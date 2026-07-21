@@ -1,0 +1,43 @@
+import cron from "node-cron";
+import { TipoComunicacion } from "@prisma/client";
+import { runComunicacion } from "./comunicaciones.js";
+
+/**
+ * Cron en zona configurada (default America/Argentina/Buenos_Aires).
+ * Solo Lun–Vie (1–5): Vettore no opera sábados; el viernes cubre sáb+lun.
+ */
+export function startComunicacionesScheduler(): void {
+  if (process.env.COMUNICACIONES_CRON_ENABLED === "false") {
+    console.log("[comunicaciones] cron deshabilitado (COMUNICACIONES_CRON_ENABLED=false)");
+    return;
+  }
+
+  const tz = process.env.COMUNICACIONES_TZ || "America/Argentina/Buenos_Aires";
+
+  const jobs: Array<{ expr: string; tipo: TipoComunicacion; label: string }> = [
+    { expr: "0 9 * * 1-5", tipo: TipoComunicacion.RESUMEN_09, label: "09:00 resumen" },
+    { expr: "0 12 * * 1-5", tipo: TipoComunicacion.OFERTA_12, label: "12:00 oferta" },
+    {
+      expr: "0 15 * * 1-5",
+      tipo: TipoComunicacion.CONFIRMACION_15,
+      label: "15:00 confirmación",
+    },
+  ];
+
+  for (const job of jobs) {
+    if (!cron.validate(job.expr)) {
+      console.error(`[comunicaciones] expresión cron inválida: ${job.expr}`);
+      continue;
+    }
+    cron.schedule(
+      job.expr,
+      () => {
+        void runComunicacion(job.tipo).catch((err) =>
+          console.error(`[comunicaciones] error ${job.label}`, err)
+        );
+      },
+      { timezone: tz }
+    );
+    console.log(`[comunicaciones] programado ${job.label} (${job.expr}) TZ=${tz}`);
+  }
+}

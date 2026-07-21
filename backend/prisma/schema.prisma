@@ -1,0 +1,276 @@
+// Mi Vettore — Prisma schema
+//
+// Desarrollo local: SQLite (cero configuración).
+// Producción: cambiar provider a "postgresql" y DATABASE_URL a la connection string
+// de Postgres. Los modelos no necesitan reescribirse.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLIENTE
+  CHOFER
+  PABLO
+  SILVINA
+  FACU
+  PATRICIO
+  JULIETA
+  CARLA
+}
+
+enum UserStatus {
+  ACTIVO
+  INACTIVO
+}
+
+enum SegmentoCliente {
+  ESTATICO
+  CONSULTA
+  CONFIRMACION
+}
+
+enum EstadoChofer {
+  ACTIVO
+  INACTIVO
+}
+
+enum EstadoCamioneta {
+  OPERATIVA
+  EN_TALLER
+  DE_VACACIONES
+  FUERA_SERVICIO
+}
+
+enum TipoEmpresa {
+  PROPIA
+  ALIADA
+}
+
+enum TipoPedido {
+  ALTA
+  BAJA
+  CAMBIO_HORARIO
+  CAMBIO_RUTA
+  PEDIDO_ESPECIAL
+}
+
+enum EstadoPedido {
+  PENDIENTE
+  EN_CURSO
+  RESUELTO
+}
+
+enum OrigenPedido {
+  FORMULARIO
+  MANUAL
+  SISTEMA
+}
+
+model Usuario {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  rol          Role
+  estado       UserStatus @default(ACTIVO)
+  nombre       String?
+  clienteId    String?
+  choferId     String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  cliente Cliente? @relation(fields: [clienteId], references: [id])
+  chofer  Chofer?  @relation(fields: [choferId], references: [id])
+}
+
+model Cliente {
+  id        String          @id @default(cuid())
+  nombre    String
+  segmento  SegmentoCliente @default(ESTATICO)
+  contacto  String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  pedidos   Pedido[]
+  usuarios  Usuario[]
+}
+
+model Chofer {
+  id           String           @id @default(cuid())
+  nombre       String
+  dni          String           @unique
+  licencia     String?
+  telefono     String?
+  estado       EstadoChofer     @default(ACTIVO)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  asignaciones AsignacionFlota[]
+  pedidos      Pedido[]
+  usuarios     Usuario[]
+  solicitudes  SolicitudTaller[]
+}
+
+model Camioneta {
+  id                String           @id @default(cuid())
+  patente           String           @unique
+  datosTecnicos     String?
+  km                Int              @default(0)
+  fechaUltimoAceite DateTime?
+  estado            EstadoCamioneta  @default(OPERATIVA)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  asignaciones      AsignacionFlota[]
+  pedidos           Pedido[]
+  solicitudes       SolicitudTaller[]
+}
+
+model EmpresaTransporte {
+  id           String           @id @default(cuid())
+  nombre       String
+  tipo         TipoEmpresa      @default(PROPIA)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  asignaciones AsignacionFlota[]
+}
+
+/// Historial de asignaciones camioneta ↔ chofer ↔ empresa.
+/// Nunca se sobreescribe: un cambio cierra el período actual y crea un registro nuevo.
+model AsignacionFlota {
+  id           String    @id @default(cuid())
+  camionetaId  String
+  choferId     String
+  empresaId    String
+  periodoDesde DateTime
+  periodoHasta DateTime?
+  createdAt    DateTime  @default(now())
+
+  camioneta Camioneta         @relation(fields: [camionetaId], references: [id])
+  chofer    Chofer            @relation(fields: [choferId], references: [id])
+  empresa   EmpresaTransporte @relation(fields: [empresaId], references: [id])
+
+  @@index([camionetaId])
+  @@index([choferId])
+  @@index([empresaId])
+}
+
+/// Pedido / cambio operativo del panel de tráfico (M1).
+model Pedido {
+  id               String       @id @default(cuid())
+  clienteId        String
+  fecha            DateTime
+  tipo             TipoPedido
+  hora             String?
+  zona             String?
+  motivo           String
+  estado           EstadoPedido @default(PENDIENTE)
+  comentarioCierre String?
+  choferId         String?
+  camionetaId      String?
+  origen           OrigenPedido @default(MANUAL)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  cliente   Cliente    @relation(fields: [clienteId], references: [id])
+  chofer    Chofer?    @relation(fields: [choferId], references: [id])
+  camioneta Camioneta? @relation(fields: [camionetaId], references: [id])
+
+  @@index([fecha])
+  @@index([estado])
+  @@index([clienteId])
+}
+
+enum SolicitanteTaller {
+  CHOFER
+  ADMINISTRATIVO
+}
+
+/// Solicitud de reparación (paso 1 del circuito de talleres).
+model SolicitudTaller {
+  id            String            @id @default(cuid())
+  camionetaId   String
+  choferId      String?
+  solicitante   SolicitanteTaller
+  falla         String
+  detalle       String
+  /// Criterio vinculante del chofer: si true, queda inhabilitado.
+  inhabilitado  Boolean           @default(false)
+  createdById   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  camioneta    Camioneta     @relation(fields: [camionetaId], references: [id])
+  chofer       Chofer?       @relation(fields: [choferId], references: [id])
+  ordenTrabajo OrdenTrabajo?
+}
+
+/// Orden de trabajo — flujo de 6 etapas (currentStep 0..5).
+/// 0 Solicitud · 1 Notificación panel · 2 Evaluación (Facu) · 3 Presupuesto (Silvina)
+/// 4 Aprobación (Patricio/Julieta) · 5 Cierre y pago
+model OrdenTrabajo {
+  id                       String   @id @default(cuid())
+  solicitudTallerId        String   @unique
+  numeroOT                 String   @unique
+  currentStep              Int      @default(0)
+  tallerAsignado           String?
+  presupuestoMonto         Float?
+  presupuestoArchivo       String?
+  valorAprobado            Float?
+  valorFinal               Float?
+  incrementoJustificacion  String?
+  facturaPDF               String?
+  trabajoDescripcion       String?
+  pedidoNotificacionId     String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  solicitud SolicitudTaller @relation(fields: [solicitudTallerId], references: [id])
+
+  @@index([currentStep])
+}
+
+enum TipoComunicacion {
+  RESUMEN_09
+  OFERTA_12
+  CONFIRMACION_15
+}
+
+enum EstadoComunicacion {
+  ENVIADO
+  SIMULADO
+  ERROR
+}
+
+enum DestinatarioTipo {
+  CLIENTE
+  CHOFER
+}
+
+/// Log de comunicaciones automáticas (M3) — canal EMAIL en el MVP.
+model Comunicacion {
+  id                 String             @id @default(cuid())
+  loteId             String
+  tipo               TipoComunicacion
+  canal              String             @default("EMAIL")
+  destinatarioTipo   DestinatarioTipo
+  destinatarioId     String?
+  destinatarioNombre String
+  destinatarioEmail  String
+  asunto             String
+  cuerpoTexto        String
+  coberturaDesde     DateTime
+  coberturaHasta     DateTime
+  coberturaLabel     String
+  estado             EstadoComunicacion
+  errorMensaje       String?
+  enviadoAt         DateTime           @default(now())
+  createdAt          DateTime           @default(now())
+
+  @@index([enviadoAt])
+  @@index([tipo])
+  @@index([loteId])
+  @@index([estado])
+}

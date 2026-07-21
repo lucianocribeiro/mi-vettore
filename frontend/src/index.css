@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --vl-sidebar: #0f1f38;
+  --vl-sidebar-border: #1a3050;
+  --vl-sidebar-search: #172d4a;
+  --vl-nav: #8aabc8;
+  --vl-nav-muted: #6b88aa;
+  --vl-nav-active: #1e4080;
+  --vl-brand-sub: #6b88aa;
+  --vl-main: #f4f6fb;
+  --vl-page: #cdd5e4;
+  --vl-role-label: #4d6f8f;
+  --vl-shell: #ffffff;
+  --vl-shell-border: rgb(203 213 225 / 0.6);
+  --vl-text: #0f172a;
+  --vl-text-muted: #64748b;
+  --vl-card: #ffffff;
+  --vl-card-border: #e2e8f0;
+  --vl-heading: #0f172a;
+  --vl-login-card: #ffffff;
+}
+
+.dark {
+  --vl-sidebar: #080f1c;
+  --vl-sidebar-border: #152238;
+  --vl-sidebar-search: #101c30;
+  --vl-nav: #9bb4cc;
+  --vl-nav-muted: #6b88aa;
+  --vl-nav-active: #2563eb;
+  --vl-brand-sub: #6b88aa;
+  --vl-main: #0b1220;
+  --vl-page: #020617;
+  --vl-role-label: #64748b;
+  --vl-shell: #0f172a;
+  --vl-shell-border: #1e293b;
+  --vl-text: #e2e8f0;
+  --vl-text-muted: #94a3b8;
+  --vl-card: #111827;
+  --vl-card-border: #1f2937;
+  --vl-heading: #f1f5f9;
+  --vl-login-card: #0f172a;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100dvh;
+  width: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  background: var(--vl-page);
+  color: var(--vl-text);
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+.safe-top {
+  padding-top: max(0.25rem, env(safe-area-inset-top));
+}
+
+.safe-bottom {
+  padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 767px) {
+  body {
+    background: var(--vl-sidebar);
+  }
+}

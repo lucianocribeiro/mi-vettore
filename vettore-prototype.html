@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi Vettore — Prototipo operativo</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100vh; }
+    body {
+      background: #cdd5e4;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem 3rem;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #root { width: 100%; max-width: 1280px; }
+    #loading {
+      position: fixed; inset: 0;
+      background: #cdd5e4;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999; gap: 12px;
+      font-size: 0.8125rem; color: #475569; letter-spacing: 0.02em;
+    }
+    .spin {
+      width: 28px; height: 28px;
+      border: 2px solid #c8d3e6;
+      border-top-color: #1e3a5f;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Sidebar override — dark navy instead of default slate-50 */
+    .vl-sidebar {
+      background: #0f1f38 !important;
+      border-right-color: #1a3050 !important;
+    }
+    .vl-sidebar .vl-brand-title { color: #e8edf5 !important; }
+    .vl-sidebar .vl-brand-sub { color: #6b88aa !important; }
+    .vl-sidebar .vl-search {
+      background: #172d4a !important;
+      border-color: #1e3a5f !important;
+      color: #6b88aa !important;
+    }
+    .vl-sidebar .vl-nav-item {
+      color: #8aabc8 !important;
+    }
+    .vl-sidebar .vl-nav-item:hover {
+      background: #172d4a !important;
+      color: #c8ddf0 !important;
+    }
+    .vl-sidebar .vl-nav-item.active {
+      background: #1e4080 !important;
+      color: #ffffff !important;
+    }
+    .vl-sidebar .vl-nav-item.active svg { color: #fff !important; }
+    .vl-sidebar .vl-nav-item svg { color: #6b88aa !important; }
+    .vl-sidebar .vl-nav-sub { color: #3d5a78 !important; }
+    .vl-sidebar .vl-nav-item.active .vl-nav-sub { color: #6b9ed4 !important; }
+    .vl-sidebar .vl-role-area {
+      border-top-color: #1a3050 !important;
+    }
+    .vl-sidebar .vl-role-label { color: #4d6f8f !important; }
+    .vl-sidebar .vl-role-select {
+      background: #172d4a !important;
+      border-color: #1e3a5f !important;
+      color: #a8c4dc !important;
+    }
+    .vl-brand-logo {
+      background: #1e4080 !important;
+    }
+    /* Main area subtle paper */
+    .vl-main { background: #f4f6fb; }
+    /* Table row hover */
+    tbody tr:hover { background: #f8faff !important; }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="spin"></div>
+    Cargando prototipo Mi Vettore…
+  </div>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    /* ─── Inline SVG icon system ─────────────────────────────────────────── */
+    function SI({ size = 16, className = "", style = {}, children }) {
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
+          viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+          className={className} style={{ flexShrink: 0, ...style }}>{children}</svg>
+      );
+    }
+    const Truck         = p => <SI {...p}><path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3"/><rect width="9" height="11" x="11" y="11" rx="1"/><circle cx="7" cy="20" r="2"/><circle cx="17" cy="20" r="2"/></SI>;
+    const Calendar      = p => <SI {...p}><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></SI>;
+    const MessageSquare = p => <SI {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></SI>;
+    const AlertCircle   = p => <SI {...p}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></SI>;
+    const CreditCard    = p => <SI {...p}><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></SI>;
+    const Wrench        = p => <SI {...p}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></SI>;
+    const Settings      = p => <SI {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></SI>;
+    const ChevronRight  = p => <SI {...p}><path d="m9 18 6-6-6-6"/></SI>;
+    const ChevronLeft   = p => <SI {...p}><path d="m15 18-6-6 6-6"/></SI>;
+    const X             = p => <SI {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></SI>;
+    const Check         = p => <SI {...p}><path d="M20 6 9 17l-5-5"/></SI>;
+    const AlertTriangle = p => <SI {...p}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></SI>;
+    const Clock         = p => <SI {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></SI>;
+    const Bell          = p => <SI {...p}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></SI>;
+    const Search        = p => <SI {...p}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></SI>;
+    const Eye           = p => <SI {...p}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></SI>;
+    const Pencil        = p => <SI {...p}><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></SI>;
+    const Plus          = p => <SI {...p}><path d="M5 12h14"/><path d="M12 5v14"/></SI>;
+    const Paperclip     = p => <SI {...p}><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></SI>;
+    const Lock          = p => <SI {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></SI>;
+
+    /* ─── Data ───────────────────────────────────────────────────────────── */
+    const NAV = [
+      { id: "m1", label: "Panel de tráfico",      sub: "M1", icon: Calendar },
+      { id: "m3", label: "Comunicaciones",         sub: "M3", icon: MessageSquare },
+      { id: "m4", label: "Alertas de vencimiento", sub: "M4", icon: AlertCircle },
+      { id: "m5", label: "Ficha integral (ABM)",   sub: "M5", icon: CreditCard },
+      { id: "m6", label: "Mantenimiento",          sub: "M6", icon: Wrench },
+      { id: "m7", label: "Talleres / OT",          sub: "M7", icon: Settings },
+    ];
+
+    const CLIENTES       = ["La Delfina", "Dietética Norte", "Congelados Sur", "FarmaExpress", "Verduras del Valle"];
+    const CHOFERES_NOMBRES = ["Marcos Ibáñez", "Rocío Paz", "Diego Sosa", "Braian Ortíz", "Lucía Ferrari"];
+    const EMPRESAS       = ["Flota propia", "Transportes Sosa", "Flota propia", "Ortíz Logística", "Flota propia"];
+    const PATENTES       = ["AD122CP", "HYT424", "ISJ188", "JRR309", "HTK198"];
+    const TALLERES       = ["Frío Norte SRL", "Gomería Central", "Taller Mecánico Sosa", "Taller Norte Repuestos"];
+    const ROLES          = ["Pablo (Tráfico)", "Facu (Flota)", "Silvina (Administración)", "Patricio (Dirección)"];
+
+    const DIAS = [
+      { key: "Lunes",     label: "Lunes 20" },
+      { key: "Martes",    label: "Martes 21", hoy: true },
+      { key: "Miércoles", label: "Miércoles 22" },
+      { key: "Jueves",    label: "Jueves 23" },
+      { key: "Viernes",   label: "Viernes 24" },
+    ];
+
+    const ESTADO_STYLE = {
+      pendiente: "bg-amber-100 text-amber-800 border-amber-300",
+      "en curso": "bg-blue-100 text-blue-800 border-blue-300",
+      resuelto:  "bg-emerald-100 text-emerald-800 border-emerald-300",
+    };
+    const VENC_STYLE = {
+      vencido:     "bg-red-100 text-red-700 border-red-300",
+      "por vencer":"bg-amber-100 text-amber-700 border-amber-300",
+      ok:          "bg-emerald-100 text-emerald-700 border-emerald-300",
+    };
+
+    const initialPedidos = [
+      { id:1, dia:"Miércoles", cliente:CLIENTES[0], tipo:"Alta",                   hora:"08:30", zona:"Vicente López", motivo:"Cliente pidió reparto extra por stock nuevo",           estado:"pendiente", chofer:CHOFERES_NOMBRES[0], patente:PATENTES[0], comentario:"", origen:"formulario" },
+      { id:2, dia:"Miércoles", cliente:CLIENTES[1], tipo:"Cambio de horario",       hora:"10:00", zona:"San Isidro",   motivo:"Local abre más tarde esta semana",                      estado:"en curso",  chofer:CHOFERES_NOMBRES[1], patente:PATENTES[1], comentario:"", origen:"formulario" },
+      { id:3, dia:"Miércoles", cliente:CLIENTES[2], tipo:"Baja",                    hora:"—",     zona:"Tigre",        motivo:"Suspenden reparto por remodelación de depósito",        estado:"resuelto",  chofer:CHOFERES_NOMBRES[2], patente:PATENTES[2], comentario:"Ya cargado en Rukas", origen:"formulario" },
+      { id:4, dia:"Jueves",    cliente:CLIENTES[3], tipo:"Pedido especial",         hora:"07:15", zona:"Belgrano",     motivo:"Requiere chofer con cadena de frío -18°",               estado:"pendiente", chofer:"",                  patente:"",          comentario:"", origen:"manual" },
+      { id:5, dia:"Jueves",    cliente:CLIENTES[4], tipo:"Cambio de ruta/recorrido",hora:"09:00", zona:"Pilar",        motivo:"Corte de calle habitual, reasignar recorrido",          estado:"en curso",  chofer:CHOFERES_NOMBRES[3], patente:PATENTES[3], comentario:"", origen:"formulario" },
+    ];
+
+    const initialCamionetas = PATENTES.map((p, i) => ({
+      patente: p,
+      chofer:  CHOFERES_NOMBRES[i % CHOFERES_NOMBRES.length],
+      empresa: EMPRESAS[i % EMPRESAS.length],
+      km:      40000 + i * 3400,
+      ultAceite: `hace ${30 + i * 5} días`,
+      estado:  i === 2 ? "en taller" : "operativa",
+      vencimientos: i === 0
+        ? [{ tipo:"VTV",    fecha:"2026-07-20", estado:"vencido"     },
+           { tipo:"Seguro", fecha:"2026-08-05", estado:"por vencer"  }]
+        : i === 2
+        ? [{ tipo:"Senasa", fecha:"2026-08-01", estado:"por vencer"  }]
+        : [{ tipo:"VTV",    fecha:"2026-12-01", estado:"ok"          }],
+      historial: [
+        { evento: "Asignada a " + EMPRESAS[i % EMPRESAS.length], fecha:"2026-03-01" },
+        { evento: "Alta en Rukas",                                 fecha:"2026-01-15" },
+      ],
+    }));
+
+    const initialChoferes = CHOFERES_NOMBRES.map((n, i) => ({
+      nombre:   n,
+      dni:      `3${2+i}.${100+i*7}.${200+i}`,
+      licencia: "vigente",
+      telefono: `11-45${i}0-00${i}0`,
+      estado:   "activo",
+      vencimientos: i === 2
+        ? [{ tipo:"Seguro personal", fecha:"2026-07-18", estado:"vencido" }]
+        : [{ tipo:"Licencia",        fecha:"2026-09-12", estado:"ok"      }],
+      historial: [{ evento:"Incorporado a la flota", fecha:"2025-11-02" }],
+    }));
+
+    const initialOTs = [
+      { id:"OT-0142", patente:PATENTES[0], chofer:CHOFERES_NOMBRES[0], solicitante:"Chofer",          falla:"Pérdida de gas en equipo de frío",    detalle:"El equipo de frío deja de enfriar después de 20 minutos de viaje, se escucha silbido en la parte trasera.", taller:"Frío Norte SRL",       tallerAsignado:"Frío Norte SRL",       presupuestoMonto:"",    presupuestoArchivo:"",                        valorAprobado:null, valorFinal:null,  currentStep:2, incremento:false },
+      { id:"OT-0141", patente:PATENTES[3], chofer:CHOFERES_NOMBRES[3], solicitante:"Administrativo",   falla:"Cambio de batería",                  detalle:"Batería no arranca en frío, chofer reporta luces tenues desde el lunes.",                                   taller:"Gomería Central",      tallerAsignado:"Gomería Central",      presupuestoMonto:"32000", presupuestoArchivo:"presupuesto_OT-0141.pdf", valorAprobado:32000, valorFinal:32000, currentStep:5, incremento:false },
+      { id:"OT-0140", patente:PATENTES[1], chofer:CHOFERES_NOMBRES[1], solicitante:"Chofer",          falla:"Ruido en suspensión delantera",       detalle:"Ruido metálico al pasar por lomos de burro, se acentuó esta semana.",                                       taller:"Taller Mecánico Sosa", tallerAsignado:"Taller Mecánico Sosa", presupuestoMonto:"60000", presupuestoArchivo:"presupuesto_OT-0140.pdf", valorAprobado:60000, valorFinal:null,  currentStep:4, incremento:true  },
+    ];
+
+    const OT_STEPS = [
+      { label:"Solicitud",          owner:null,                        detail:"El chofer o el personal administrativo carga la falla mediante el formulario. Es la información base, todavía sin monto." },
+      { label:"Notificación panel", owner:null,                        detail:"Pasa automáticamente al Panel de tráfico (M1) como notificación de cambio: la camioneta queda marcada inactiva." },
+      { label:"Evaluación taller",  owner:"Facu (Flota)",              detail:"Facu evalúa la falla y decide a qué taller enviar la unidad. Solo su rol puede avanzar esta etapa." },
+      { label:"Presupuesto",        owner:"Silvina (Administración)",  detail:"Silvina gestiona y adjunta el presupuesto de reparación con el taller." },
+      { label:"Aprobación",         owner:"Patricio (Dirección)",      detail:"Patricio aprueba la reparación. Si hay incremento sobre lo presupuestado, necesita justificación." },
+      { label:"Cierre y pago",      owner:null,                        detail:"Taller sube factura PDF + descripción del trabajo. Condición para procesar el pago." },
+    ];
+
+    /* ─── Shared components ──────────────────────────────────────────────── */
+    function Badge({ children, className = "" }) {
+      return (
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function SectionHeader({ title, sub, desc, right }) {
+      return (
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">{sub}</span>
+              <h1 className="text-xl font-bold text-slate-900">{title}</h1>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">{desc}</p>
+          </div>
+          {right}
+        </div>
+      );
+    }
+
+    /* ─── M2 Client form preview ─────────────────────────────────────────── */
+    function ClientFormPreview({ onClose }) {
+      const [tipo, setTipo] = useState("Alta");
+      const tipos = ["Alta", "Baja", "Cambio de horario", "Cambio de ruta/recorrido", "Pedido especial"];
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <Badge className="bg-violet-100 text-violet-700 border-violet-300 mb-1">Vista del cliente</Badge>
+                <h3 className="text-base font-bold text-slate-900">Formulario de cambios (M2)</h3>
+              </div>
+              <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+            </div>
+            <p className="mb-3 text-xs text-slate-500">
+              Esto NO es una pantalla de Vettore: la completa el cliente. Lo que envía aparece como pedido nuevo directamente en el Panel de tráfico (M1).
+            </p>
+            <div className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              Aplica para <strong>mañana</strong> — el sistema no pide la fecha.
+            </div>
+            <label className="text-xs font-medium text-slate-500">Tipo de cambio</label>
+            <div className="mt-1 mb-3 flex flex-wrap gap-2">
+              {tipos.map(t => (
+                <button key={t} onClick={() => setTipo(t)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium border ${tipo === t ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200"}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            <label className="text-xs font-medium text-slate-500">Detalle</label>
+            <input placeholder="ej. hora de servicio, zona/ruta" className="mt-1 mb-3 w-full rounded-md border border-slate-200 p-2 text-sm" />
+            <label className="text-xs font-medium text-slate-500">Motivo (obligatorio)</label>
+            <textarea rows={2} placeholder="Para que coordinación decida si contactarte" className="mt-1 mb-4 w-full rounded-md border border-slate-200 p-2 text-sm" />
+            <button className="w-full rounded-md bg-slate-900 py-2 text-sm font-medium text-white">Enviar cambio</button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── M1 Panel de tráfico ────────────────────────────────────────────── */
+    function M1Panel({ pedidos, setPedidos }) {
+      const [selected, setSelected]         = useState(null);
+      const [dia, setDia]                   = useState("Miércoles");
+      const [comentario, setComentario]     = useState("");
+      const [showClientForm, setShowClientForm] = useState(false);
+      const visibles = pedidos.filter(p => p.dia === dia);
+
+      function cerrarPedido(id) {
+        if (!comentario.trim()) return;
+        setPedidos(prev => prev.map(p => p.id === id ? { ...p, estado:"resuelto", comentario } : p));
+        setSelected(null);
+        setComentario("");
+      }
+
+      return (
+        <div>
+          <SectionHeader
+            title="Panel de control de tráfico" sub="M1 · MVP"
+            desc="Vista única de pedidos y cambios. Los que llegan por el formulario del cliente o desde talleres entran directo acá."
+            right={
+              <button onClick={() => setShowClientForm(true)}
+                className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                <Eye size={13} /> Ver formulario del cliente
+              </button>
+            }
+          />
+
+          {/* Day tabs */}
+          <div className="flex gap-2 mb-4 flex-wrap">
+            {DIAS.map(d => (
+              <button key={d.key} onClick={() => setDia(d.key)}
+                className={`relative rounded-lg px-3 py-1.5 text-sm font-medium transition ${dia === d.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                {d.label}
+                {d.hoy && (
+                  <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${dia === d.key ? "bg-white/20 text-white" : "bg-indigo-100 text-indigo-600"}`}>
+                    hoy
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Taller alert */}
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <span>Unidad <strong>{PATENTES[2]}</strong> en taller — no disponible para asignación esta semana.</span>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-slate-500">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Cliente</th>
+                    <th className="px-4 py-2 font-medium">Tipo</th>
+                    <th className="px-4 py-2 font-medium">Hora</th>
+                    <th className="px-4 py-2 font-medium">Zona</th>
+                    <th className="px-4 py-2 font-medium">Chofer / Unidad</th>
+                    <th className="px-4 py-2 font-medium">Estado</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibles.length === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Sin pedidos para este día.</td></tr>
+                  )}
+                  {visibles.map(p => (
+                    <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => setSelected(p)}>
+                      <td className="px-4 py-3 font-medium text-slate-800">
+                        {p.cliente}
+                        {p.origen === "formulario" && <span className="ml-2 text-[10px] font-normal text-violet-500">vía formulario</span>}
+                        {p.origen === "sistema"    && <span className="ml-2 text-[10px] font-normal text-orange-500">notificación taller</span>}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{p.tipo}</td>
+                      <td className="px-4 py-3 text-slate-600">{p.hora}</td>
+                      <td className="px-4 py-3 text-slate-600">{p.zona}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {p.patente
+                          ? <span className={p.patente === PATENTES[2] ? "rounded bg-amber-100 px-1.5 py-0.5 text-amber-800" : ""}>{p.chofer} · {p.patente}</span>
+                          : <span className="text-slate-400">Sin asignar</span>}
+                      </td>
+                      <td className="px-4 py-3"><Badge className={ESTADO_STYLE[p.estado]}>{p.estado}</Badge></td>
+                      <td className="px-4 py-3 text-slate-400"><ChevronRight size={16} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* AI suggestion */}
+          <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900">
+            <div className="flex items-center gap-2 font-semibold"><Bell size={15} /> Agente de IA sugiere</div>
+            <p className="mt-1">Detecté 2 servicios de <strong>{CLIENTES[4]}</strong> repetidos en la semana tipo con horario distinto al histórico. ¿Confirmar como cambio permanente?</p>
+            <div className="mt-2 flex gap-2">
+              <button className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700">Revisar</button>
+              <button className="rounded-md bg-white px-3 py-1 text-xs font-medium text-indigo-700 border border-indigo-200 hover:bg-indigo-100">Descartar</button>
+            </div>
+            <p className="mt-2 text-xs text-indigo-500">La IA sugiere, no ejecuta — necesita validación de Pablo.</p>
+          </div>
+
+          {/* Detail modal */}
+          {selected && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSelected(null)}>
+              <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-xs text-slate-400">
+                      {selected.dia} · {selected.tipo}
+                      {selected.origen === "formulario" && " · recibido por formulario"}
+                      {selected.origen === "sistema"    && " · generado automáticamente"}
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900">{selected.cliente}</h3>
+                  </div>
+                  <button onClick={() => setSelected(null)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                </div>
+                <div className="mt-3 space-y-2 text-sm text-slate-600">
+                  <div><span className="font-medium text-slate-800">Motivo: </span>{selected.motivo}</div>
+                  <div><span className="font-medium text-slate-800">Zona: </span>{selected.zona}</div>
+                  <div><span className="font-medium text-slate-800">Hora: </span>{selected.hora}</div>
+                  <div><span className="font-medium text-slate-800">Estado: </span><Badge className={ESTADO_STYLE[selected.estado]}>{selected.estado}</Badge></div>
+                </div>
+                {selected.estado !== "resuelto" ? (
+                  <div className="mt-4 border-t border-slate-100 pt-3">
+                    <label className="text-xs font-medium text-slate-500">Comentario de cierre (obligatorio)</label>
+                    <textarea value={comentario} onChange={e => setComentario(e.target.value)}
+                      placeholder="ej. ya cargado en Rukas"
+                      className="mt-1 w-full rounded-md border border-slate-200 p-2 text-sm" rows={2} />
+                    <button disabled={!comentario.trim()} onClick={() => cerrarPedido(selected.id)}
+                      className="mt-2 flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                      <Check size={14} /> Marcar resuelto
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                    Cerrado con comentario: <span className="italic">"{selected.comentario}"</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {showClientForm && <ClientFormPreview onClose={() => setShowClientForm(false)} />}
+        </div>
+      );
+    }
+
+    /* ─── M3 Comunicaciones ──────────────────────────────────────────────── */
+    function M3Comunicaciones() {
+      const flujo = [
+        { hora:"09:00",        destino:"Todos los clientes con servicios",           accion:"Servicios del día siguiente + link a formulario de cambios. Silencio = confirmación.", canal:"WhatsApp + Mail" },
+        { hora:"12:00",        destino:"Clientes de demanda variable (~7 de 22) + choferes", accion:"Oferta de servicios adicionales / validación de disponibilidad",              canal:"WhatsApp"        },
+        { hora:"15:00",        destino:"Clientes y choferes",                        accion:"Confirmación final con servicios, horarios y choferes asignados",                     canal:"WhatsApp + Mail" },
+        { hora:"Viernes",      destino:"Clientes y choferes",                        accion:"Doble mensaje cubriendo sábado y lunes",                                               canal:"WhatsApp + Mail" },
+        { hora:"Fuera de horario", destino:"Pablo",                                  accion:"Urgencias por teléfono personal — no se automatizan",                                  canal:"Teléfono"        },
+      ];
+      return (
+        <div>
+          <SectionHeader title="Motor de comunicaciones y notificaciones" sub="M3 · MVP"
+            desc="Automatiza el ciclo de las tres comunicaciones diarias y las alertas operativas, con filtro humano donde corresponde." />
+          <div className="space-y-3">
+            {flujo.map((f, i) => (
+              <div key={i} className="flex gap-4 rounded-xl border border-slate-200 p-4">
+                <div className="flex w-28 shrink-0 items-center gap-1 text-sm font-semibold text-slate-700"><Clock size={14} />{f.hora}</div>
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-slate-800">{f.destino}</div>
+                  <div className="text-sm text-slate-500">{f.accion}</div>
+                </div>
+                <Badge className="h-fit bg-slate-100 text-slate-600 border-slate-200">{f.canal}</Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── M4 Alertas ─────────────────────────────────────────────────────── */
+    function M4Alertas({ camionetas, choferes, onVerFicha }) {
+      const alertas = [
+        ...camionetas.flatMap(c => c.vencimientos.filter(v => v.estado !== "ok").map(v => ({ ...v, entidad:"Camioneta", ref:c.patente, tipoEnt:"camioneta" }))),
+        ...choferes.flatMap(c  => c.vencimientos.filter(v => v.estado !== "ok").map(v => ({ ...v, entidad:"Chofer",    ref:c.nombre,  tipoEnt:"chofer"     }))),
+      ];
+      return (
+        <div>
+          <SectionHeader title="Alertas de vencimiento" sub="M4 · MVP"
+            desc="Solo lo vencido o próximo a vencer (≤30 días). El estado completo de cada documento vive en la Ficha integral (M5)." />
+          {alertas.length === 0 ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center text-sm text-emerald-700">Sin alertas activas.</div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-slate-500">
+                    <tr>
+                      <th className="px-4 py-2 font-medium">Entidad</th>
+                      <th className="px-4 py-2 font-medium">Referencia</th>
+                      <th className="px-4 py-2 font-medium">Tipo</th>
+                      <th className="px-4 py-2 font-medium">Vencimiento</th>
+                      <th className="px-4 py-2 font-medium">Estado</th>
+                      <th className="px-4 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {alertas.map((v, i) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <td className="px-4 py-3 text-slate-600">{v.entidad}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800">{v.ref}</td>
+                        <td className="px-4 py-3 text-slate-600">{v.tipo}</td>
+                        <td className="px-4 py-3 text-slate-600 font-variant-numeric tabular-nums">{v.fecha}</td>
+                        <td className="px-4 py-3"><Badge className={VENC_STYLE[v.estado]}>{v.estado}</Badge></td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => onVerFicha(v.tipoEnt, v.ref)}
+                            className="text-xs font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1">
+                            Ver ficha <ChevronRight size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ─── M5 Ficha drawer ────────────────────────────────────────────────── */
+    function FichaDrawer({ item, tipo, onClose, onUpdate, choferesNombres, empresas }) {
+      const [tab, setTab]               = useState("datos");
+      const [editAsignacion, setEditAsignacion] = useState(false);
+      const [chofer, setChofer]         = useState(item.chofer);
+      const [empresa, setEmpresa]       = useState(item.empresa);
+      const [nuevoVenc, setNuevoVenc]   = useState({ tipo:"", fecha:"" });
+
+      function guardarAsignacion() {
+        onUpdate({ ...item, chofer, empresa, historial:[{ evento:`Reasignada a ${empresa} / ${chofer}`, fecha:"2026-07-21" }, ...item.historial] });
+        setEditAsignacion(false);
+      }
+      function agregarVencimiento() {
+        if (!nuevoVenc.tipo || !nuevoVenc.fecha) return;
+        onUpdate({ ...item, vencimientos:[{ ...nuevoVenc, estado:"ok" }, ...item.vencimientos] });
+        setNuevoVenc({ tipo:"", fecha:"" });
+      }
+
+      return (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
+          <div className="h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="mb-3 flex items-start justify-between">
+              <div>
+                <Badge className="bg-slate-100 text-slate-600 border-slate-300 mb-1">{tipo === "camioneta" ? "Camioneta" : "Chofer"}</Badge>
+                <h3 className="text-lg font-bold text-slate-900">{tipo === "camioneta" ? item.patente : item.nombre}</h3>
+              </div>
+              <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+            </div>
+
+            <div className="mb-4 flex gap-2 border-b border-slate-100">
+              {["datos","vencimientos","historial"].map(t => (
+                <button key={t} onClick={() => setTab(t)}
+                  className={`px-2 pb-2 text-sm font-medium capitalize ${tab === t ? "border-b-2 border-slate-900 text-slate-900" : "text-slate-400"}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {tab === "datos" && (
+              <div className="space-y-3 text-sm">
+                {tipo === "camioneta" ? (
+                  <>
+                    <div className="flex justify-between"><span className="text-slate-500">Kilometraje</span><span className="font-medium text-slate-800">{item.km.toLocaleString()} km</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Últ. cambio de aceite</span><span className="font-medium text-slate-800">{item.ultAceite}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Estado</span>
+                      <Badge className={item.estado === "en taller" ? "bg-amber-100 text-amber-700 border-amber-300" : "bg-emerald-100 text-emerald-700 border-emerald-300"}>{item.estado}</Badge>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-500">Asignación (empresa / chofer)</span>
+                        {!editAsignacion && (
+                          <button onClick={() => setEditAsignacion(true)} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800">
+                            <Pencil size={12} /> Editar
+                          </button>
+                        )}
+                      </div>
+                      {editAsignacion ? (
+                        <div className="space-y-2">
+                          <select value={empresa} onChange={e => setEmpresa(e.target.value)} className="w-full rounded-md border border-slate-200 p-1.5 text-sm">
+                            {[...new Set(empresas)].map(e => <option key={e}>{e}</option>)}
+                          </select>
+                          <select value={chofer} onChange={e => setChofer(e.target.value)} className="w-full rounded-md border border-slate-200 p-1.5 text-sm">
+                            {choferesNombres.map(c => <option key={c}>{c}</option>)}
+                          </select>
+                          <div className="flex gap-2">
+                            <button onClick={guardarAsignacion} className="rounded-md bg-slate-900 px-3 py-1 text-xs font-medium text-white">Guardar</button>
+                            <button onClick={() => setEditAsignacion(false)} className="rounded-md border border-slate-200 px-3 py-1 text-xs text-slate-600">Cancelar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-slate-700">{item.empresa} · {item.chofer}</div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between"><span className="text-slate-500">DNI</span><span className="font-medium text-slate-800">{item.dni}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Licencia</span><span className="font-medium text-slate-800">{item.licencia}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Teléfono</span><span className="font-medium text-slate-800">{item.telefono}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Estado</span><Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">{item.estado}</Badge></div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {tab === "vencimientos" && (
+              <div>
+                <div className="space-y-2">
+                  {item.vencimientos.map((v, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-lg border border-slate-200 p-2.5 text-sm">
+                      <div>
+                        <div className="font-medium text-slate-800">{v.tipo}</div>
+                        <div className="text-xs text-slate-500">{v.fecha}</div>
+                      </div>
+                      <Badge className={VENC_STYLE[v.estado]}>{v.estado}</Badge>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-3">
+                  <div className="mb-2 text-xs font-semibold text-slate-500">Actualizar / agregar vencimiento</div>
+                  <div className="flex gap-2">
+                    <input placeholder="Tipo (ej. VTV)" value={nuevoVenc.tipo}
+                      onChange={e => setNuevoVenc({ ...nuevoVenc, tipo:e.target.value })}
+                      className="w-1/2 rounded-md border border-slate-200 p-1.5 text-sm" />
+                    <input type="date" value={nuevoVenc.fecha}
+                      onChange={e => setNuevoVenc({ ...nuevoVenc, fecha:e.target.value })}
+                      className="w-1/2 rounded-md border border-slate-200 p-1.5 text-sm" />
+                  </div>
+                  <button onClick={agregarVencimiento}
+                    className="mt-2 flex items-center gap-1 rounded-md bg-slate-900 px-3 py-1 text-xs font-medium text-white">
+                    <Plus size={12} /> Guardar
+                  </button>
+                  <p className="mt-2 text-[11px] text-slate-400">El historial nunca se sobreescribe: esto agrega un registro nuevo.</p>
+                </div>
+              </div>
+            )}
+
+            {tab === "historial" && (
+              <div className="space-y-2">
+                {item.historial.map((h, i) => (
+                  <div key={i} className="flex justify-between rounded-lg bg-slate-50 p-2.5 text-sm">
+                    <span className="text-slate-700">{h.evento}</span>
+                    <span className="text-xs text-slate-400">{h.fecha}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── M5 Ficha integral ──────────────────────────────────────────────── */
+    function M5Ficha({ camionetas, setCamionetas, choferes, setChoferes, jumpTo, clearJump }) {
+      const [tab, setTab] = useState(jumpTo?.tipo === "chofer" ? "chofer" : "camioneta");
+      const [open, setOpen] = useState(null);
+
+      useEffect(() => {
+        if (jumpTo) {
+          const found = jumpTo.tipo === "camioneta"
+            ? camionetas.find(c => c.patente === jumpTo.ref)
+            : choferes.find(c => c.nombre === jumpTo.ref);
+          if (found) setOpen({ tipo:jumpTo.tipo, item:found });
+          clearJump();
+        }
+      }, [jumpTo]);
+
+      function updateItem(tipo, updated) {
+        if (tipo === "camioneta") {
+          setCamionetas(prev => prev.map(c => c.patente === updated.patente ? updated : c));
+        } else {
+          setChoferes(prev => prev.map(c => c.nombre === updated.nombre ? updated : c));
+        }
+        setOpen({ tipo, item:updated });
+      }
+
+      return (
+        <div>
+          <SectionHeader title="Ficha integral: camioneta / chofer / empresa" sub="M5 · MVP"
+            desc="Registro maestro y ABM: reasignar patentes y actualizar vencimientos desde acá, con historial conservado." />
+          <div className="mb-4 flex gap-2">
+            <button onClick={() => setTab("chofer")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "chofer" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>
+              Vista por chofer
+            </button>
+            <button onClick={() => setTab("camioneta")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "camioneta" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>
+              Vista por camioneta
+            </button>
+          </div>
+
+          {tab === "chofer" ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {choferes.map(c => (
+                <button key={c.nombre} onClick={() => setOpen({ tipo:"chofer", item:c })}
+                  className="rounded-xl border border-slate-200 p-4 text-left hover:border-slate-400 hover:shadow-sm transition">
+                  <div className="font-semibold text-slate-800">{c.nombre}</div>
+                  <div className="mt-1 text-xs text-slate-500">DNI {c.dni} · Licencia {c.licencia}</div>
+                  <div className="mt-2 flex items-center gap-2 text-xs">
+                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">{c.estado}</Badge>
+                    {c.vencimientos.some(v => v.estado !== "ok") && <Badge className="bg-red-100 text-red-700 border-red-300">alerta doc.</Badge>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {camionetas.map(c => (
+                <button key={c.patente} onClick={() => setOpen({ tipo:"camioneta", item:c })}
+                  className="rounded-xl border border-slate-200 p-4 text-left hover:border-slate-400 hover:shadow-sm transition">
+                  <div className="font-semibold text-slate-800">{c.patente}</div>
+                  <div className="mt-1 text-xs text-slate-500">{c.empresa} · {c.chofer} · {c.km.toLocaleString()} km</div>
+                  <div className="mt-2 flex items-center gap-2 text-xs">
+                    <Badge className={c.estado === "en taller" ? "bg-amber-100 text-amber-700 border-amber-300" : "bg-emerald-100 text-emerald-700 border-emerald-300"}>{c.estado}</Badge>
+                    {c.vencimientos.some(v => v.estado !== "ok") && <Badge className="bg-red-100 text-red-700 border-red-300">alerta doc.</Badge>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {open && (
+            <FichaDrawer
+              item={open.item} tipo={open.tipo}
+              onClose={() => setOpen(null)}
+              onUpdate={u => updateItem(open.tipo, u)}
+              choferesNombres={choferes.map(c => c.nombre)}
+              empresas={camionetas.map(c => c.empresa)}
+            />
+          )}
+        </div>
+      );
+    }
+
+    /* ─── M6 Mantenimiento ───────────────────────────────────────────────── */
+    function M6Mantenimiento() {
+      const [km, setKm]     = useState("");
+      const [sent, setSent] = useState(false);
+      const anterior = 45200;
+      const inconsistente = km !== "" && Number(km) <= anterior;
+      return (
+        <div>
+          <SectionHeader title="Mantenimiento preventivo" sub="M6 · MVP"
+            desc="Relevamiento de kilometraje y aceite cada 15 días vía link de WhatsApp, con validación y alertas configurables." />
+          <div className="max-w-md rounded-xl border border-slate-200 bg-white p-5">
+            <div className="mb-3 text-sm text-slate-600">Unidad <strong>{PATENTES[0]}</strong> · Último registro: {anterior.toLocaleString()} km</div>
+            <label className="text-xs font-medium text-slate-500">Kilometraje actual</label>
+            <input value={km} onChange={e => setKm(e.target.value)} type="number"
+              placeholder="ej. 45850" className="mt-1 w-full rounded-md border border-slate-200 p-2 text-sm" />
+            {inconsistente && (
+              <div className="mt-2 flex items-center gap-1 text-xs text-red-600">
+                <AlertTriangle size={13} /> Debe ser mayor al registro anterior. Marcado como inconsistente.
+              </div>
+            )}
+            <label className="mt-3 block text-xs font-medium text-slate-500">Fecha último cambio de aceite</label>
+            <input type="date" className="mt-1 w-full rounded-md border border-slate-200 p-2 text-sm" />
+            <button disabled={!km || inconsistente} onClick={() => setSent(true)}
+              className="mt-4 w-full rounded-md bg-slate-900 py-2 text-sm font-medium text-white disabled:opacity-40">
+              Enviar relevamiento
+            </button>
+            {sent && (
+              <div className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700 flex items-center gap-1">
+                <Check size={13} /> Registro guardado.
+              </div>
+            )}
+          </div>
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            3 unidades con alerta de mantenimiento próximo (km o fecha configurada).
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── M7 Nueva solicitud form ────────────────────────────────────────── */
+    function NuevaSolicitudForm({ onClose, onSubmit, camionetas }) {
+      const [solicitante, setSolicitante] = useState("Chofer");
+      const [patente, setPatente]         = useState(camionetas[0]?.patente || "");
+      const [falla, setFalla]             = useState("");
+      const [detalle, setDetalle]         = useState("");
+      const camionetaSel = camionetas.find(c => c.patente === patente);
+
+      function submit() {
+        if (!falla.trim() || !detalle.trim()) return;
+        onSubmit({ solicitante, patente, chofer:camionetaSel?.chofer || "", falla, detalle });
+      }
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-900">Nueva solicitud de reparación</h3>
+              <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+            </div>
+            <label className="text-xs font-medium text-slate-500">Solicitado por</label>
+            <div className="mt-1 mb-3 flex gap-2">
+              {["Chofer","Administrativo"].map(s => (
+                <button key={s} onClick={() => setSolicitante(s)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium border ${solicitante === s ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200"}`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+            <label className="text-xs font-medium text-slate-500">Unidad</label>
+            <select value={patente} onChange={e => setPatente(e.target.value)}
+              className="mt-1 mb-3 w-full rounded-md border border-slate-200 p-2 text-sm">
+              {camionetas.map(c => <option key={c.patente} value={c.patente}>{c.patente} — {c.chofer}</option>)}
+            </select>
+            <label className="text-xs font-medium text-slate-500">Falla (resumen)</label>
+            <input value={falla} onChange={e => setFalla(e.target.value)}
+              placeholder="ej. Pérdida de gas en equipo de frío"
+              className="mt-1 mb-3 w-full rounded-md border border-slate-200 p-2 text-sm" />
+            <label className="text-xs font-medium text-slate-500">Detalle de la reparación</label>
+            <textarea value={detalle} onChange={e => setDetalle(e.target.value)} rows={3}
+              placeholder="Describí el problema con el mayor detalle posible"
+              className="mt-1 mb-4 w-full rounded-md border border-slate-200 p-2 text-sm" />
+            <button disabled={!falla.trim() || !detalle.trim()} onClick={submit}
+              className="w-full rounded-md bg-slate-900 py-2 text-sm font-medium text-white disabled:opacity-40">
+              Enviar solicitud
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── M7 Talleres / OT ───────────────────────────────────────────────── */
+    function M7Talleres({ camionetas, notifyPanel, role, setRole }) {
+      const [ots, setOts]           = useState(initialOTs);
+      const [selectedId, setSelectedId] = useState(initialOTs[0].id);
+      const [showForm, setShowForm] = useState(false);
+      const [otCounter, setOtCounter] = useState(143);
+      const ot = ots.find(o => o.id === selectedId);
+
+      function crearSolicitud(data) {
+        const id = `OT-0${otCounter}`;
+        setOtCounter(n => n + 1);
+        setOts(prev => [{ id, ...data, taller:"", tallerAsignado:"", presupuestoMonto:"", presupuestoArchivo:"", valorAprobado:null, valorFinal:null, currentStep:0, incremento:false }, ...prev]);
+        setSelectedId(id);
+        setShowForm(false);
+      }
+
+      function updateOt(patch) {
+        setOts(prev => prev.map(o => o.id === selectedId ? { ...o, ...patch } : o));
+      }
+
+      const canAdvance = ot && (() => {
+        if (ot.currentStep === 2) return role === "Facu (Flota)" && !!ot.tallerAsignado;
+        if (ot.currentStep === 3) return role === "Silvina (Administración)" && !!ot.presupuestoArchivo;
+        if (ot.currentStep === 4) return role === "Patricio (Dirección)";
+        return true;
+      })();
+
+      function avanzar() {
+        if (!ot || !canAdvance || ot.currentStep >= OT_STEPS.length - 1) return;
+        if (ot.currentStep === 0) notifyPanel(ot);
+        updateOt({ currentStep:ot.currentStep + 1 });
+      }
+      function retroceder() {
+        if (!ot || ot.currentStep === 0) return;
+        updateOt({ currentStep:ot.currentStep - 1 });
+      }
+      function adjuntarPresupuesto(monto) {
+        updateOt({ presupuestoMonto:monto, presupuestoArchivo:`presupuesto_${ot.id}.pdf`, valorAprobado:Number(monto) || null });
+      }
+
+      return (
+        <div>
+          <SectionHeader
+            title="Talleres y órdenes de trabajo" sub="M7 · MVP"
+            desc="Circuito end-to-end: solicitud → notificación → evaluación → presupuesto → aprobación → pago."
+            right={
+              <div className="flex items-center gap-2">
+                <select value={role} onChange={e => setRole(e.target.value)}
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600">
+                  {ROLES.map(r => <option key={r}>{r}</option>)}
+                </select>
+                <button onClick={() => setShowForm(true)}
+                  className="flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800">
+                  <Plus size={13} /> Nueva solicitud
+                </button>
+              </div>
+            }
+          />
+
+          <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+            {/* OT list */}
+            <div className="space-y-2">
+              {ots.map(o => (
+                <button key={o.id} onClick={() => setSelectedId(o.id)}
+                  className={`w-full rounded-xl border p-3 text-left transition ${selectedId === o.id ? "border-slate-900 bg-slate-50" : "border-slate-200 hover:bg-slate-50"}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-800">{o.id}</span>
+                    <Badge className="bg-slate-100 text-slate-600 border-slate-200">{o.patente}</Badge>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">{o.falla}</div>
+                  <div className="mt-2 text-[11px] font-medium text-slate-400">
+                    Etapa {o.currentStep + 1}/{OT_STEPS.length}: {OT_STEPS[o.currentStep].label}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* OT detail */}
+            {ot && (
+              <div className="rounded-xl border border-slate-200 bg-white p-5">
+                <div className="mb-1 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-slate-400">{ot.patente} · {ot.chofer} · solicitado por {ot.solicitante}</div>
+                    <h3 className="text-base font-bold text-slate-900">{ot.falla}</h3>
+                  </div>
+                  {ot.tallerAsignado && <Badge className="bg-slate-100 text-slate-600 border-slate-200">{ot.tallerAsignado}</Badge>}
+                </div>
+
+                {/* Step progress */}
+                <div className="my-5 flex items-center">
+                  {OT_STEPS.map((s, i) => (
+                    <div key={i} className="flex flex-1 items-center last:flex-none">
+                      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold
+                        ${i < ot.currentStep ? "bg-emerald-500 text-white" : i === ot.currentStep ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400"}`}>
+                        {i < ot.currentStep ? <Check size={13} /> : i + 1}
+                      </div>
+                      {i < OT_STEPS.length - 1 && (
+                        <div className={`h-0.5 flex-1 ${i < ot.currentStep ? "bg-emerald-400" : "bg-slate-100"}`} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Current step detail */}
+                <div className="rounded-lg bg-slate-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-slate-800">{OT_STEPS[ot.currentStep].label}</div>
+                    {OT_STEPS[ot.currentStep].owner && (
+                      <Badge className="bg-white border-slate-200 text-slate-500">
+                        <Lock size={10} /> {OT_STEPS[ot.currentStep].owner}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">{OT_STEPS[ot.currentStep].detail}</p>
+
+                  {ot.currentStep === 0 && (
+                    <div className="mt-3 rounded-md bg-white border border-slate-200 p-3 text-sm text-slate-600">
+                      <div><span className="font-medium text-slate-800">Detalle informado: </span>{ot.detalle}</div>
+                      <div className="mt-1 text-xs text-slate-400">Sin monto todavía — se define recién en la etapa de presupuesto.</div>
+                    </div>
+                  )}
+
+                  {ot.currentStep === 2 && (
+                    <div className="mt-3 rounded-md bg-white border border-slate-200 p-3">
+                      <label className="text-xs font-medium text-slate-500">Taller asignado</label>
+                      <select disabled={role !== "Facu (Flota)"} value={ot.tallerAsignado}
+                        onChange={e => updateOt({ tallerAsignado:e.target.value })}
+                        className="mt-1 w-full rounded-md border border-slate-200 p-1.5 text-sm disabled:bg-slate-50 disabled:text-slate-400">
+                        <option value="">Seleccionar taller...</option>
+                        {TALLERES.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                      {role !== "Facu (Flota)" && (
+                        <div className="mt-1.5 text-[11px] text-slate-400">Solo el rol de Facu puede asignar el taller y avanzar esta etapa.</div>
+                      )}
+                    </div>
+                  )}
+
+                  {ot.currentStep === 3 && (
+                    <div className="mt-3 rounded-md bg-white border border-slate-200 p-3">
+                      {ot.presupuestoArchivo ? (
+                        <div className="flex items-center gap-2 text-sm text-slate-700">
+                          <Paperclip size={14} /> {ot.presupuestoArchivo} — ${Number(ot.presupuestoMonto).toLocaleString()}
+                        </div>
+                      ) : role === "Silvina (Administración)" ? (
+                        <div className="flex gap-2">
+                          <input type="number" placeholder="Monto presupuestado"
+                            className="w-full rounded-md border border-slate-200 p-1.5 text-sm"
+                            onChange={e => updateOt({ presupuestoMonto:e.target.value })} />
+                          <button onClick={() => adjuntarPresupuesto(ot.presupuestoMonto)} disabled={!ot.presupuestoMonto}
+                            className="flex shrink-0 items-center gap-1 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40">
+                            <Paperclip size={12} /> Adjuntar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-400">Solo el rol de Silvina puede cargar y adjuntar el presupuesto.</div>
+                      )}
+                    </div>
+                  )}
+
+                  {ot.currentStep === 4 && ot.incremento && (
+                    <div className="mt-2 flex items-center gap-1 text-xs text-amber-700">
+                      <AlertTriangle size={12} /> Requiere justificación escrita + aprobación explícita de Patricio (hay incremento sobre el presupuesto).
+                    </div>
+                  )}
+                  {ot.currentStep === 4 && role !== "Patricio (Dirección)" && (
+                    <div className="mt-2 text-xs text-slate-400">Solo el rol de Patricio puede aprobar esta etapa.</div>
+                  )}
+                  {ot.currentStep === 5 && (
+                    <div className="mt-2 flex items-center gap-1 text-xs text-emerald-700">
+                      <Check size={12} /> Facturas solo en PDF — condición para procesar el pago.
+                    </div>
+                  )}
+                </div>
+
+                {/* Valores */}
+                <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-slate-500">Valor aprobado</span><div className="font-semibold text-slate-800">{ot.valorAprobado ? `$${ot.valorAprobado.toLocaleString()}` : "—"}</div></div>
+                  <div><span className="text-slate-500">Valor final</span><div className="font-semibold text-slate-800">{ot.valorFinal ? `$${ot.valorFinal.toLocaleString()}` : "—"}</div></div>
+                </div>
+
+                {/* Navigation */}
+                <div className="mt-5 flex gap-2">
+                  <button onClick={retroceder} disabled={ot.currentStep === 0}
+                    className="flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:opacity-30">
+                    <ChevronLeft size={13} /> Retroceder
+                  </button>
+                  <button onClick={avanzar} disabled={ot.currentStep === OT_STEPS.length - 1 || !canAdvance}
+                    className="flex items-center gap-1 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-30">
+                    Avanzar etapa <ChevronRight size={13} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {showForm && <NuevaSolicitudForm onClose={() => setShowForm(false)} onSubmit={crearSolicitud} camionetas={camionetas} />}
+        </div>
+      );
+    }
+
+    /* ─── Root app ───────────────────────────────────────────────────────── */
+    function MiVettorePrototype() {
+      const [active, setActive]         = useState("m1");
+      const [pedidos, setPedidos]       = useState(initialPedidos);
+      const [camionetas, setCamionetas] = useState(initialCamionetas);
+      const [choferes, setChoferes]     = useState(initialChoferes);
+      const [jumpTo, setJumpTo]         = useState(null);
+      const [role, setRole]             = useState("Pablo (Tráfico)");
+
+      function irAFicha(tipo, ref) {
+        setJumpTo({ tipo, ref });
+        setActive("m5");
+      }
+
+      function notifyPanel(ot) {
+        setCamionetas(prev => prev.map(c => c.patente === ot.patente ? { ...c, estado:"en taller" } : c));
+        setPedidos(prev => [{
+          id:Date.now(), dia:"Martes",
+          cliente:`Taller · ${ot.patente}`,
+          tipo:"Notificación de taller",
+          hora:"—", zona:"—",
+          motivo:`${ot.falla} — unidad enviada a taller (${ot.id})`,
+          estado:"pendiente",
+          chofer:ot.chofer, patente:ot.patente,
+          comentario:"", origen:"sistema",
+        }, ...prev]);
+      }
+
+      const pageProps = {
+        m1: { pedidos, setPedidos },
+        m3: {},
+        m4: { camionetas, choferes, onVerFicha:irAFicha },
+        m5: { camionetas, setCamionetas, choferes, setChoferes, jumpTo, clearJump:() => setJumpTo(null) },
+        m6: {},
+        m7: { camionetas, notifyPanel, role, setRole },
+      };
+      const PAGES = { m1:M1Panel, m3:M3Comunicaciones, m4:M4Alertas, m5:M5Ficha, m6:M6Mantenimiento, m7:M7Talleres };
+      const Page = PAGES[active];
+
+      return (
+        <div className="flex w-full overflow-hidden rounded-2xl border border-slate-200 shadow-xl"
+          style={{ height:"760px", background:"#f4f6fb" }}>
+
+          {/* Sidebar */}
+          <aside className="vl-sidebar flex w-60 shrink-0 flex-col border-r">
+            {/* Brand */}
+            <div className="flex items-center gap-2.5 px-4 py-4">
+              <div className="vl-brand-logo flex h-8 w-8 items-center justify-center rounded-lg">
+                <Truck size={16} style={{ color:"#7eb8f7" }} />
+              </div>
+              <div>
+                <div className="vl-brand-title text-sm font-bold leading-tight">Mi Vettore</div>
+                <div className="vl-brand-sub text-[10px] leading-tight">Vettore Logística</div>
+              </div>
+            </div>
+
+            {/* Search */}
+            <div className="px-3 pb-2">
+              <div className="vl-search flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs">
+                <Search size={13} /> Buscar patente, DNI...
+              </div>
+            </div>
+
+            {/* Nav */}
+            <nav className="flex-1 space-y-0.5 px-2 py-2">
+              {NAV.map(n => {
+                const Icon = n.icon;
+                const isActive = active === n.id;
+                return (
+                  <button key={n.id} onClick={() => setActive(n.id)}
+                    className={`vl-nav-item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition ${isActive ? "active" : ""}`}>
+                    <Icon size={15} />
+                    <span className="flex-1">{n.label}</span>
+                    <span className="vl-nav-sub text-[10px] font-semibold">{n.sub}</span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Role selector */}
+            <div className="vl-role-area border-t px-4 py-3">
+              <div className="vl-role-label text-[11px] mb-1">Rol activo (simula permisos)</div>
+              <select value={role} onChange={e => setRole(e.target.value)}
+                className="vl-role-select w-full rounded-md border px-2 py-1 text-xs font-medium">
+                {ROLES.map(r => <option key={r}>{r}</option>)}
+              </select>
+            </div>
+          </aside>
+
+          {/* Main */}
+          <main className="vl-main flex-1 overflow-y-auto p-6">
+            <Page {...pageProps[active]} />
+          </main>
+        </div>
+      );
+    }
+
+    /* Hide loading, mount app */
+    document.getElementById("loading").style.display = "none";
+    ReactDOM.createRoot(document.getElementById("root")).render(<MiVettorePrototype />);
+  </script>
+</body>
+</html>
