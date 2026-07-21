@@ -338,8 +338,9 @@ export function M7TalleresPage() {
             </h1>
           </div>
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            Circuito: solicitud → notificación → evaluación → presupuesto →
-            aprobación → cierre. Los permisos siguen el rol de tu sesión.
+            {rol === "CHOFER"
+              ? "Solo ves las solicitudes de reparación que vos cargaste."
+              : "Circuito: solicitud → notificación → evaluación → presupuesto → aprobación → cierre. Los permisos siguen el rol de tu sesión."}
           </p>
         </div>
         {canCreateSolicitud(rol) && (

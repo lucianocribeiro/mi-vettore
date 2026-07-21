@@ -78,15 +78,38 @@ const includeOT = {
   },
 } as const;
 
+async function choferScope(userId: string): Promise<{
+  userId: string;
+  choferId: string | null;
+} | null> {
+  const me = await prisma.usuario.findUnique({ where: { id: userId } });
+  if (!me || me.rol !== "CHOFER") return null;
+  return { userId: me.id, choferId: me.choferId };
+}
+
+/** El chofer solo ve/opera solicitudes que él creó. */
+function whereOwnSolicitudes(scope: { userId: string }) {
+  return { solicitud: { createdById: scope.userId } };
+}
+
+function choferOwnsOt(
+  ot: { solicitud: { createdById: string | null } },
+  scope: { userId: string }
+): boolean {
+  return ot.solicitud.createdById === scope.userId;
+}
+
 async function nextNumeroOT(): Promise<string> {
   const count = await prisma.ordenTrabajo.count();
   const n = 140 + count + 1;
   return `OT-${String(n).padStart(4, "0")}`;
 }
 
-router.get("/", authenticate, async (_req, res) => {
+router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
+    const scope = await choferScope(req.user!.id);
     const items = await prisma.ordenTrabajo.findMany({
+      where: scope ? whereOwnSolicitudes(scope) : undefined,
       include: includeOT,
       orderBy: { createdAt: "desc" },
     });
@@ -97,7 +120,7 @@ router.get("/", authenticate, async (_req, res) => {
   }
 });
 
-router.get("/:id", authenticate, async (req, res) => {
+router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.ordenTrabajo.findUnique({
       where: { id: req.params.id },
@@ -105,6 +128,11 @@ router.get("/:id", authenticate, async (req, res) => {
     });
     if (!item) {
       res.status(404).json({ error: "OT no encontrada" });
+      return;
+    }
+    const scope = await choferScope(req.user!.id);
+    if (scope && !choferOwnsOt(item, scope)) {
+      res.status(403).json({ error: "Solo podés ver tus propias solicitudes" });
       return;
     }
     res.json(item);
@@ -153,28 +181,51 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
 
-    if (!choferId) {
+    // Si el usuario es CHOFER, forzar su choferId y solicitante
+    const me = await prisma.usuario.findUnique({ where: { id: req.user!.id } });
+    if (rol === "CHOFER") {
+      if (!me?.choferId) {
+        res.status(400).json({
+          error: "Tu usuario no está vinculado a un chofer",
+        });
+        return;
+      }
+      choferId = me.choferId;
+      // Solo puede pedir reparación sobre unidades asignadas a él
+      const asignada = await prisma.asignacionFlota.findFirst({
+        where: {
+          camionetaId,
+          choferId: me.choferId,
+          periodoHasta: null,
+        },
+      });
+      if (!asignada) {
+        res.status(403).json({
+          error: "Solo podés solicitar taller para tu unidad asignada",
+        });
+        return;
+      }
+    } else if (!choferId) {
       choferId = camioneta.asignaciones[0]?.choferId ?? null;
     }
 
-    // Si el usuario es CHOFER, forzar su choferId si está vinculado
-    const me = await prisma.usuario.findUnique({ where: { id: req.user!.id } });
-    if (rol === "CHOFER" && me?.choferId) {
-      choferId = me.choferId;
-    }
+    const solicitante =
+      rol === "CHOFER"
+        ? SolicitanteTaller.CHOFER
+        : (solicitanteRaw as SolicitanteTaller);
 
     const numeroOT = await nextNumeroOT();
 
     const ot = await prisma.$transaction(async (tx) => {
       if (inhabilitado && choferId) {
-        // Criterio vinculante: queda registrado inhabilitado (estado chofer INACTIVO opcional — usamos flag en solicitud)
+        // Criterio vinculante: queda registrado inhabilitado (flag en solicitud)
       }
 
       const solicitud = await tx.solicitudTaller.create({
         data: {
           camionetaId,
           choferId,
-          solicitante: solicitanteRaw as SolicitanteTaller,
+          solicitante,
           falla,
           detalle,
           inhabilitado,
@@ -208,6 +259,12 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     });
     if (!ot) {
       res.status(404).json({ error: "OT no encontrada" });
+      return;
+    }
+
+    const scope = await choferScope(req.user!.id);
+    if (scope) {
+      res.status(403).json({ error: "Sin permiso para editar esta OT" });
       return;
     }
 
@@ -385,6 +442,13 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       res.status(404).json({ error: "OT no encontrada" });
       return;
     }
+
+    const scope = await choferScope(req.user!.id);
+    if (scope && !choferOwnsOt(ot, scope)) {
+      res.status(403).json({ error: "Solo podés operar tus propias solicitudes" });
+      return;
+    }
+
     if (ot.currentStep >= OT_STEPS.length - 1) {
       res.status(400).json({ error: "La OT ya está en la última etapa" });
       return;

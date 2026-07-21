@@ -37,7 +37,6 @@ const NAV: NavItem[] = [
     sub: "M1",
     icon: Calendar,
     roles: [
-      "CHOFER",
       "PABLO",
       "SILVINA",
       "FACU",
@@ -52,7 +51,6 @@ const NAV: NavItem[] = [
     sub: "M3",
     icon: MessageSquare,
     roles: [
-      "CHOFER",
       "PABLO",
       "SILVINA",
       "FACU",

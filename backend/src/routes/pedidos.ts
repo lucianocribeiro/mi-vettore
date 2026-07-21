@@ -2,7 +2,7 @@ import { Router } from "express";
 import ExcelJS from "exceljs";
 import { EstadoCamioneta, EstadoPedido, Role } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { authenticate, authorize } from "../middleware/auth.js";
+import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -106,8 +106,12 @@ function resolveRange(query: {
  * GET /api/pedidos/export?from=&to= | ?semana= | ?fecha=
  * Debe ir antes de /:id
  */
-router.get("/export", authenticate, async (req, res) => {
+router.get("/export", authenticate, async (req: AuthedRequest, res) => {
   try {
+    if (req.user!.rol === Role.CHOFER || req.user!.rol === Role.CLIENTE) {
+      res.status(403).json({ error: "Sin acceso al panel de tráfico" });
+      return;
+    }
     const { rangeStart, rangeEnd } = resolveRange(req.query);
 
     const pedidos = await prisma.pedido.findMany({
@@ -179,8 +183,13 @@ router.get("/export", authenticate, async (req, res) => {
  * GET /api/pedidos
  * Query: fecha | from&to | semana
  */
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
+    if (req.user!.rol === Role.CHOFER || req.user!.rol === Role.CLIENTE) {
+      res.status(403).json({ error: "Sin acceso al panel de tráfico" });
+      return;
+    }
+
     const { rangeStart, rangeEnd } = resolveRange(req.query);
 
     const pedidos = await prisma.pedido.findMany({

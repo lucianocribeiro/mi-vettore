@@ -60,7 +60,11 @@ const FLUJO = [
   },
 ];
 
-router.get("/meta", authenticate, async (_req, res) => {
+router.get("/meta", authenticate, async (req: AuthedRequest, res) => {
+  if (req.user!.rol === "CHOFER" || req.user!.rol === "CLIENTE") {
+    res.status(403).json({ error: "Sin acceso a comunicaciones" });
+    return;
+  }
   const cob = fechasCobertura();
   res.json({
     flujo: FLUJO,
@@ -76,8 +80,12 @@ router.get("/meta", authenticate, async (_req, res) => {
   });
 });
 
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
+    if (req.user!.rol === "CHOFER" || req.user!.rol === "CLIENTE") {
+      res.status(403).json({ error: "Sin acceso a comunicaciones" });
+      return;
+    }
     const take = Math.min(Number(req.query.limit) || 100, 500);
     const tipoRaw = req.query.tipo ? String(req.query.tipo).toUpperCase() : "";
     const where =

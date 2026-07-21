@@ -13,6 +13,7 @@ import { M7TalleresPage } from "./pages/m7/M7TalleresPage";
 function HomeRedirect() {
   const { user } = useAuth();
   if (user?.rol === "CLIENTE") return <Navigate to="/m2" replace />;
+  if (user?.rol === "CHOFER") return <Navigate to="/m7" replace />;
   return <Navigate to="/m1" replace />;
 }
 

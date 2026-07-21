@@ -218,6 +218,27 @@ async function main() {
     }
   }
 
+  // Asegurar que el chofer demo (Marcos) tenga unidad abierta para M7
+  const asgMarcos = await prisma.asignacionFlota.findFirst({
+    where: { choferId: marcos.id, periodoHasta: null },
+  });
+  if (!asgMarcos) {
+    // Liberar AD122CP si está con otro chofer y reasignar a Marcos
+    await prisma.asignacionFlota.updateMany({
+      where: { camionetaId: camionetas[0].id, periodoHasta: null },
+      data: { periodoHasta: new Date() },
+    });
+    await prisma.asignacionFlota.create({
+      data: {
+        camionetaId: camionetas[0].id,
+        choferId: marcos.id,
+        empresaId: empresas[0].id,
+        periodoDesde: new Date("2026-03-01"),
+        periodoHasta: null,
+      },
+    });
+  }
+
   // Pedidos demo — semana del 20 al 24 jul 2026 (Lun–Vie)
   await prisma.pedido.deleteMany({});
   const byName = (nombre: string) =>

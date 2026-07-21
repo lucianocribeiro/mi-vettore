@@ -2,7 +2,7 @@ import { Router } from "express";
 import { EstadoCamioneta } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES } from "../lib/roles.js";
-import { authenticate, authorize } from "../middleware/auth.js";
+import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -23,8 +23,27 @@ function parseDate(value: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-router.get("/", authenticate, async (_req, res) => {
+router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
+    const me = await prisma.usuario.findUnique({ where: { id: req.user!.id } });
+    if (me?.rol === "CHOFER") {
+      if (!me.choferId) {
+        res.json([]);
+        return;
+      }
+      const items = await prisma.camioneta.findMany({
+        where: {
+          asignaciones: {
+            some: { choferId: me.choferId, periodoHasta: null },
+          },
+        },
+        orderBy: { patente: "asc" },
+        include: includeAsignaciones,
+      });
+      res.json(items);
+      return;
+    }
+
     const items = await prisma.camioneta.findMany({
       orderBy: { patente: "asc" },
       include: includeAsignaciones,
