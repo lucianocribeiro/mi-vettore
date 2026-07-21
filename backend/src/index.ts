@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import fs from "fs";
 import path from "path";
 import { authRouter } from "./routes/auth.js";
 import { meRouter } from "./routes/me.js";
@@ -19,14 +20,20 @@ import { isSmtpConfigured } from "./lib/mailer.js";
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 
+const defaultOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5174",
+];
+const corsOrigins = (process.env.CORS_ORIGINS || defaultOrigins.join(","))
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-      "http://localhost:5174",
-      "http://127.0.0.1:5174",
-    ],
+    origin: corsOrigins,
     credentials: true,
   })
 );
@@ -38,6 +45,7 @@ app.get("/api/health", (_req, res) => {
     ok: true,
     service: "mi-vettore-backend",
     smtp: isSmtpConfigured() ? "configured" : "simulated",
+    env: process.env.NODE_ENV || "development",
   });
 });
 
@@ -53,10 +61,26 @@ app.use("/api/talleres", talleresRouter);
 app.use("/api/cambios", cambiosRouter);
 app.use("/api/comunicaciones", comunicacionesRouter);
 
+/** Producción single-host: servir el build de Vite desde ../frontend/dist */
+const serveFrontend = process.env.SERVE_FRONTEND === "true";
+const frontendDist = path.resolve(process.cwd(), "../frontend/dist");
+if (serveFrontend && fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
+      next();
+      return;
+    }
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+  console.log(`[static] sirviendo frontend desde ${frontendDist}`);
+}
+
 app.listen(PORT, () => {
   console.log(`Mi Vettore API escuchando en http://localhost:${PORT}`);
   console.log(
     `Email: ${isSmtpConfigured() ? "SMTP activo" : "modo simulado (sin SMTP_*)"}`
   );
+  console.log(`CORS: ${corsOrigins.join(", ")}`);
   startComunicacionesScheduler();
 });

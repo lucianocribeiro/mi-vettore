@@ -4,6 +4,7 @@ import { Badge } from "../../components/Badge";
 import {
   AlertTriangle,
   Check,
+  ChevronLeft,
   ChevronRight,
   Download,
   X,
@@ -116,21 +117,17 @@ function pedidoDayKey(fechaIso: string): string {
 }
 
 function defaultWeekRef(): Date {
-  const now = new Date();
-  if (now.getFullYear() === 2026 && now.getMonth() === 6) return now;
-  return new Date("2026-07-21T12:00:00");
+  return new Date();
 }
 
 export function M1PanelPage() {
   const { token, user } = useAuth();
   const canWrite = canOperateTrafico(user?.rol);
 
-  const weekRef = useMemo(() => defaultWeekRef(), []);
+  const [weekRef, setWeekRef] = useState(() => defaultWeekRef());
   const dias = useMemo(() => buildWeekDays(weekRef), [weekRef]);
   const defaultDia =
-    dias.find((d) => d.hoy)?.key ??
-    dias.find((d) => d.key === "2026-07-22")?.key ??
-    dias[0]?.key;
+    dias.find((d) => d.hoy)?.key ?? dias[0]?.key ?? ymdLocal(new Date());
 
   const [dia, setDia] = useState(defaultDia);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
@@ -146,6 +143,12 @@ export function M1PanelPage() {
   const [cierreError, setCierreError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    const next =
+      dias.find((d) => d.hoy)?.key ?? dias[0]?.key ?? ymdLocal(new Date());
+    setDia(next);
+  }, [dias]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -174,6 +177,14 @@ export function M1PanelPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  function shiftWeek(delta: number) {
+    setWeekRef((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + delta * 7);
+      return d;
+    });
+  }
 
   const visibles = pedidos.filter((p) => pedidoDayKey(p.fecha) === dia);
 
@@ -283,6 +294,32 @@ export function M1PanelPage() {
             {exporting ? "Exportando…" : "Exportar Excel"}
           </button>
         </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => shiftWeek(-1)}
+          className="inline-flex min-h-10 items-center gap-1 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2.5 py-1.5 text-xs font-medium text-[var(--vl-text)]"
+          aria-label="Semana anterior"
+        >
+          <ChevronLeft size={14} /> Semana
+        </button>
+        <button
+          type="button"
+          onClick={() => setWeekRef(new Date())}
+          className="inline-flex min-h-10 items-center rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2.5 py-1.5 text-xs font-medium text-[var(--vl-text-muted)]"
+        >
+          Hoy
+        </button>
+        <button
+          type="button"
+          onClick={() => shiftWeek(1)}
+          className="inline-flex min-h-10 items-center gap-1 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2.5 py-1.5 text-xs font-medium text-[var(--vl-text)]"
+          aria-label="Semana siguiente"
+        >
+          Semana <ChevronRight size={14} />
+        </button>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">

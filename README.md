@@ -1,59 +1,80 @@
 # Mi Vettore
 
-Plataforma web interna de Vettore Logística. Monorepo con `/backend` (Node + Express + Prisma) y `/frontend` (Vite + React + Tailwind).
+Plataforma operativa interna de Vettore Logística (Etapa 1 MVP).  
+Monorepo: `/backend` (Express + Prisma) · `/frontend` (Vite + React + Tailwind).
+
+## Módulos Etapa 1
+
+| Código | Módulo | Estado |
+|--------|--------|--------|
+| M1 | Panel de tráfico | Listo |
+| M2 | Formulario de cambios (cliente) | Listo |
+| M3 | Comunicaciones email | Listo |
+| M5 | Datos maestros (ABM) | Listo |
+| M7 | Talleres / OT | Listo |
+| M4 / M6 | Alertas / Mantenimiento | Etapa posterior |
 
 ## Requisitos
 
 - Node.js 20+
 - npm 10+
 
-## Arranque rápido
+## Arranque local
 
 ```bash
 npm run install:all
-cd backend
-npx prisma migrate dev
-npm run db:seed
-cd ..
+cp backend/.env.example backend/.env
+cd backend && npx prisma migrate dev && npm run db:seed && cd ..
 npm run dev
 ```
 
-- Frontend: http://localhost:5173
-- API: http://localhost:4000
+- Frontend: http://localhost:5173  
+- API: http://localhost:4000  
+- Login: botones por rol (password `vettore123`)
 
-## Usuarios de prueba (seed)
+## Roles y pantallas
 
-Password para todos: `vettore123`
+| Rol | Home | Qué ve |
+|-----|------|--------|
+| CLIENTE | `/m2` | Solo formulario de cambios |
+| CHOFER | `/m7` | Solo sus propias solicitudes de taller |
+| Ops (Pablo, Silvina, Facu, Patricio, Julieta, Carla) | `/m1` | Panel, comunicaciones, ABM, todas las OT |
 
-| Email | Rol |
-|-------|-----|
-| cliente@vettore.test | CLIENTE |
-| chofer@vettore.test | CHOFER |
-| pablo@vettore.test | PABLO |
-| silvina@vettore.test | SILVINA |
-| facu@vettore.test | FACU |
-| patricio@vettore.test | PATRICIO |
-| julieta@vettore.test | JULIETA |
-| carla@vettore.test | CARLA |
+## Producción (checklist)
 
-Escritura de datos maestros (M5): PABLO, SILVINA, FACU, PATRICIO, JULIETA.
+1. Copiar `backend/.env.example` → `backend/.env` y setear:
+   - `JWT_SECRET` fuerte
+   - `DATABASE_URL` (SQLite o Postgres)
+   - `APP_PUBLIC_URL` = URL pública del frontend
+   - `CORS_ORIGINS` = origen(es) del frontend
+   - SMTP (`SMTP_*`) si querés mails reales (si no, quedan `SIMULADO`)
+2. Frontend: build con API relativa o URL absoluta:
+   ```bash
+   cd frontend && npm run build
+   ```
+   - Misma máquina / reverse proxy: dejar `VITE_API_URL` vacío (requests a `/api`)
+   - API en otro dominio: `VITE_API_URL=https://api.tudominio.com`
+3. Opción single-host (API sirve el build):
+   ```bash
+   cd frontend && npm run build
+   cd ../backend
+   # .env: SERVE_FRONTEND=true  PORT=4000
+   npx prisma migrate deploy
+   npm run db:seed   # solo primera vez / demo
+   npm start
+   ```
+4. Postgres (opcional): en `schema.prisma` cambiar `provider` a `postgresql` y `DATABASE_URL` a la connection string; luego `npx prisma migrate deploy`.
 
-## Base de datos
-
-Desarrollo local usa **SQLite** (`backend/prisma/dev.db`).
-
-Para producción con PostgreSQL:
-
-1. Cambiar `provider = "postgresql"` en `backend/prisma/schema.prisma`
-2. Setear `DATABASE_URL` a la connection string de Postgres
-3. Correr migraciones
-
-Los modelos no necesitan reescribirse.
-
-## Scripts útiles
+## Scripts
 
 | Comando | Descripción |
 |---------|-------------|
 | `npm run dev` | Backend + frontend en paralelo |
-| `npm run seed` | Seed de usuarios y datos demo |
+| `npm run seed` | Seed demo |
 | `npm run db:migrate` | Migraciones Prisma |
+| `cd backend && npm start` | API producción (`tsx src/index.ts`) |
+| `cd frontend && npm run build` | Build estático |
+
+## Nota
+
+M4 y M6 son placeholders. WhatsApp queda fuera del MVP (solo email en M3).

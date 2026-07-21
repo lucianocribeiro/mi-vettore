@@ -239,7 +239,7 @@ async function main() {
     });
   }
 
-  // Pedidos demo — semana del 20 al 24 jul 2026 (Lun–Vie)
+  // Pedidos demo — semana laboral actual (Lun–Vie)
   await prisma.pedido.deleteMany({});
   const byName = (nombre: string) =>
     clientesDb.find((c) => c.nombre === nombre)!;
@@ -248,10 +248,26 @@ async function main() {
     return new Date(Date.now() - h * 60 * 60 * 1000);
   }
 
+  function mondayOfWeek(ref = new Date()): Date {
+    const d = new Date(ref);
+    d.setHours(12, 0, 0, 0);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
+  /** offset 0 = lunes … 4 = viernes de la semana actual */
+  function weekDay(offset: number): Date {
+    const d = mondayOfWeek();
+    d.setDate(d.getDate() + offset);
+    return d;
+  }
+
   const pedidosSeed = [
     {
       clienteId: byName("La Delfina").id,
-      fecha: new Date("2026-07-22T12:00:00"),
+      fecha: weekDay(1),
       tipo: TipoPedido.ALTA,
       hora: "08:30",
       zona: "Vicente López",
@@ -264,7 +280,7 @@ async function main() {
     },
     {
       clienteId: byName("Dietética Norte").id,
-      fecha: new Date("2026-07-22T12:00:00"),
+      fecha: weekDay(1),
       tipo: TipoPedido.CAMBIO_HORARIO,
       hora: "10:00",
       zona: "San Isidro",
@@ -277,7 +293,7 @@ async function main() {
     },
     {
       clienteId: byName("Congelados Sur").id,
-      fecha: new Date("2026-07-22T12:00:00"),
+      fecha: weekDay(1),
       tipo: TipoPedido.BAJA,
       hora: null,
       zona: "Tigre",
@@ -291,7 +307,7 @@ async function main() {
     },
     {
       clienteId: byName("FarmaExpress").id,
-      fecha: new Date("2026-07-23T12:00:00"),
+      fecha: weekDay(2),
       tipo: TipoPedido.PEDIDO_ESPECIAL,
       hora: "07:15",
       zona: "Belgrano",
@@ -304,7 +320,7 @@ async function main() {
     },
     {
       clienteId: byName("Verduras del Valle").id,
-      fecha: new Date("2026-07-23T12:00:00"),
+      fecha: weekDay(2),
       tipo: TipoPedido.CAMBIO_RUTA,
       hora: "09:00",
       zona: "Pilar",
@@ -317,7 +333,7 @@ async function main() {
     },
     {
       clienteId: byName("La Delfina").id,
-      fecha: new Date("2026-07-21T12:00:00"),
+      fecha: weekDay(0),
       tipo: TipoPedido.ALTA,
       hora: "11:00",
       zona: "Olivos",
@@ -330,7 +346,7 @@ async function main() {
     },
     {
       clienteId: byName("Congelados Sur").id,
-      fecha: new Date("2026-07-24T12:00:00"),
+      fecha: weekDay(3),
       tipo: TipoPedido.BAJA,
       hora: "06:30",
       zona: "Tigre",
@@ -351,6 +367,13 @@ async function main() {
   await prisma.ordenTrabajo.deleteMany({});
   await prisma.solicitudTaller.deleteMany({});
 
+  const choferUser = await prisma.usuario.findUnique({
+    where: { email: "chofer@vettore.test" },
+  });
+  const pabloUser = await prisma.usuario.findUnique({
+    where: { email: "pablo@vettore.test" },
+  });
+
   let opTaller = await prisma.cliente.findFirst({
     where: { nombre: "Operación Talleres" },
   });
@@ -365,6 +388,28 @@ async function main() {
   }
   void opTaller;
 
+  // OT del chofer demo (solo él la ve por createdById)
+  if (choferUser) {
+    const solChofer = await prisma.solicitudTaller.create({
+      data: {
+        camionetaId: camionetas[0].id,
+        choferId: marcos.id,
+        solicitante: "CHOFER",
+        falla: "Ruido al frenar",
+        detalle: "Chirrido al frenar en frío — solicitud del chofer demo.",
+        inhabilitado: false,
+        createdById: choferUser.id,
+      },
+    });
+    await prisma.ordenTrabajo.create({
+      data: {
+        solicitudTallerId: solChofer.id,
+        numeroOT: "OT-0143",
+        currentStep: 0,
+      },
+    });
+  }
+
   const sol1 = await prisma.solicitudTaller.create({
     data: {
       camionetaId: camionetas[0].id,
@@ -374,6 +419,7 @@ async function main() {
       detalle:
         "El equipo de frío deja de enfriar después de 20 minutos de viaje, se escucha silbido en la parte trasera.",
       inhabilitado: false,
+      createdById: pabloUser?.id ?? null,
     },
   });
   await prisma.ordenTrabajo.create({
@@ -394,6 +440,7 @@ async function main() {
       detalle:
         "Batería no arranca en frío, chofer reporta luces tenues desde el lunes.",
       inhabilitado: false,
+      createdById: pabloUser?.id ?? null,
     },
   });
   await prisma.ordenTrabajo.create({
@@ -420,6 +467,7 @@ async function main() {
       detalle:
         "Ruido metálico al pasar por lomos de burro, se acentuó esta semana.",
       inhabilitado: true,
+      createdById: pabloUser?.id ?? null,
     },
   });
   await prisma.ordenTrabajo.create({
@@ -438,8 +486,8 @@ async function main() {
 
   console.log("Seed OK");
   console.log(`Password demo para todos: ${DEMO_PASSWORD}`);
-  console.log(`Pedidos demo: ${pedidosSeed.length}`);
-  console.log("OTs demo: OT-0140, OT-0141, OT-0142");
+  console.log(`Pedidos demo: ${pedidosSeed.length} (semana laboral actual)`);
+  console.log("OTs demo: OT-0140…0143 (0143 = solo chofer)");
   console.log("Usuarios:");
   for (const u of USERS) {
     console.log(`  ${u.email} → ${u.rol}`);
