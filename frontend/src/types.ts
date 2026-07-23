@@ -23,7 +23,7 @@ export type User = {
 export const ROLE_LABELS: Record<Role, string> = {
   CLIENTE: "Cliente",
   CHOFER: "Chofer",
-  PABLO: "Pablo (Tráfico)",
+  PABLO: "Pablo (Ops)",
   SILVINA: "Silvina (Flota)",
   FACU: "Facu (Flota)",
   PATRICIO: "Patricio (Dirección)",
@@ -53,6 +53,16 @@ export type EstadoCamioneta =
   | "DE_VACACIONES"
   | "FUERA_SERVICIO";
 export type TipoEmpresa = "PROPIA" | "ALIADA";
+
+export type TipoPedido =
+  | "ALTA"
+  | "BAJA"
+  | "CAMBIO_HORARIO"
+  | "CAMBIO_RUTA"
+  | "PEDIDO_ESPECIAL";
+
+export type EstadoPedido = "PENDIENTE" | "EN_CURSO" | "RESUELTO";
+export type OrigenPedido = "FORMULARIO" | "MANUAL" | "SISTEMA";
 
 export type Cliente = {
   id: string;

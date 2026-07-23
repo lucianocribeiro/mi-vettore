@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge } from "../../components/Badge";
 import { apiFetch, ApiError } from "../../lib/api";
-import type { TipoPedido } from "../m1/M1PanelPage";
+import type { TipoPedido } from "../../types";
 
 const TIPOS: Array<{ value: TipoPedido; label: string }> = [
   { value: "ALTA", label: "Alta" },
@@ -12,7 +12,7 @@ const TIPOS: Array<{ value: TipoPedido; label: string }> = [
   { value: "PEDIDO_ESPECIAL", label: "Pedido especial" },
 ];
 
-/** Pantalla real del cliente (M2) — no es un modal de previsualización. */
+/** Pantalla real del cliente (M2). */
 export function M2CambiosPage() {
   const { token, user } = useAuth();
   const [tipo, setTipo] = useState<TipoPedido>("ALTA");
@@ -41,9 +41,7 @@ export function M2CambiosPage() {
         },
         token
       );
-      setOkMsg(
-        "Cambio enviado. Ya figura en el Panel de Tráfico de Pablo (pendiente)."
-      );
+      setOkMsg("Cambio enviado correctamente. Coordinación lo recibirá.");
       setMotivo("");
       setDetalle("");
     } catch (err) {
@@ -63,8 +61,7 @@ export function M2CambiosPage() {
           Formulario de cambios
         </h1>
         <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-          Lo que envíes aparece como pedido nuevo en el Panel de tráfico (M1),
-          con origen formulario y estado pendiente.
+          Cargá altas, bajas o cambios de servicio. El motivo es obligatorio.
         </p>
         {user?.nombre && (
           <p className="mt-1 text-xs text-[var(--vl-text-muted)]">

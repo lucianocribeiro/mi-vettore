@@ -5,12 +5,10 @@ import { AppLogo } from "./AppLogo";
 import { ThemeToggle } from "./ThemeToggle";
 import {
   AlertCircle,
-  Calendar,
   CreditCard,
   FileText,
   MessageSquare,
   Search,
-  Settings,
   Wrench,
   X,
 } from "./icons";
@@ -19,11 +17,26 @@ type NavItem = {
   to: string;
   label: string;
   sub: string;
-  icon: typeof Calendar;
+  icon: typeof FileText;
   roles?: Role[];
 };
 
 const NAV: NavItem[] = [
+  {
+    to: "/m7",
+    label: "Talleres / OT",
+    sub: "Circuito OT",
+    icon: Wrench,
+    roles: [
+      "CHOFER",
+      "PABLO",
+      "SILVINA",
+      "FACU",
+      "PATRICIO",
+      "JULIETA",
+      "CARLA",
+    ],
+  },
   {
     to: "/m2",
     label: "Formulario de cambios",
@@ -32,10 +45,10 @@ const NAV: NavItem[] = [
     roles: ["CLIENTE"],
   },
   {
-    to: "/m1",
-    label: "Panel de tráfico",
-    sub: "M1",
-    icon: Calendar,
+    to: "/m5",
+    label: "Ficha integral (ABM)",
+    sub: "M5",
+    icon: CreditCard,
     roles: [
       "PABLO",
       "SILVINA",
@@ -74,40 +87,11 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    to: "/m5",
-    label: "Ficha integral (ABM)",
-    sub: "M5",
-    icon: CreditCard,
-    roles: [
-      "PABLO",
-      "SILVINA",
-      "FACU",
-      "PATRICIO",
-      "JULIETA",
-      "CARLA",
-    ],
-  },
-  {
     to: "/m6",
     label: "Mantenimiento",
     sub: "M6",
     icon: Wrench,
     roles: [
-      "PABLO",
-      "SILVINA",
-      "FACU",
-      "PATRICIO",
-      "JULIETA",
-      "CARLA",
-    ],
-  },
-  {
-    to: "/m7",
-    label: "Talleres / OT",
-    sub: "M7",
-    icon: Settings,
-    roles: [
-      "CHOFER",
       "PABLO",
       "SILVINA",
       "FACU",

@@ -33,10 +33,10 @@ const OT_STEPS = [
       "El chofer o el personal administrativo carga la falla. Es la información base, todavía sin monto.",
   },
   {
-    label: "Notificación panel",
+    label: "Notificación",
     owner: null,
     detail:
-      "Al avanzar se genera un pedido en el Panel de Tráfico y la unidad queda marcada en taller.",
+      "Se notifica a operación y la unidad queda marcada en taller.",
   },
   {
     label: "Evaluación taller",
@@ -61,6 +61,26 @@ const OT_STEPS = [
     detail: "Factura solo en PDF y descripción del trabajo para cerrar el circuito.",
   },
 ] as const;
+
+function roleActionHint(rol?: Role | null): string {
+  switch (rol) {
+    case "CHOFER":
+      return "Tu rol: crear solicitudes y avanzarlas desde Solicitud.";
+    case "FACU":
+      return "Tu rol: asignar taller en Evaluación y avanzar esa etapa.";
+    case "SILVINA":
+      return "Tu rol: cargar presupuesto PDF y cerrar con factura PDF.";
+    case "PATRICIO":
+    case "JULIETA":
+      return "Tu rol: aprobar montos (justificación si hay incremento).";
+    case "PABLO":
+      return "Tu rol: ver todas las OT, notificar y cerrar pago.";
+    case "CARLA":
+      return "Tu rol: crear solicitudes de reparación.";
+    default:
+      return "Los permisos siguen el rol de tu sesión.";
+  }
+}
 
 type Solicitud = {
   id: string;
@@ -140,6 +160,7 @@ export function M7TalleresPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [filter, setFilter] = useState<"todas" | "mia">("todas");
 
   const [tallerDraft, setTallerDraft] = useState("");
   const [montoDraft, setMontoDraft] = useState("");
@@ -176,6 +197,27 @@ export function M7TalleresPage() {
     () => ots.find((o) => o.id === selectedId) ?? null,
     [ots, selectedId]
   );
+
+  const needsMyAction = useCallback(
+    (o: OrdenTrabajo) => canAdvanceFromStep(rol, o.currentStep),
+    [rol]
+  );
+
+  const visibleOts = useMemo(() => {
+    if (filter === "mia") return ots.filter(needsMyAction);
+    return ots;
+  }, [ots, filter, needsMyAction]);
+
+  const actionCount = useMemo(
+    () => ots.filter(needsMyAction).length,
+    [ots, needsMyAction]
+  );
+
+  useEffect(() => {
+    if (!visibleOts.some((o) => o.id === selectedId)) {
+      setSelectedId(visibleOts[0]?.id ?? null);
+    }
+  }, [visibleOts, selectedId]);
 
   useEffect(() => {
     if (!ot) return;
@@ -331,16 +373,19 @@ export function M7TalleresPage() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
-              M7 · MVP
+              Talleres
             </span>
             <h1 className="text-lg font-bold text-[var(--vl-heading)] sm:text-xl">
-              Talleres y órdenes de trabajo
+              Órdenes de trabajo
             </h1>
           </div>
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
             {rol === "CHOFER"
               ? "Solo ves las solicitudes de reparación que vos cargaste."
-              : "Circuito: solicitud → notificación → evaluación → presupuesto → aprobación → cierre. Los permisos siguen el rol de tu sesión."}
+              : "Circuito OT: solicitud → notificación → evaluación → presupuesto → aprobación → cierre."}
+          </p>
+          <p className="mt-1.5 text-xs font-medium text-[#1e4080] dark:text-sky-300">
+            {roleActionHint(rol)}
           </p>
         </div>
         {canCreateSolicitud(rol) && (
@@ -360,41 +405,80 @@ export function M7TalleresPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {!loading && !error && (
-        <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-          <div className="space-y-2">
-            {ots.length === 0 && (
-              <p className="text-sm text-[var(--vl-text-muted)]">
-                No hay órdenes de trabajo.
-              </p>
-            )}
-            {ots.map((o) => (
+        <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
               <button
-                key={o.id}
                 type="button"
-                onClick={() => setSelectedId(o.id)}
-                className={`w-full rounded-xl border p-3 text-left transition ${
-                  selectedId === o.id
-                    ? "border-slate-900 bg-slate-50 dark:border-slate-100 dark:bg-slate-900/40"
-                    : "border-[var(--vl-card-border)] hover:bg-slate-50 dark:hover:bg-slate-900/30"
+                onClick={() => setFilter("todas")}
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  filter === "todas"
+                    ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                    : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
                 }`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-[var(--vl-heading)]">
-                    {o.numeroOT}
-                  </span>
-                  <Badge className="border-slate-200 bg-slate-100 text-slate-600">
-                    {o.solicitud.camioneta.patente}
-                  </Badge>
-                </div>
-                <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
-                  {o.solicitud.falla}
-                </div>
-                <div className="mt-2 text-[11px] font-medium text-[var(--vl-text-muted)]">
-                  Etapa {o.currentStep + 1}/{OT_STEPS.length}:{" "}
-                  {OT_STEPS[o.currentStep]?.label}
-                </div>
+                Todas ({ots.length})
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setFilter("mia")}
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  filter === "mia"
+                    ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                    : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                }`}
+              >
+                Requieren mi acción ({actionCount})
+              </button>
+            </div>
+
+            {visibleOts.length === 0 && (
+              <div className="rounded-xl border border-dashed border-[var(--vl-card-border)] p-4 text-sm text-[var(--vl-text-muted)]">
+                {filter === "mia"
+                  ? "No hay OT pendientes de tu rol ahora."
+                  : rol === "CHOFER"
+                    ? "Todavía no cargaste solicitudes. Usá «Nueva solicitud»."
+                    : "No hay órdenes de trabajo."}
+              </div>
+            )}
+            {visibleOts.map((o) => {
+              const mine = needsMyAction(o);
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setSelectedId(o.id)}
+                  className={`w-full rounded-xl border p-3 text-left transition ${
+                    selectedId === o.id
+                      ? "border-slate-900 bg-slate-50 dark:border-slate-100 dark:bg-slate-900/40"
+                      : "border-[var(--vl-card-border)] hover:bg-slate-50 dark:hover:bg-slate-900/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-[var(--vl-heading)]">
+                      {o.numeroOT}
+                    </span>
+                    <Badge className="border-slate-200 bg-slate-100 text-slate-600">
+                      {o.solicitud.camioneta.patente}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
+                    {o.solicitud.falla}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium">
+                    <span className="text-[var(--vl-text-muted)]">
+                      Etapa {o.currentStep + 1}/{OT_STEPS.length}:{" "}
+                      {OT_STEPS[o.currentStep]?.label}
+                    </span>
+                    {mine && (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                        Tu turno
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
           {ot && (
@@ -461,11 +545,18 @@ export function M7TalleresPage() {
                   <div className="text-sm font-semibold text-[var(--vl-heading)]">
                     {OT_STEPS[ot.currentStep].label}
                   </div>
-                  {OT_STEPS[ot.currentStep].owner && (
-                    <Badge className="border-slate-200 bg-white text-slate-500 dark:bg-slate-900">
-                      <Lock size={10} /> {OT_STEPS[ot.currentStep].owner}
-                    </Badge>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {roleCanAdvance && ot.currentStep < OT_STEPS.length - 1 && (
+                      <Badge className="border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                        Tu turno
+                      </Badge>
+                    )}
+                    {OT_STEPS[ot.currentStep].owner && (
+                      <Badge className="border-slate-200 bg-white text-slate-500 dark:bg-slate-900">
+                        <Lock size={10} /> {OT_STEPS[ot.currentStep].owner}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
                   {OT_STEPS[ot.currentStep].detail}
@@ -488,8 +579,8 @@ export function M7TalleresPage() {
 
                 {ot.currentStep === 1 && (
                   <div className="mt-3 text-xs text-[var(--vl-text-muted)]">
-                    Pedido de notificación ya generado en M1 (origen sistema).
-                    Podés avanzar a evaluación cuando Facu tome el caso.
+                    Notificación a operación registrada. Podés avanzar a
+                    evaluación cuando Facu tome el caso.
                   </div>
                 )}
 

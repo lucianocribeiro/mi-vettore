@@ -5,7 +5,6 @@ import { AppLayout } from "./components/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { M5FichaPage } from "./pages/m5/M5FichaPage";
-import { M1PanelPage } from "./pages/m1/M1PanelPage";
 import { M2CambiosPage } from "./pages/m2/M2CambiosPage";
 import { M3ComunicacionesPage } from "./pages/m3/M3ComunicacionesPage";
 import { M7TalleresPage } from "./pages/m7/M7TalleresPage";
@@ -13,8 +12,7 @@ import { M7TalleresPage } from "./pages/m7/M7TalleresPage";
 function HomeRedirect() {
   const { user } = useAuth();
   if (user?.rol === "CLIENTE") return <Navigate to="/m2" replace />;
-  if (user?.rol === "CHOFER") return <Navigate to="/m7" replace />;
-  return <Navigate to="/m1" replace />;
+  return <Navigate to="/m7" replace />;
 }
 
 export default function App() {
@@ -25,7 +23,7 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route index element={<HomeRedirect />} />
-            <Route path="/m1" element={<M1PanelPage />} />
+            <Route path="/m1" element={<Navigate to="/" replace />} />
             <Route path="/m2" element={<M2CambiosPage />} />
             <Route path="/m3" element={<M3ComunicacionesPage />} />
             <Route

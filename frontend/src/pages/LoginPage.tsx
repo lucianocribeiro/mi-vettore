@@ -18,73 +18,73 @@ type DemoAccount = {
 
 const DEMO_ACCOUNTS: DemoAccount[] = [
   {
-    email: "cliente@vettore.test",
-    rol: "CLIENTE",
-    label: "Cliente",
-    home: "/m2",
-    note: "Solo formulario de cambios",
-  },
-  {
     email: "chofer@vettore.test",
     rol: "CHOFER",
     label: "Chofer",
     home: "/m7",
-    note: "Solo sus propias solicitudes de taller",
-  },
-  {
-    email: "pablo@vettore.test",
-    rol: "PABLO",
-    label: "Pablo · Tráfico",
-    home: "/m1",
-    note: "Panel + comunicaciones + OT completas",
-  },
-  {
-    email: "silvina@vettore.test",
-    rol: "SILVINA",
-    label: "Silvina · Flota",
-    home: "/m1",
-    note: "Presupuesto PDF en talleres",
+    note: "Crea y ve solo sus solicitudes de taller",
   },
   {
     email: "facu@vettore.test",
     rol: "FACU",
-    label: "Facu · Flota",
-    home: "/m1",
-    note: "Evaluación / asignar taller",
+    label: "Facu · Evaluación",
+    home: "/m7",
+    note: "Asigna taller (etapa evaluación)",
+  },
+  {
+    email: "silvina@vettore.test",
+    rol: "SILVINA",
+    label: "Silvina · Presupuesto",
+    home: "/m7",
+    note: "Carga presupuesto PDF y cierre",
   },
   {
     email: "patricio@vettore.test",
     rol: "PATRICIO",
-    label: "Patricio · Dirección",
-    home: "/m1",
-    note: "Aprobación de presupuesto",
+    label: "Patricio · Aprobación",
+    home: "/m7",
+    note: "Aprueba montos / incrementos",
   },
   {
     email: "julieta@vettore.test",
     rol: "JULIETA",
-    label: "Julieta · Dirección",
-    home: "/m1",
-    note: "Aprobación de presupuesto",
+    label: "Julieta · Aprobación",
+    home: "/m7",
+    note: "Aprueba montos / incrementos",
+  },
+  {
+    email: "pablo@vettore.test",
+    rol: "PABLO",
+    label: "Pablo · Ops",
+    home: "/m7",
+    note: "Ve todas las OT y cierra pago",
   },
   {
     email: "carla@vettore.test",
     rol: "CARLA",
-    label: "Carla · Administración",
-    home: "/m1",
-    note: "Operación completa",
+    label: "Carla · Admin",
+    home: "/m7",
+    note: "Puede crear solicitudes de taller",
+  },
+  {
+    email: "cliente@vettore.test",
+    rol: "CLIENTE",
+    label: "Cliente",
+    home: "/m2",
+    note: "Formulario de cambios (fuera de talleres)",
   },
 ];
 
 export function LoginPage() {
   const { user, loading, login } = useAuth();
 
-  const [email, setEmail] = useState("pablo@vettore.test");
+  const [email, setEmail] = useState("chofer@vettore.test");
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [quickEmail, setQuickEmail] = useState<string | null>(null);
 
-  // Siempre al home por rol (/, M2 cliente, M7 chofer, M1 ops)
+  // Home: /m7 talleres (ops/chofer) o /m2 (cliente)
   if (!loading && user) {
     return <Navigate to="/" replace />;
   }
@@ -142,10 +142,10 @@ export function LoginPage() {
         <div className="space-y-5 p-5 sm:p-6">
           <div>
             <h1 className="text-lg font-bold text-[var(--vl-heading)]">
-              Entrar por rol
+              Demo Talleres
             </h1>
             <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-              Tocá un rol para entrar directo. Password demo:{" "}
+              Entrá con el rol del circuito OT. Password:{" "}
               <code className="text-[var(--vl-heading)]">{DEMO_PASSWORD}</code>
             </p>
           </div>
