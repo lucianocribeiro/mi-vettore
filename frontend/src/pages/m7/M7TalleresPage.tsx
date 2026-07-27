@@ -1083,7 +1083,11 @@ function NuevaSolicitudForm({
         )}
 
         <label className="text-xs font-medium text-[var(--vl-text-muted)]">
-          Unidad (patentes de tu empresa)
+          {user?.rol === "CHOFER"
+            ? user.esDuenoFlota
+              ? "Unidad (toda tu flota)"
+              : "Unidad (tu patente asignada)"
+            : "Unidad"}
         </label>
         <select
           value={camionetaId}
