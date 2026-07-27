@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge } from "../../components/Badge";
+import { AvisosBanner } from "../../components/AvisosBanner";
 import {
   AlertTriangle,
   Check,
@@ -25,85 +26,110 @@ const TALLERES = [
   "Taller Norte Repuestos",
 ];
 
+const FALLAS_COMUNES = [
+  "Pérdida de gas / equipo de frío",
+  "Frenos",
+  "Neumáticos / gomería",
+  "Batería / no arranca",
+  "Problema eléctrico",
+  "Motor / mecánica general",
+  "Otros",
+] as const;
+
+/** WhatsApp/tel admin — botón de emergencia (placeholder no operativo). */
+const EMERGENCIA_WHATSAPP = "5491112345678";
+const EMERGENCIA_TEL = "+541112345678";
+
 const OT_STEPS = [
   {
     label: "Solicitud",
     owner: null as string | null,
-    detail:
-      "El chofer o el personal administrativo carga la falla. Es la información base, todavía sin monto.",
+    detail: "El chofer reporta la falla con las opciones más comunes.",
   },
   {
-    label: "Notificación",
-    owner: null,
+    label: "Notificación ops",
+    owner: "Pablo / Facu",
     detail:
-      "Se notifica a operación y la unidad queda marcada en taller.",
+      "Mail y campana a Pablo y Facu para sacar la unidad de circulación.",
   },
   {
-    label: "Evaluación taller",
-    owner: "Facu (Flota)",
-    detail:
-      "Facu evalúa la falla y decide a qué taller enviar la unidad. Solo su rol puede avanzar esta etapa.",
+    label: "Presupuestos",
+    owner: "Silvina",
+    detail: "Silvina pide y sube hasta 3 presupuestos PDF con taller y monto.",
   },
   {
-    label: "Presupuesto",
-    owner: "Silvina (Flota)",
-    detail: "Silvina gestiona y adjunta el presupuesto de reparación (PDF) con el taller.",
+    label: "Elección taller",
+    owner: "Facu",
+    detail: "Facu elige el presupuesto/taller y asigna el valor del arreglo.",
   },
   {
     label: "Aprobación",
     owner: "Patricio / Julieta",
-    detail:
-      "Dirección aprueba el monto. Si hay incremento sobre lo presupuestado, la justificación escrita es obligatoria.",
+    detail: "Dirección aprueba el gasto y se carga la factura PDF.",
   },
   {
-    label: "Cierre y pago",
-    owner: "Silvina / Pablo",
-    detail: "Factura solo en PDF y descripción del trabajo para cerrar el circuito.",
+    label: "Pago",
+    owner: "Silvina / Carla",
+    detail: "Notificación final a Silvina y Carla para proceder con el pago.",
   },
 ] as const;
 
 function roleActionHint(rol?: Role | null): string {
   switch (rol) {
     case "CHOFER":
-      return "Tu rol: crear solicitudes y avanzarlas desde Solicitud.";
+      return "Tu rol: crear solicitudes de unidades de tu empresa.";
     case "FACU":
-      return "Tu rol: asignar taller en Evaluación y avanzar esa etapa.";
+      return "Tu rol: notificación ops + elegir presupuesto/taller.";
     case "SILVINA":
-      return "Tu rol: cargar presupuesto PDF y cerrar con factura PDF.";
+      return "Tu rol: cargar hasta 3 presupuestos PDF y cerrar pago.";
     case "PATRICIO":
     case "JULIETA":
-      return "Tu rol: aprobar montos (justificación si hay incremento).";
+      return "Tu rol: aprobar el gasto y cargar factura.";
     case "PABLO":
-      return "Tu rol: ver todas las OT, notificar y cerrar pago.";
+      return "Tu rol: notificación ops (sacar unidad de circulación).";
     case "CARLA":
-      return "Tu rol: crear solicitudes de reparación.";
+      return "Tu rol: crear solicitudes y cerrar/avisar pago.";
     default:
       return "Los permisos siguen el rol de tu sesión.";
   }
 }
+
+type PresupuestoOt = {
+  id: string;
+  taller: string;
+  monto: number;
+  archivo: string;
+};
 
 type Solicitud = {
   id: string;
   falla: string;
   detalle: string;
   solicitante: "CHOFER" | "ADMINISTRATIVO";
+  habilitadaCircular?: boolean;
   inhabilitado: boolean;
   camioneta: { id: string; patente: string };
   chofer: { id: string; nombre: string } | null;
 };
 
-export type OrdenTrabajo = {
+type OrdenTrabajo = {
   id: string;
   numeroOT: string;
   currentStep: number;
   tallerAsignado: string | null;
+  montoAutorizado: number | null;
+  plazoEntrega: string | null;
   presupuestoMonto: number | null;
   presupuestoArchivo: string | null;
+  presupuestoElegidoId: string | null;
+  presupuestos: PresupuestoOt[];
+  presupuestoElegido: PresupuestoOt | null;
   valorAprobado: number | null;
   valorFinal: number | null;
   incrementoJustificacion: string | null;
   facturaPDF: string | null;
   trabajoDescripcion: string | null;
+  cerradaAt: string | null;
   solicitud: Solicitud;
 };
 
@@ -120,19 +146,15 @@ function canCreateSolicitud(rol?: Role | null) {
 function canAdvanceFromStep(rol: Role | undefined, step: number) {
   if (!rol) return false;
   if (step === 0) return canCreateSolicitud(rol);
-  if (step === 1)
-    return (
-      rol === "PABLO" ||
-      rol === "FACU" ||
-      rol === "SILVINA" ||
-      rol === "PATRICIO" ||
-      rol === "JULIETA"
-    );
-  if (step === 2) return rol === "FACU";
-  if (step === 3) return rol === "SILVINA";
+  if (step === 1) return rol === "PABLO" || rol === "FACU";
+  if (step === 2) return rol === "SILVINA";
+  if (step === 3) return rol === "FACU";
   if (step === 4) return rol === "PATRICIO" || rol === "JULIETA";
-  if (step === 5) return rol === "SILVINA" || rol === "PABLO";
   return false;
+}
+
+function canCerrarOt(rol?: Role | null) {
+  return rol === "SILVINA" || rol === "CARLA";
 }
 
 function canRetreat(rol?: Role | null) {
@@ -141,7 +163,8 @@ function canRetreat(rol?: Role | null) {
     rol === "FACU" ||
     rol === "SILVINA" ||
     rol === "PATRICIO" ||
-    rol === "JULIETA"
+    rol === "JULIETA" ||
+    rol === "CARLA"
   );
 }
 
@@ -162,9 +185,12 @@ export function M7TalleresPage() {
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState<"todas" | "mia">("todas");
 
-  const [tallerDraft, setTallerDraft] = useState("");
-  const [montoDraft, setMontoDraft] = useState("");
-  const [presupuestoFile, setPresupuestoFile] = useState<File | null>(null);
+  const [elegidoId, setElegidoId] = useState("");
+  const [montoAuthDraft, setMontoAuthDraft] = useState("");
+  const [plazoDraft, setPlazoDraft] = useState("");
+  const [presTaller, setPresTaller] = useState(TALLERES[0]);
+  const [presMonto, setPresMonto] = useState("");
+  const [presFile, setPresFile] = useState<File | null>(null);
   const [valorFinalDraft, setValorFinalDraft] = useState("");
   const [justifDraft, setJustifDraft] = useState("");
   const [trabajoDraft, setTrabajoDraft] = useState("");
@@ -199,7 +225,13 @@ export function M7TalleresPage() {
   );
 
   const needsMyAction = useCallback(
-    (o: OrdenTrabajo) => canAdvanceFromStep(rol, o.currentStep),
+    (o: OrdenTrabajo) => {
+      if (o.cerradaAt) return false;
+      if (o.currentStep === 5) {
+        return canCerrarOt(rol) && !!o.facturaPDF;
+      }
+      return canAdvanceFromStep(rol, o.currentStep);
+    },
     [rol]
   );
 
@@ -221,61 +253,69 @@ export function M7TalleresPage() {
 
   useEffect(() => {
     if (!ot) return;
-    setTallerDraft(ot.tallerAsignado ?? "");
-    setMontoDraft(ot.presupuestoMonto != null ? String(ot.presupuestoMonto) : "");
+    setElegidoId(ot.presupuestoElegidoId ?? "");
+    setMontoAuthDraft(
+      ot.montoAutorizado != null ? String(ot.montoAutorizado) : ""
+    );
+    setPlazoDraft(ot.plazoEntrega ? ot.plazoEntrega.slice(0, 10) : "");
     setValorFinalDraft(
       ot.valorFinal != null
         ? String(ot.valorFinal)
-        : ot.presupuestoMonto != null
-          ? String(ot.presupuestoMonto)
+        : ot.montoAutorizado != null
+          ? String(ot.montoAutorizado)
           : ""
     );
     setJustifDraft(ot.incrementoJustificacion ?? "");
     setTrabajoDraft(ot.trabajoDescripcion ?? "");
-    setPresupuestoFile(null);
+    setPresFile(null);
     setFacturaFile(null);
+    setPresMonto("");
   }, [ot?.id, ot?.currentStep]);
 
   function replaceOt(updated: OrdenTrabajo) {
     setOts((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
   }
 
-  async function saveTaller() {
-    if (!token || !ot) return;
+  async function uploadPresupuesto() {
+    if (!token || !ot || !presFile || !presMonto) return;
     setBusy(true);
     try {
+      const fd = new FormData();
+      fd.append("archivo", presFile);
+      fd.append("taller", presTaller);
+      fd.append("monto", presMonto);
       const updated = await apiFetch<OrdenTrabajo>(
-        `/api/talleres/${ot.id}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ tallerAsignado: tallerDraft }),
-        },
+        `/api/talleres/${ot.id}/presupuestos`,
+        { method: "POST", body: fd },
         token
       );
       replaceOt(updated);
+      setPresFile(null);
+      setPresMonto("");
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo guardar");
+      alert(err instanceof ApiError ? err.message : "No se pudo adjuntar");
     } finally {
       setBusy(false);
     }
   }
 
-  async function uploadPresupuesto() {
-    if (!token || !ot || !presupuestoFile) return;
+  async function saveEleccionFacu() {
+    if (!token || !ot || !elegidoId) return;
     setBusy(true);
     try {
-      const fd = new FormData();
-      fd.append("archivo", presupuestoFile);
-      fd.append("monto", montoDraft);
+      const body: Record<string, unknown> = {
+        presupuestoElegidoId: elegidoId,
+      };
+      if (montoAuthDraft) body.montoAutorizado = Number(montoAuthDraft);
+      if (plazoDraft) body.plazoEntrega = plazoDraft;
       const updated = await apiFetch<OrdenTrabajo>(
-        `/api/talleres/${ot.id}/presupuesto`,
-        { method: "POST", body: fd },
+        `/api/talleres/${ot.id}`,
+        { method: "PATCH", body: JSON.stringify(body) },
         token
       );
       replaceOt(updated);
-      setPresupuestoFile(null);
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo adjuntar");
+      alert(err instanceof ApiError ? err.message : "No se pudo guardar");
     } finally {
       setBusy(false);
     }
@@ -306,12 +346,16 @@ export function M7TalleresPage() {
     if (!token || !ot) return;
     setBusy(true);
     try {
-      if (ot.currentStep === 2 && tallerDraft && tallerDraft !== ot.tallerAsignado) {
+      if (ot.currentStep === 3 && rol === "FACU" && elegidoId) {
         await apiFetch<OrdenTrabajo>(
           `/api/talleres/${ot.id}`,
           {
             method: "PATCH",
-            body: JSON.stringify({ tallerAsignado: tallerDraft }),
+            body: JSON.stringify({
+              presupuestoElegidoId: elegidoId,
+              montoAutorizado: Number(montoAuthDraft),
+              plazoEntrega: plazoDraft || undefined,
+            }),
           },
           token
         );
@@ -329,6 +373,24 @@ export function M7TalleresPage() {
       replaceOt(updated);
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo avanzar");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cerrarOt() {
+    if (!token || !ot) return;
+    setBusy(true);
+    try {
+      const updated = await apiFetch<OrdenTrabajo>(
+        `/api/talleres/${ot.id}/cerrar`,
+        { method: "POST", body: "{}" },
+        token
+      );
+      replaceOt(updated);
+      alert("Pago cerrado. Aviso enviado a Silvina y Carla.");
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo cerrar");
     } finally {
       setBusy(false);
     }
@@ -352,7 +414,7 @@ export function M7TalleresPage() {
   }
 
   const roleCanAdvance = canAdvanceFromStep(rol, ot?.currentStep ?? -1);
-  const aprobado = ot?.valorAprobado ?? ot?.presupuestoMonto ?? 0;
+  const aprobado = ot?.valorAprobado ?? ot?.montoAutorizado ?? 0;
   const valorFinalNum = Number(valorFinalDraft);
   const needsJustif =
     ot?.currentStep === 4 &&
@@ -361,14 +423,25 @@ export function M7TalleresPage() {
 
   const canAdvanceUi =
     !!ot &&
+    !ot.cerradaAt &&
     ot.currentStep < OT_STEPS.length - 1 &&
     roleCanAdvance &&
-    (ot.currentStep !== 2 || !!tallerDraft) &&
-    (ot.currentStep !== 3 || !!ot.presupuestoArchivo) &&
-    (ot.currentStep !== 4 || !needsJustif || !!justifDraft.trim());
+    (ot.currentStep !== 2 || (ot.presupuestos?.length ?? 0) >= 1) &&
+    (ot.currentStep !== 3 ||
+      (!!elegidoId && Number(montoAuthDraft) > 0)) &&
+    (ot.currentStep !== 4 ||
+      (!!ot.facturaPDF && (!needsJustif || !!justifDraft.trim())));
+
+  const canCerrarUi =
+    !!ot &&
+    !ot.cerradaAt &&
+    ot.currentStep === 5 &&
+    canCerrarOt(rol) &&
+    !!ot.facturaPDF;
 
   return (
     <div>
+      <AvisosBanner />
       <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -381,8 +454,8 @@ export function M7TalleresPage() {
           </div>
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
             {rol === "CHOFER"
-              ? "Solo ves las solicitudes de reparación que vos cargaste."
-              : "Circuito OT: solicitud → notificación → evaluación → presupuesto → aprobación → cierre."}
+              ? "Solo ves las solicitudes que vos cargaste. Podés pedir taller sobre unidades de tu empresa."
+              : "Solicitud → notif. ops → presupuestos → elección → aprobación → pago."}
           </p>
           <p className="mt-1.5 text-xs font-medium text-[#1e4080] dark:text-sky-300">
             {roleActionHint(rol)}
@@ -467,8 +540,9 @@ export function M7TalleresPage() {
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium">
                     <span className="text-[var(--vl-text-muted)]">
-                      Etapa {o.currentStep + 1}/{OT_STEPS.length}:{" "}
-                      {OT_STEPS[o.currentStep]?.label}
+                      {o.cerradaAt
+                        ? "Cerrada"
+                        : `Etapa ${o.currentStep + 1}/${OT_STEPS.length}: ${OT_STEPS[o.currentStep]?.label}`}
                     </span>
                     {mine && (
                       <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
@@ -490,13 +564,14 @@ export function M7TalleresPage() {
                     {ot.solicitud.chofer
                       ? ` · ${ot.solicitud.chofer.nombre}`
                       : ""}{" "}
-                    · solicitado por{" "}
+                    ·{" "}
                     {ot.solicitud.solicitante === "CHOFER"
                       ? "Chofer"
                       : "Administrativo"}
-                    {ot.solicitud.inhabilitado && (
+                    {(ot.solicitud.habilitadaCircular === false ||
+                      ot.solicitud.inhabilitado) && (
                       <span className="ml-2 font-medium text-amber-700">
-                        · chofer inhabilitado
+                        · no habilitada para circular
                       </span>
                     )}
                   </div>
@@ -519,7 +594,7 @@ export function M7TalleresPage() {
                   >
                     <div
                       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                        i < ot.currentStep
+                        ot.cerradaAt || i < ot.currentStep
                           ? "bg-emerald-500 text-white"
                           : i === ot.currentStep
                             ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
@@ -527,12 +602,18 @@ export function M7TalleresPage() {
                       }`}
                       title={s.label}
                     >
-                      {i < ot.currentStep ? <Check size={13} /> : i + 1}
+                      {ot.cerradaAt || i < ot.currentStep ? (
+                        <Check size={13} />
+                      ) : (
+                        i + 1
+                      )}
                     </div>
                     {i < OT_STEPS.length - 1 && (
                       <div
                         className={`h-0.5 flex-1 ${
-                          i < ot.currentStep ? "bg-emerald-400" : "bg-slate-100 dark:bg-slate-800"
+                          ot.cerradaAt || i < ot.currentStep
+                            ? "bg-emerald-400"
+                            : "bg-slate-100 dark:bg-slate-800"
                         }`}
                       />
                     )}
@@ -546,11 +627,13 @@ export function M7TalleresPage() {
                     {OT_STEPS[ot.currentStep].label}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {roleCanAdvance && ot.currentStep < OT_STEPS.length - 1 && (
-                      <Badge className="border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                        Tu turno
-                      </Badge>
-                    )}
+                    {roleCanAdvance &&
+                      ot.currentStep < OT_STEPS.length - 1 &&
+                      !ot.cerradaAt && (
+                        <Badge className="border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                          Tu turno
+                        </Badge>
+                      )}
                     {OT_STEPS[ot.currentStep].owner && (
                       <Badge className="border-slate-200 bg-white text-slate-500 dark:bg-slate-900">
                         <Lock size={10} /> {OT_STEPS[ot.currentStep].owner}
@@ -563,92 +646,156 @@ export function M7TalleresPage() {
                 </p>
 
                 {ot.currentStep === 0 && (
-                  <div className="mt-3 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3 text-sm text-[var(--vl-text)]">
+                  <div className="mt-3 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3 text-sm">
                     <div>
-                      <span className="font-medium">Detalle informado: </span>
+                      <span className="font-medium">Detalle: </span>
                       {ot.solicitud.detalle}
                     </div>
-                    {ot.solicitud.inhabilitado && (
-                      <div className="mt-2 flex items-center gap-1 text-xs text-amber-700">
-                        <AlertTriangle size={12} /> Criterio vinculante: el
-                        chofer se declaró inhabilitado.
-                      </div>
-                    )}
+                    <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
+                      ¿Habilitada para circular?{" "}
+                      {ot.solicitud.habilitadaCircular === false ||
+                      ot.solicitud.inhabilitado
+                        ? "No"
+                        : "Sí"}
+                    </div>
                   </div>
                 )}
 
                 {ot.currentStep === 1 && (
                   <div className="mt-3 text-xs text-[var(--vl-text-muted)]">
-                    Notificación a operación registrada. Podés avanzar a
-                    evaluación cuando Facu tome el caso.
+                    Se envió mail + campana a Pablo y Facu. La unidad quedó en
+                    taller. Avanzá cuando ops confirme.
                   </div>
                 )}
 
                 {ot.currentStep === 2 && (
-                  <div className="mt-3 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
-                    <label className="text-xs font-medium text-[var(--vl-text-muted)]">
-                      Taller asignado
-                    </label>
-                    <select
-                      disabled={rol !== "FACU" || busy}
-                      value={tallerDraft}
-                      onChange={(e) => setTallerDraft(e.target.value)}
-                      onBlur={() => {
-                        if (rol === "FACU" && tallerDraft) void saveTaller();
-                      }}
-                      className="mt-1 w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm disabled:bg-slate-50 disabled:text-slate-400"
-                    >
-                      <option value="">Seleccionar taller...</option>
-                      {TALLERES.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                    {rol !== "FACU" && (
-                      <div className="mt-1.5 text-[11px] text-[var(--vl-text-muted)]">
-                        Solo Facu puede asignar el taller y avanzar esta etapa.
+                  <div className="mt-3 space-y-3 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
+                    {(ot.presupuestos ?? []).map((p, idx) => (
+                      <div
+                        key={p.id}
+                        className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                      >
+                        <span>
+                          #{idx + 1} {p.taller} — {money(p.monto)}
+                          <span className="ml-2 text-xs text-[var(--vl-text-muted)]">
+                            <Paperclip size={12} className="inline" /> {p.archivo}
+                          </span>
+                        </span>
                       </div>
-                    )}
-                  </div>
-                )}
-
-                {ot.currentStep === 3 && (
-                  <div className="mt-3 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
-                    {ot.presupuestoArchivo ? (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Paperclip size={14} />
-                        {ot.presupuestoArchivo} — {money(ot.presupuestoMonto)}
-                      </div>
-                    ) : rol === "SILVINA" ? (
-                      <div className="flex flex-col gap-2 sm:flex-row">
+                    ))}
+                    {rol === "SILVINA" && (ot.presupuestos?.length ?? 0) < 3 && (
+                      <div className="space-y-2 border-t border-[var(--vl-card-border)] pt-3">
+                        <select
+                          value={presTaller}
+                          onChange={(e) => setPresTaller(e.target.value)}
+                          className="w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
+                        >
+                          {TALLERES.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
                         <input
                           type="number"
-                          placeholder="Monto presupuestado"
-                          value={montoDraft}
-                          onChange={(e) => setMontoDraft(e.target.value)}
+                          placeholder="Monto"
+                          value={presMonto}
+                          onChange={(e) => setPresMonto(e.target.value)}
                           className="w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
                         />
                         <input
                           type="file"
                           accept="application/pdf,.pdf"
                           onChange={(e) =>
-                            setPresupuestoFile(e.target.files?.[0] ?? null)
+                            setPresFile(e.target.files?.[0] ?? null)
                           }
                           className="text-xs"
                         />
                         <button
                           type="button"
-                          disabled={!montoDraft || !presupuestoFile || busy}
+                          disabled={!presFile || !presMonto || busy}
                           onClick={() => void uploadPresupuesto()}
-                          className="inline-flex shrink-0 items-center gap-1 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
                         >
-                          <Paperclip size={12} /> Adjuntar PDF
+                          Subir presupuesto {(ot.presupuestos?.length ?? 0) + 1}/3
                         </button>
                       </div>
-                    ) : (
+                    )}
+                    {rol !== "SILVINA" && (ot.presupuestos?.length ?? 0) === 0 && (
                       <div className="text-xs text-[var(--vl-text-muted)]">
-                        Solo Silvina puede cargar y adjuntar el presupuesto.
+                        Esperando presupuestos de Silvina.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {ot.currentStep === 3 && (
+                  <div className="mt-3 space-y-3 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
+                    {(ot.presupuestos ?? []).length === 0 && (
+                      <div className="text-xs text-amber-700">
+                        No hay presupuestos cargados.
+                      </div>
+                    )}
+                    {(ot.presupuestos ?? []).map((p) => (
+                      <label
+                        key={p.id}
+                        className={`flex cursor-pointer items-start gap-2 rounded-md border p-2 text-sm ${
+                          elegidoId === p.id
+                            ? "border-slate-900 bg-slate-50 dark:border-slate-100"
+                            : "border-[var(--vl-card-border)]"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="presupuesto"
+                          disabled={rol !== "FACU" || busy}
+                          checked={elegidoId === p.id}
+                          onChange={() => {
+                            setElegidoId(p.id);
+                            setMontoAuthDraft(String(p.monto));
+                          }}
+                        />
+                        <span>
+                          <span className="font-medium">{p.taller}</span> —{" "}
+                          {money(p.monto)}
+                          <div className="text-xs text-[var(--vl-text-muted)]">
+                            {p.archivo}
+                          </div>
+                        </span>
+                      </label>
+                    ))}
+                    {rol === "FACU" && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div>
+                          <label className="text-xs text-[var(--vl-text-muted)]">
+                            Valor del arreglo
+                          </label>
+                          <input
+                            type="number"
+                            value={montoAuthDraft}
+                            onChange={(e) => setMontoAuthDraft(e.target.value)}
+                            className="mt-1 w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-[var(--vl-text-muted)]">
+                            Plazo estimado
+                          </label>
+                          <input
+                            type="date"
+                            value={plazoDraft}
+                            onChange={(e) => setPlazoDraft(e.target.value)}
+                            className="mt-1 w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!elegidoId || busy}
+                          onClick={() => void saveEleccionFacu()}
+                          className="rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-medium sm:col-span-2"
+                        >
+                          Guardar elección
+                        </button>
                       </div>
                     )}
                   </div>
@@ -657,39 +804,70 @@ export function M7TalleresPage() {
                 {ot.currentStep === 4 && (
                   <div className="mt-3 space-y-2 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
                     <div className="text-xs text-[var(--vl-text-muted)]">
-                      Presupuestado / aprobado: {money(aprobado)}
+                      Autorizado: {money(aprobado)} · Taller:{" "}
+                      {ot.tallerAsignado ?? "—"}
                     </div>
                     {(rol === "PATRICIO" || rol === "JULIETA") && (
                       <>
-                        <label className="text-xs font-medium text-[var(--vl-text-muted)]">
-                          Valor final
-                        </label>
                         <input
                           type="number"
                           value={valorFinalDraft}
                           onChange={(e) => setValorFinalDraft(e.target.value)}
+                          placeholder="Valor final"
                           className="w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
                         />
                         {needsJustif && (
                           <>
                             <div className="flex items-center gap-1 text-xs text-amber-700">
-                              <AlertTriangle size={12} /> Incremento: justificación
-                              escrita obligatoria.
+                              <AlertTriangle size={12} /> Justificación
+                              obligatoria por incremento.
                             </div>
                             <textarea
                               rows={2}
                               value={justifDraft}
                               onChange={(e) => setJustifDraft(e.target.value)}
-                              placeholder="Justificación del incremento"
                               className="w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
                             />
+                          </>
+                        )}
+                        {ot.facturaPDF ? (
+                          <div className="text-sm">
+                            <Paperclip size={14} className="mr-1 inline" />
+                            {ot.facturaPDF}
+                          </div>
+                        ) : (
+                          <>
+                            <textarea
+                              rows={2}
+                              value={trabajoDraft}
+                              onChange={(e) => setTrabajoDraft(e.target.value)}
+                              placeholder="Descripción del trabajo (opcional)"
+                              className="w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
+                            />
+                            <input
+                              type="file"
+                              accept="application/pdf,.pdf"
+                              onChange={(e) =>
+                                setFacturaFile(e.target.files?.[0] ?? null)
+                              }
+                              className="text-xs"
+                            />
+                            <button
+                              type="button"
+                              disabled={!facturaFile || busy}
+                              onClick={() => void uploadFactura()}
+                              className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                            >
+                              Subir factura PDF
+                            </button>
                           </>
                         )}
                       </>
                     )}
                     {rol !== "PATRICIO" && rol !== "JULIETA" && (
                       <div className="text-xs text-[var(--vl-text-muted)]">
-                        Solo Patricio o Julieta pueden aprobar esta etapa.
+                        Solo Patricio/Julieta aprueban y cargan factura.
+                        {ot.facturaPDF ? ` Factura: ${ot.facturaPDF}` : ""}
                       </div>
                     )}
                   </div>
@@ -697,57 +875,19 @@ export function M7TalleresPage() {
 
                 {ot.currentStep === 5 && (
                   <div className="mt-3 space-y-2 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
-                    <div className="flex items-center gap-1 text-xs text-emerald-700">
-                      <Check size={12} /> Facturas solo en PDF — se rechazan
-                      imágenes u otros formatos.
-                    </div>
-                    {ot.facturaPDF ? (
-                      <div className="text-sm">
-                        <Paperclip size={14} className="mr-1 inline" />
-                        {ot.facturaPDF}
-                        {ot.trabajoDescripcion && (
-                          <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
-                            {ot.trabajoDescripcion}
-                          </div>
-                        )}
+                    {ot.cerradaAt ? (
+                      <div className="text-sm text-emerald-700">
+                        <Check size={14} className="mr-1 inline" />
+                        Pago cerrado el{" "}
+                        {new Date(ot.cerradaAt).toLocaleString("es-AR")}. Aviso
+                        a Silvina y Carla.
                       </div>
-                    ) : (rol === "SILVINA" || rol === "PABLO") ? (
-                      <>
-                        <textarea
-                          rows={2}
-                          value={trabajoDraft}
-                          onChange={(e) => setTrabajoDraft(e.target.value)}
-                          placeholder="Descripción del trabajo realizado"
-                          className="w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
-                        />
-                        <input
-                          type="file"
-                          accept="application/pdf,.pdf"
-                          onChange={(e) =>
-                            setFacturaFile(e.target.files?.[0] ?? null)
-                          }
-                          className="text-xs"
-                        />
-                        <button
-                          type="button"
-                          disabled={!facturaFile || !trabajoDraft.trim() || busy}
-                          onClick={() => void uploadFactura()}
-                          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
-                        >
-                          Subir factura PDF
-                        </button>
-                      </>
                     ) : (
                       <div className="text-xs text-[var(--vl-text-muted)]">
-                        Pendiente de factura PDF.
+                        Factura: {ot.facturaPDF ?? "—"}. Silvina o Carla cierran
+                        el pago y reciben la notificación.
                       </div>
                     )}
-                  </div>
-                )}
-
-                {!roleCanAdvance && ot.currentStep < OT_STEPS.length - 1 && (
-                  <div className="mt-2 text-xs text-[var(--vl-text-muted)]">
-                    Tu rol no puede avanzar esta etapa.
                   </div>
                 )}
               </div>
@@ -755,10 +895,10 @@ export function M7TalleresPage() {
               <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-[var(--vl-text-muted)]">
-                    Valor aprobado
+                    Valor autorizado
                   </span>
                   <div className="font-semibold text-[var(--vl-heading)]">
-                    {money(ot.valorAprobado)}
+                    {money(ot.montoAutorizado)}
                   </div>
                 </div>
                 <div>
@@ -773,19 +913,36 @@ export function M7TalleresPage() {
                 <button
                   type="button"
                   onClick={() => void retroceder()}
-                  disabled={ot.currentStep === 0 || !canRetreat(rol) || busy}
-                  className="inline-flex items-center gap-1 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-medium text-[var(--vl-text)] disabled:opacity-30"
+                  disabled={
+                    ot.currentStep === 0 ||
+                    !!ot.cerradaAt ||
+                    !canRetreat(rol) ||
+                    busy
+                  }
+                  className="inline-flex items-center gap-1 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-medium disabled:opacity-30"
                 >
                   <ChevronLeft size={13} /> Retroceder
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void avanzar()}
-                  disabled={!canAdvanceUi || busy}
-                  className="inline-flex items-center gap-1 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-30 dark:bg-slate-100 dark:text-slate-900"
-                >
-                  Avanzar etapa <ChevronRight size={13} />
-                </button>
+                {ot.currentStep < 5 && (
+                  <button
+                    type="button"
+                    onClick={() => void avanzar()}
+                    disabled={!canAdvanceUi || busy}
+                    className="inline-flex items-center gap-1 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-30 dark:bg-slate-100 dark:text-slate-900"
+                  >
+                    Avanzar etapa <ChevronRight size={13} />
+                  </button>
+                )}
+                {ot.currentStep === 5 && !ot.cerradaAt && (
+                  <button
+                    type="button"
+                    onClick={() => void cerrarOt()}
+                    disabled={!canCerrarUi || busy}
+                    className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-30"
+                  >
+                    <Check size={13} /> Cerrar pago
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -819,9 +976,9 @@ function NuevaSolicitudForm({
     user?.rol === "CHOFER" ? "CHOFER" : "ADMINISTRATIVO"
   );
   const [camionetaId, setCamionetaId] = useState("");
-  const [falla, setFalla] = useState("");
+  const [falla, setFalla] = useState<string>(FALLAS_COMUNES[0]);
   const [detalle, setDetalle] = useState("");
-  const [inhabilitado, setInhabilitado] = useState(false);
+  const [habilitadaCircular, setHabilitadaCircular] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -836,7 +993,11 @@ function NuevaSolicitudForm({
   }, [token]);
 
   async function submit() {
-    if (!token || !falla.trim() || !detalle.trim() || !camionetaId) return;
+    if (!token || !falla || !camionetaId) return;
+    if (falla === "Otros" && !detalle.trim()) {
+      setErr("Con «Otros» el detalle es obligatorio");
+      return;
+    }
     setSaving(true);
     setErr(null);
     try {
@@ -847,9 +1008,9 @@ function NuevaSolicitudForm({
           body: JSON.stringify({
             camionetaId,
             solicitante,
-            falla: falla.trim(),
-            detalle: detalle.trim(),
-            inhabilitado,
+            falla,
+            detalle: detalle.trim() || falla,
+            habilitadaCircular,
           }),
         },
         token
@@ -862,13 +1023,19 @@ function NuevaSolicitudForm({
     }
   }
 
+  function emergenciaClick() {
+    alert(
+      "Botón de emergencia: próximamente conectará llamada / WhatsApp a administración Vettore.\n\n(Por ahora no operativo.)"
+    );
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-t-2xl bg-[var(--vl-card)] p-5 shadow-xl sm:rounded-xl"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-[var(--vl-card)] p-5 shadow-xl sm:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
@@ -880,28 +1047,43 @@ function NuevaSolicitudForm({
           </button>
         </div>
 
-        <label className="text-xs font-medium text-[var(--vl-text-muted)]">
-          Solicitado por
-        </label>
-        <div className="mb-3 mt-1 flex gap-2">
-          {(["CHOFER", "ADMINISTRATIVO"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSolicitante(s)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                solicitante === s
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-              }`}
-            >
-              {s === "CHOFER" ? "Chofer" : "Administrativo"}
-            </button>
-          ))}
-        </div>
+        <button
+          type="button"
+          onClick={emergenciaClick}
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+        >
+          <AlertTriangle size={16} /> Emergencia (próximamente)
+        </button>
+        <p className="mb-3 text-[11px] text-[var(--vl-text-muted)]">
+          Tel {EMERGENCIA_TEL} · WA {EMERGENCIA_WHATSAPP} — aún no enlazado.
+        </p>
+
+        {user?.rol !== "CHOFER" && (
+          <>
+            <label className="text-xs font-medium text-[var(--vl-text-muted)]">
+              Solicitado por
+            </label>
+            <div className="mb-3 mt-1 flex gap-2">
+              {(["CHOFER", "ADMINISTRATIVO"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSolicitante(s)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                    solicitante === s
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                  }`}
+                >
+                  {s === "CHOFER" ? "Chofer" : "Administrativo"}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <label className="text-xs font-medium text-[var(--vl-text-muted)]">
-          Unidad
+          Unidad (patentes de tu empresa)
         </label>
         <select
           value={camionetaId}
@@ -913,55 +1095,79 @@ function NuevaSolicitudForm({
             return (
               <option key={c.id} value={c.id}>
                 {c.patente}
-                {asg?.chofer ? ` — ${asg.chofer.nombre}` : ""}
+                {c.marca ? ` · ${c.marca}` : ""}
+                {asg?.empresa ? ` — ${asg.empresa.nombre}` : ""}
               </option>
             );
           })}
         </select>
 
         <label className="text-xs font-medium text-[var(--vl-text-muted)]">
-          Falla (resumen)
+          Falla
         </label>
-        <input
+        <select
           value={falla}
           onChange={(e) => setFalla(e.target.value)}
-          placeholder="ej. Pérdida de gas en equipo de frío"
           className="mb-3 mt-1 w-full rounded-md border border-[var(--vl-card-border)] p-2 text-sm"
-        />
+        >
+          {FALLAS_COMUNES.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
 
         <label className="text-xs font-medium text-[var(--vl-text-muted)]">
-          Detalle de la reparación
+          Detalle {falla === "Otros" ? "(obligatorio)" : "(opcional)"}
         </label>
         <textarea
+          rows={3}
           value={detalle}
           onChange={(e) => setDetalle(e.target.value)}
-          rows={3}
-          placeholder="Describí el problema con el mayor detalle posible"
+          placeholder={
+            falla === "Otros"
+              ? "Describí el problema…"
+              : "Más detalle si hace falta"
+          }
           className="mb-3 mt-1 w-full rounded-md border border-[var(--vl-card-border)] p-2 text-sm"
         />
 
-        <label className="mb-4 flex items-start gap-2 text-xs text-[var(--vl-text)]">
-          <input
-            type="checkbox"
-            checked={inhabilitado}
-            onChange={(e) => setInhabilitado(e.target.checked)}
-            className="mt-0.5"
-          />
-          <span>
-            El chofer se declara <strong>inhabilitado</strong> (criterio
-            vinculante: queda registrado así).
-          </span>
-        </label>
+        <fieldset className="mb-4">
+          <legend className="text-xs font-medium text-[var(--vl-text-muted)]">
+            ¿La camioneta está habilitada para circular?
+          </legend>
+          <div className="mt-2 flex gap-2">
+            {(
+              [
+                { v: true, label: "Sí" },
+                { v: false, label: "No" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={String(opt.v)}
+                type="button"
+                onClick={() => setHabilitadaCircular(opt.v)}
+                className={`rounded-full border px-4 py-1.5 text-xs font-medium ${
+                  habilitadaCircular === opt.v
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
-        {err && <p className="mb-2 text-xs text-red-600">{err}</p>}
+        {err && <p className="mb-2 text-sm text-red-600">{err}</p>}
 
         <button
           type="button"
-          disabled={!falla.trim() || !detalle.trim() || saving}
+          disabled={saving || !camionetaId || !falla}
           onClick={() => void submit()}
-          className="w-full rounded-md bg-slate-900 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="w-full rounded-md bg-slate-900 py-2.5 text-sm font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
         >
-          {saving ? "Enviando…" : "Enviar solicitud"}
+          {saving ? "Enviando…" : "Crear solicitud"}
         </button>
       </div>
     </div>

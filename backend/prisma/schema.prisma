@@ -52,6 +52,13 @@ enum TipoEmpresa {
   ALIADA
 }
 
+enum TipoTransporte {
+  CONGELADO
+  SUPERCONGELADO
+  REFRIGERADO
+  SECO
+}
+
 enum TipoPedido {
   ALTA
   BAJA
@@ -100,38 +107,54 @@ model Cliente {
 }
 
 model Chofer {
-  id           String           @id @default(cuid())
-  nombre       String
-  dni          String           @unique
-  licencia     String?
-  telefono     String?
-  estado       EstadoChofer     @default(ACTIVO)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  asignaciones AsignacionFlota[]
-  pedidos      Pedido[]
-  usuarios     Usuario[]
-  solicitudes  SolicitudTaller[]
+  id                   String           @id @default(cuid())
+  nombre               String
+  dni                  String           @unique
+  cuil                 String?
+  licencia             String?
+  licenciaVencimiento  DateTime?
+  telefono             String?
+  email                String?
+  /// Dueño de empresa de transporte: ve todas las unidades de su/s empresa/s.
+  esDuenoFlota         Boolean          @default(false)
+  estado               EstadoChofer     @default(ACTIVO)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  asignaciones         AsignacionFlota[]
+  pedidos              Pedido[]
+  usuarios             Usuario[]
+  solicitudes          SolicitudTaller[]
 }
 
 model Camioneta {
-  id                String           @id @default(cuid())
-  patente           String           @unique
-  datosTecnicos     String?
-  km                Int              @default(0)
-  fechaUltimoAceite DateTime?
-  estado            EstadoCamioneta  @default(OPERATIVA)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  asignaciones      AsignacionFlota[]
-  pedidos           Pedido[]
-  solicitudes       SolicitudTaller[]
+  id                  String           @id @default(cuid())
+  patente             String           @unique
+  marca               String?
+  modelo              String?
+  anio                Int?
+  color               String?
+  tipoTransporte      TipoTransporte?
+  datosTecnicos       String?
+  km                  Int              @default(0)
+  fechaUltimoAceite   DateTime?
+  seguroCompania      String?
+  seguroVencimiento   DateTime?
+  /// VTB / revisión técnica — vencimiento
+  vtbVencimiento      DateTime?
+  estado              EstadoCamioneta  @default(OPERATIVA)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  asignaciones        AsignacionFlota[]
+  pedidos             Pedido[]
+  solicitudes         SolicitudTaller[]
 }
 
 model EmpresaTransporte {
   id           String           @id @default(cuid())
   nombre       String
-  tipo         TipoEmpresa      @default(PROPIA)
+  cuit         String?          @unique
+  contacto     String?
+  tipo         TipoEmpresa      @default(ALIADA)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   asignaciones AsignacionFlota[]
@@ -190,46 +213,87 @@ enum SolicitanteTaller {
 
 /// Solicitud de reparación (paso 1 del circuito de talleres).
 model SolicitudTaller {
-  id            String            @id @default(cuid())
-  camionetaId   String
-  choferId      String?
-  solicitante   SolicitanteTaller
-  falla         String
-  detalle       String
-  /// Criterio vinculante del chofer: si true, queda inhabilitado.
-  inhabilitado  Boolean           @default(false)
-  createdById   String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id                 String            @id @default(cuid())
+  camionetaId        String
+  choferId           String?
+  solicitante        SolicitanteTaller
+  falla              String
+  detalle            String
+  /// ¿La camioneta está habilitada para circular?
+  habilitadaCircular Boolean           @default(true)
+  /// Legacy: true si NO está habilitada para circular
+  inhabilitado       Boolean           @default(false)
+  createdById        String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   camioneta    Camioneta     @relation(fields: [camionetaId], references: [id])
   chofer       Chofer?       @relation(fields: [choferId], references: [id])
   ordenTrabajo OrdenTrabajo?
 }
 
-/// Orden de trabajo — flujo de 6 etapas (currentStep 0..5).
-/// 0 Solicitud · 1 Notificación panel · 2 Evaluación (Facu) · 3 Presupuesto (Silvina)
-/// 4 Aprobación (Patricio/Julieta) · 5 Cierre y pago
+/// Orden de trabajo — 6 etapas (currentStep 0..5)
+/// 0 Solicitud · 1 Notif. ops (Pablo/Facu) · 2 Presupuestos (Silvina, hasta 3)
+/// 3 Elección taller (Facu) · 4 Aprobación+factura (Patricio) · 5 Pago (Silvina/Carla)
 model OrdenTrabajo {
-  id                       String   @id @default(cuid())
-  solicitudTallerId        String   @unique
-  numeroOT                 String   @unique
-  currentStep              Int      @default(0)
+  id                       String    @id @default(cuid())
+  solicitudTallerId        String    @unique
+  numeroOT                 String    @unique
+  currentStep              Int       @default(0)
   tallerAsignado           String?
+  montoAutorizado          Float?
+  plazoEntrega             DateTime?
+  /// Legacy single presupuesto (se mantiene por compat)
   presupuestoMonto         Float?
   presupuestoArchivo       String?
+  presupuestoElegidoId     String?   @unique
   valorAprobado            Float?
   valorFinal               Float?
   incrementoJustificacion  String?
   facturaPDF               String?
   trabajoDescripcion       String?
   pedidoNotificacionId     String?
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  cerradaAt                DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
-  solicitud SolicitudTaller @relation(fields: [solicitudTallerId], references: [id])
+  solicitud            SolicitudTaller @relation(fields: [solicitudTallerId], references: [id])
+  presupuestos         PresupuestoOt[]
+  presupuestoElegido   PresupuestoOt?  @relation("PresupuestoElegido", fields: [presupuestoElegidoId], references: [id])
+  avisos               AvisoInterno[]
 
   @@index([currentStep])
+}
+
+/// Hasta 3 presupuestos PDF por OT (etapa Silvina).
+model PresupuestoOt {
+  id        String   @id @default(cuid())
+  otId      String
+  taller    String
+  monto     Float
+  archivo   String
+  createdAt DateTime @default(now())
+
+  ot       OrdenTrabajo  @relation(fields: [otId], references: [id], onDelete: Cascade)
+  elegidoEn OrdenTrabajo? @relation("PresupuestoElegido")
+
+  @@index([otId])
+}
+
+/// Avisos internos al cerrar una OT (ops, no dueños).
+model AvisoInterno {
+  id        String   @id @default(cuid())
+  rolDestino Role
+  titulo    String
+  mensaje   String
+  otId      String?
+  leido     Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  ot OrdenTrabajo? @relation(fields: [otId], references: [id])
+
+  @@index([rolDestino, leido])
+  @@index([createdAt])
 }
 
 enum TipoComunicacion {

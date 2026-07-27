@@ -1,0 +1,1542 @@
+{
+  "empresas": [
+    {
+      "cuit": "20294890298",
+      "nombre": "Adrian Diaz",
+      "mail": "adri.loju@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20261481023",
+      "nombre": "Alberto Vilchez",
+      "mail": "albertovilchez30@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20295008971",
+      "nombre": "Alejandro Cassineiro",
+      "mail": "alecassinerio82@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20252626167",
+      "nombre": "ALVAREZ DIEGO SEBASTIAN",
+      "mail": "diegolaurastepinac@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "27407610755",
+      "nombre": "ARANDA ELIANA DANIELA",
+      "mail": "Elianadaniela.ea@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20271457988",
+      "nombre": "ARCAMONE PABLO DOMINGO",
+      "mail": "deposito.vettore@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20289701800",
+      "nombre": "BAEZ JUAN PABLO ADRIAN",
+      "mail": "1981adribaez@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "23113463759",
+      "nombre": "BARBELLI OSCAR RUBEN",
+      "mail": null,
+      "activo": true
+    },
+    {
+      "cuit": "20174062529",
+      "nombre": "Cesar Sein",
+      "mail": "cesargiasone@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20243786844",
+      "nombre": "CHIAPPORI DIEGO MATIAS",
+      "mail": "Diegochiappori22@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20171250804",
+      "nombre": "Claudio Fuentes",
+      "mail": "cafuentes007@yahoo.com.ar",
+      "activo": true
+    },
+    {
+      "cuit": "20344157287",
+      "nombre": "Cristian Michelo",
+      "mail": "cristian.michelo1989@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20284089023",
+      "nombre": "CUBAS JORGE ARIEL",
+      "mail": "cubasjor1980@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "23339102449",
+      "nombre": "Daniel Landolfo",
+      "mail": "daniellandolfo1218@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20245554584",
+      "nombre": "Daniel Vilchez",
+      "mail": "danitrapi458@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20204281298",
+      "nombre": "Dario Rodriguez",
+      "mail": "dariohr1968@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20446566998",
+      "nombre": "Diego Cuscuna",
+      "mail": "cuscunadiego@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "23327546929",
+      "nombre": "Eric Ferreyra",
+      "mail": "eric.ferreyra@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20261570786",
+      "nombre": "ESTRELLA MAXIMILIANO HERNAN",
+      "mail": "maximilianoestrella@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20359889004",
+      "nombre": "Facundo Rodriguez",
+      "mail": "facundobrenja@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20346308614",
+      "nombre": "Fernando Inverno",
+      "mail": "invernoparabrisas@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20227829363",
+      "nombre": "FIORE CARLOS FABIAN",
+      "mail": "Faby19721@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "22304299717",
+      "nombre": "Gisela Torrez",
+      "mail": "gtorrez2008@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "23335714369",
+      "nombre": "GOMEZ NAZARENO NAHUEL",
+      "mail": "nazarenogomez999@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20361675550",
+      "nombre": "GRAVAGLIA DAVID EZEQUIEL",
+      "mail": "Gravaglia_david@live.com",
+      "activo": true
+    },
+    {
+      "cuit": "20210830368",
+      "nombre": "Gustavo Ochoa",
+      "mail": "romabe2969@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20245374802",
+      "nombre": "Gustavo Ojeda",
+      "mail": "ojedaangelgustavooooooo@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20217878706",
+      "nombre": "GUZMAN MARCELO LUIS",
+      "mail": "mlgtv@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20182757617",
+      "nombre": "Hector Retamozo",
+      "mail": "hector22288@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20130111093",
+      "nombre": "Hugo Orsi",
+      "mail": "hugodanielorsi@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20206732173",
+      "nombre": "IAMETTI MARCOS VALENTIN",
+      "mail": "mviametti@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "30716918811",
+      "nombre": "ION LOGISTICA S.A.",
+      "mail": "juan.coronato@ionlogistica.com",
+      "activo": true
+    },
+    {
+      "cuit": "20180531905",
+      "nombre": "Jorge Aguirre",
+      "mail": "jorgeaguirre4625@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20269612232",
+      "nombre": "Jorge Diaz",
+      "mail": "jorgelias2013@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20220421881",
+      "nombre": "Jose Iannone",
+      "mail": "Joseiannone@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20183405099",
+      "nombre": "Jose Luis Casafus",
+      "mail": "joseluis.67008@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20331135403",
+      "nombre": "Juan Medina",
+      "mail": "miguelalejandrocancelare@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20104312463",
+      "nombre": "Julio Ghiazza",
+      "mail": null,
+      "activo": true
+    },
+    {
+      "cuit": "27271510484",
+      "nombre": "Karina Fernandez",
+      "mail": "karinaef79@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20177723623",
+      "nombre": "LEGUIZAMON CARLOS ANIBAL",
+      "mail": "carloz_45@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20386687685",
+      "nombre": "LOPEZ ATALAYA LEANDRO SEBASTIAN",
+      "mail": "Leandrolopezatalalla@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20129567728",
+      "nombre": "Luvoski Enrique",
+      "mail": "Lukovskienrique@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20252262602",
+      "nombre": "Mariano Santagata",
+      "mail": "santagatamariano35@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20256357799",
+      "nombre": "Martin Diaz",
+      "mail": "martinpelin77@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20347133052",
+      "nombre": "Martin Rodriguez",
+      "mail": "MartinRodriguez193067@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20370086215",
+      "nombre": "Matias Piegas",
+      "mail": "matiaspiegas3005@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "23190339289",
+      "nombre": "Matias Ramirez",
+      "mail": "matiasramirez1611@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20342640924",
+      "nombre": "MELGAR WALTER ABEL",
+      "mail": "walteryyoha16052014@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20291294465",
+      "nombre": "MENDIETA EMILIO ADRIAN",
+      "mail": "jbctransporte_eam@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20319634186",
+      "nombre": "Nahuel Fernandez",
+      "mail": "fernahuel@hotmail.es",
+      "activo": true
+    },
+    {
+      "cuit": "20428777795",
+      "nombre": "Ochoa Mariano Ezequiel",
+      "mail": "Marian.ochoa01@outlook.com",
+      "activo": true
+    },
+    {
+      "cuit": "20116909325",
+      "nombre": "Oscar Inverno",
+      "mail": "oscarinverno_parabrisas@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20127765767",
+      "nombre": "PALMIERI JOSE LUIS",
+      "mail": "adejochaca@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "27233281552",
+      "nombre": "PAZ MONICA LILIANA",
+      "mail": "Monipaz2022@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20201365040",
+      "nombre": "QUIROGA FELIX GUILLERMO",
+      "mail": "guillequiroga045@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "23315080509",
+      "nombre": "Rafael Falcon",
+      "mail": "rafaelfalcon85@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20118498802",
+      "nombre": "RAIMONDO DANIEL BONIFACIO",
+      "mail": "dbr_ksa@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20256382122",
+      "nombre": "RODRIGUEZ FERNANDO CHRISTIAN",
+      "mail": "Fr1940043@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20306631862",
+      "nombre": "Sergio Aquino",
+      "mail": "schapa982@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20217620377",
+      "nombre": "Sergio Cadavid",
+      "mail": "sergiocadavid1970@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "23362605369",
+      "nombre": "Sergio Maidana",
+      "mail": "maidana.sergio15@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20170696256",
+      "nombre": "SPRETZ SERGIO GILBERTO",
+      "mail": "sergiospretz@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "20372162695",
+      "nombre": "SUAREZ IVAN DANIEL",
+      "mail": "ivan.laboral2024@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "27289639461",
+      "nombre": "Veronica Monteagudo",
+      "mail": "veritomonteagudo@hotmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "33711339529",
+      "nombre": "Vettore Logistica SRL",
+      "mail": null,
+      "activo": true
+    },
+    {
+      "cuit": "20316855998",
+      "nombre": "VITALE CRISTIAN NICOLAS",
+      "mail": "Vitalecristiannicolas@gmail.com",
+      "activo": true
+    },
+    {
+      "cuit": "30718922158",
+      "nombre": "Way Logistica",
+      "mail": "waysoluciones.sas@gmail.com",
+      "activo": true
+    }
+  ],
+  "choferes": [
+    {
+      "empresa": "Adrian Diaz",
+      "cuil": "20294890298",
+      "nombre": "Adrian Diaz",
+      "dni": "29489029",
+      "email": "adri.loju@hotmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Alberto Vilchez",
+      "cuil": "20261481023",
+      "nombre": "Alberto Vilchez",
+      "dni": "26148102",
+      "email": "albertovilchez30@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Alejandro Cassineiro",
+      "cuil": "20295008971",
+      "nombre": "Alejandro Cassineiro",
+      "dni": "29500897",
+      "email": "alecassinerio82@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "ALVAREZ DIEGO SEBASTIAN",
+      "cuil": "20252626167",
+      "nombre": "Alvarez Diego Sebastian",
+      "dni": "25262616",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "ARANDA ELIANA DANIELA",
+      "cuil": "27407610755",
+      "nombre": "Aranda Eliana Daniela",
+      "dni": "40761075",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "ARCAMONE PABLO DOMINGO",
+      "cuil": "20368223662",
+      "nombre": "Maximiliano Pasarello",
+      "dni": "36822366",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "BAEZ JUAN PABLO ADRIAN",
+      "cuil": "20289701800",
+      "nombre": "Adrian Baez",
+      "dni": "28970180",
+      "email": "1981adribaez@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "BARBELLI OSCAR RUBEN",
+      "cuil": "23113463759",
+      "nombre": "Barbelli Oscar Ruben",
+      "dni": "11346375",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Cesar Sein",
+      "cuil": "20174062529",
+      "nombre": "Cesar Sein",
+      "dni": "17406252",
+      "email": "cesargiasone@hotmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Cesar Sein",
+      "cuil": "23172412939",
+      "nombre": "Jose Marcelo Bayon",
+      "dni": "17241293",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "CHIAPPORI DIEGO MATIAS",
+      "cuil": "20243786844",
+      "nombre": "Chiappori Diego Matias",
+      "dni": "24378684",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Claudio Fuentes",
+      "cuil": "20171250804",
+      "nombre": "Claudio Fuentes",
+      "dni": "17125080",
+      "email": "cafuentes007@yahoo.com.ar",
+      "activo": true
+    },
+    {
+      "empresa": "Cristian Michelo",
+      "cuil": "20344157287",
+      "nombre": "Cristian Michelo",
+      "dni": "34415728",
+      "email": "cristian.michelo1989@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "CUBAS JORGE ARIEL",
+      "cuil": "20284089023",
+      "nombre": "Cubas Jorge Ariel",
+      "dni": "28408902",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Daniel Landolfo",
+      "cuil": "20172311750",
+      "nombre": "Alberto Ramirez",
+      "dni": "17231175",
+      "email": "albertoramire1964@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Daniel Vilchez",
+      "cuil": "20245554584",
+      "nombre": "Daniel Vilchez",
+      "dni": "24555458",
+      "email": "danitrapi458@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Dario Rodriguez",
+      "cuil": "20204281298",
+      "nombre": "Dario Rodriguez",
+      "dni": "20428129",
+      "email": "dariohr1968@hotmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Diego Cuscuna",
+      "cuil": "20269985594",
+      "nombre": "Cuscuna Pablo Martin",
+      "dni": "26998559",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Eric Ferreyra",
+      "cuil": "23327546929",
+      "nombre": "Ferreyra Eric",
+      "dni": "32754692",
+      "email": "eric.ferreyra@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "ESTRELLA MAXIMILIANO HERNAN",
+      "cuil": "20261570786",
+      "nombre": "Estrella Maximiliano Hernan",
+      "dni": "26157078",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Facundo Rodriguez",
+      "cuil": "20334193137",
+      "nombre": "Jonhatan Rodriguez",
+      "dni": "33419313",
+      "email": "jonydr87@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Facundo Rodriguez",
+      "cuil": "23227996269",
+      "nombre": "Juan Carlos Sandran",
+      "dni": "22799626",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Facundo Rodriguez",
+      "cuil": "20292793848",
+      "nombre": "Rodriguez Lucas Gabriel",
+      "dni": "29279384",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Fernando Inverno",
+      "cuil": "20346308614",
+      "nombre": "Fernando Inverno",
+      "dni": "34630861",
+      "email": "invernoparabrisas@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "FIORE CARLOS FABIAN",
+      "cuil": "20227829363",
+      "nombre": "FIORE CARLOS FABIAN",
+      "dni": "22782936",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Gisela Torrez",
+      "cuil": "22304299717",
+      "nombre": "Gisela Torrez",
+      "dni": "30429971",
+      "email": "gtorrez2008@hotmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "GOMEZ NAZARENO NAHUEL",
+      "cuil": "23335714369",
+      "nombre": "Gomez Nazareno Nahuel",
+      "dni": "33571436",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "GRAVAGLIA DAVID EZEQUIEL",
+      "cuil": "20361675550",
+      "nombre": "Gravaglia David Ezequiel",
+      "dni": "36167555",
+      "email": "Gravaglia_david@live.com",
+      "activo": true
+    },
+    {
+      "empresa": "Gustavo Ochoa",
+      "cuil": "20369298780",
+      "nombre": "Gonzalo Acevedo",
+      "dni": "36929878",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Gustavo Ochoa",
+      "cuil": "20210830368",
+      "nombre": "Gustavo Ochoa",
+      "dni": "21083036",
+      "email": "romabe2969@hotmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Gustavo Ojeda",
+      "cuil": "20245374802",
+      "nombre": "Ojeda Gustavo",
+      "dni": "24537480",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "GUZMAN MARCELO LUIS",
+      "cuil": "20217878706",
+      "nombre": "Guzman Marcelo Luis",
+      "dni": "21787870",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Hector Retamozo",
+      "cuil": "20182757617",
+      "nombre": "Hector Retamozo",
+      "dni": "18275761",
+      "email": "hector22288@hotmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Hugo Orsi",
+      "cuil": "20927370965",
+      "nombre": "Enrique Moreira",
+      "dni": "92737096",
+      "email": "henricapo@hotmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "IAMETTI MARCOS VALENTIN",
+      "cuil": "20206732173",
+      "nombre": "Iametti Marcos Valentin",
+      "dni": "20673217",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "ION LOGISTICA S.A.",
+      "cuil": "20355391486",
+      "nombre": "Bihurriet Braian",
+      "dni": "35539148",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Jorge Aguirre",
+      "cuil": "20180531905",
+      "nombre": "Jorge Aguirre",
+      "dni": "18053190",
+      "email": "jorgeaguirre4625@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Jorge Diaz",
+      "cuil": "20269612232",
+      "nombre": "Jorge Diaz",
+      "dni": "26961223",
+      "email": "jorgelias2013@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Jose Iannone",
+      "cuil": "20220421881",
+      "nombre": "Jose Iannone",
+      "dni": "22042188",
+      "email": "joseiannone@hotmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Jose Luis Casafus",
+      "cuil": "20183405099",
+      "nombre": "Jose Luis Casafus",
+      "dni": "18340509",
+      "email": "joseluis.67008@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Juan Medina",
+      "cuil": "23383467519",
+      "nombre": "Miguel Alejandro Cancelare",
+      "dni": "38346751",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Karina Fernandez",
+      "cuil": "27271510484",
+      "nombre": "Karina Fernandez",
+      "dni": "27151048",
+      "email": "karinaef79@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "LEGUIZAMON CARLOS ANIBAL",
+      "cuil": "20177723623",
+      "nombre": "LEGUIZAMON CARLOS ANIBAL",
+      "dni": "17772362",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "LOPEZ ATALAYA LEANDRO SEBASTIAN",
+      "cuil": "20386687685",
+      "nombre": "Lopez Atalaya Leandro Sebastian",
+      "dni": "38668768",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Luvoski Enrique",
+      "cuil": "20129567728",
+      "nombre": "Luvoski Enrique",
+      "dni": "12956772",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Mariano Santagata",
+      "cuil": "20104711929",
+      "nombre": "Sebastian Escobar",
+      "dni": "10471192",
+      "email": "escobarsebastian22@hotmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Martin Diaz",
+      "cuil": "20256357799",
+      "nombre": "Martin Diaz",
+      "dni": "25635779",
+      "email": "martinpelin77@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Martin Rodriguez",
+      "cuil": "20347133052",
+      "nombre": "Martin Rodriguez",
+      "dni": "34713305",
+      "email": "nitram198821@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Matias Piegas",
+      "cuil": "20359011599",
+      "nombre": "Alvez Nicolas Fabricio",
+      "dni": "35901159",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Matias Piegas",
+      "cuil": "20445590801",
+      "nombre": "Gabriel Ezequiel Marquez",
+      "dni": "44559080",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Matias Piegas",
+      "cuil": "20370086215",
+      "nombre": "Matias Piegas",
+      "dni": "37008621",
+      "email": "matiaspiegas3005@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Matias Ramirez",
+      "cuil": "23190339289",
+      "nombre": "Matias Ramirez",
+      "dni": "19033928",
+      "email": "matiasramirez1611@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "MELGAR WALTER ABEL",
+      "cuil": "20342640924",
+      "nombre": "Walter Melgar",
+      "dni": "34264092",
+      "email": "Walteryyoha16052014@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "MENDIETA EMILIO ADRIAN",
+      "cuil": "20291294465",
+      "nombre": "Mendieta Emilio Adrian",
+      "dni": "29129446",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Nahuel Fernandez",
+      "cuil": "20319634186",
+      "nombre": "Nahuel Fernandez",
+      "dni": "31963418",
+      "email": "fernahuel85@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Ochoa Mariano Ezequiel",
+      "cuil": "20428383223",
+      "nombre": "D'ascencao Lautaro",
+      "dni": "42838322",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Oscar Inverno",
+      "cuil": "20116909325",
+      "nombre": "Oscar Inverno",
+      "dni": "11690932",
+      "email": "oscarinverno_parabrisas@hotmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "PALMIERI JOSE LUIS",
+      "cuil": "20127765767",
+      "nombre": "Palmieri Jose Luis",
+      "dni": "12776576",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "PAZ MONICA LILIANA",
+      "cuil": "27233281552",
+      "nombre": "Paz Monica Liliana",
+      "dni": "23328155",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "QUIROGA FELIX GUILLERMO",
+      "cuil": "20201365040",
+      "nombre": "Quiroga Felix Guillermo",
+      "dni": "20136504",
+      "email": "guillequiroga045@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Rafael Falcon",
+      "cuil": "23315080509",
+      "nombre": "Rafael Falcon",
+      "dni": "31508050",
+      "email": "rafaelfalcon85@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "RAIMONDO DANIEL BONIFACIO",
+      "cuil": "20118498802",
+      "nombre": "Raimondo Daniel Bonifacio",
+      "dni": "11849880",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "RODRIGUEZ FERNANDO CHRISTIAN",
+      "cuil": "20256382122",
+      "nombre": "Fernando Rodriguez",
+      "dni": "25638212",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Sergio Aquino",
+      "cuil": "20132006025",
+      "nombre": "Miguel Aquino",
+      "dni": "13200602",
+      "email": "schapa982@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Sergio Aquino",
+      "cuil": "20306631862",
+      "nombre": "Sergio Aquino",
+      "dni": "30663186",
+      "email": "schapa982@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Sergio Aquino",
+      "cuil": "20289388738",
+      "nombre": "Zaragoza Daniel Jose",
+      "dni": "28938873",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Sergio Cadavid",
+      "cuil": "20217620377",
+      "nombre": "Sergio Cadavid",
+      "dni": "21762037",
+      "email": "sergiocadavid1970@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Sergio Maidana",
+      "cuil": "23362605369",
+      "nombre": "Sergio Maidana",
+      "dni": "36260536",
+      "email": "maidana.sergio15@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "SPRETZ SERGIO GILBERTO",
+      "cuil": "20170696256",
+      "nombre": "Spretz Sergio Gilberto",
+      "dni": "17069625",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "SUAREZ IVAN DANIEL",
+      "cuil": "20372162695",
+      "nombre": "Suarez Ivan Daniel",
+      "dni": "37216269",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Veronica Monteagudo",
+      "cuil": "23269496959",
+      "nombre": "Claudio Marcelo Colamussi",
+      "dni": "26949695",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Veronica Monteagudo",
+      "cuil": "23329468089",
+      "nombre": "Verdum Marcelo Alejandro",
+      "dni": "32946808",
+      "email": null,
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "cuil": "20416945587",
+      "nombre": "Agustin Diaz",
+      "dni": "41694558",
+      "email": "Agustinnparra@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "cuil": "20213748697",
+      "nombre": "Castro Mario Facundo",
+      "dni": "21374869",
+      "email": "mariocastro928.mfc@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "cuil": "20122285947",
+      "nombre": "Daniel Niessner",
+      "dni": "12228594",
+      "email": "danielniessner57@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "cuil": "20949620590",
+      "nombre": "Florencia?ez Venturini Braian",
+      "dni": "94962059",
+      "email": "Braianventurini12@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "cuil": "20338125012",
+      "nombre": "Hernan Gabriel Galvan",
+      "dni": "33812501",
+      "email": "herggalvan@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "cuil": "23190441199",
+      "nombre": "Leonardo Borquez",
+      "dni": "19044119",
+      "email": "Leonardoborquez97@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "cuil": "20407419082",
+      "nombre": "Lopez Mario Ricardo",
+      "dni": "40741908",
+      "email": "ml0820863@gmail.com",
+      "activo": true
+    },
+    {
+      "empresa": "VITALE CRISTIAN NICOLAS",
+      "cuil": "20316855998",
+      "nombre": "Vitale Cristian Nicolas",
+      "dni": "31685599",
+      "email": null,
+      "activo": true
+    }
+  ],
+  "unidades": [
+    {
+      "empresa": "Adrian Diaz",
+      "patente": "AB315GY",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Alberto Vilchez",
+      "patente": "AA800TJ",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Alejandro Cassineiro",
+      "patente": "AD109FS",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "ALVAREZ DIEGO SEBASTIAN",
+      "patente": "AD425JX",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "ARANDA ELIANA DANIELA",
+      "patente": "FSS069",
+      "tipo": "Congelado Sprinter",
+      "activo": true
+    },
+    {
+      "empresa": "ARCAMONE PABLO DOMINGO",
+      "patente": "LGG476",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "BAEZ JUAN PABLO ADRIAN",
+      "patente": "AC894YP",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "BARBELLI OSCAR RUBEN",
+      "patente": "AC433QI",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "Cesar Sein",
+      "patente": "AH306FI",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Cesar Sein",
+      "patente": "KTN357",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "CHIAPPORI DIEGO MATIAS",
+      "patente": "AH087ZA",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Claudio Fuentes",
+      "patente": "OEK471",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Cristian Michelo",
+      "patente": "AA548SN",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "CUBAS JORGE ARIEL",
+      "patente": "OOR969",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "Daniel Landolfo",
+      "patente": "JRR309",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Daniel Vilchez",
+      "patente": "AB575FX",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Dario Rodriguez",
+      "patente": "JPE992",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "Diego Cuscuna",
+      "patente": "MET684",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Eric Ferreyra",
+      "patente": "AC201IB",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "ESTRELLA MAXIMILIANO HERNAN",
+      "patente": "AC447QL",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Facundo Rodriguez",
+      "patente": "AD153WE",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Facundo Rodriguez",
+      "patente": "KQS191",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "Facundo Rodriguez",
+      "patente": "OZR936",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Fernando Inverno",
+      "patente": "AA307NE",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Fernando Inverno",
+      "patente": "AB631WV",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "FIORE CARLOS FABIAN",
+      "patente": "LRK804",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Gisela Torrez",
+      "patente": "AA467GW",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "GOMEZ NAZARENO NAHUEL",
+      "patente": "ETW655",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "GRAVAGLIA DAVID EZEQUIEL",
+      "patente": "AB727ZD",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Gustavo Ochoa",
+      "patente": "LGE207",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Gustavo Ochoa",
+      "patente": "MLE579",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "Gustavo Ojeda",
+      "patente": "AE838PW",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "GUZMAN MARCELO LUIS",
+      "patente": "AC830HS",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Hector Retamozo",
+      "patente": "AA680RW",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Hugo Orsi",
+      "patente": "KSG356",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "IAMETTI MARCOS VALENTIN",
+      "patente": "OKS077",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "ION LOGISTICA S.A.",
+      "patente": "HTK198",
+      "tipo": "Congelado Sprinter",
+      "activo": true
+    },
+    {
+      "empresa": "Jorge Aguirre",
+      "patente": "PIK681",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Jorge Diaz",
+      "patente": "AB074CV",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Jorge Diaz",
+      "patente": "AG138FN",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Jose Iannone",
+      "patente": "AA645CL",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Jose Luis Casafus",
+      "patente": "PEI158",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Juan Medina",
+      "patente": "DZK556",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "Karina Fernandez",
+      "patente": "AA752KZ",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "LEGUIZAMON CARLOS ANIBAL",
+      "patente": "AF179WS",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "LOPEZ ATALAYA LEANDRO SEBASTIAN",
+      "patente": "AC934RE",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Luvoski Enrique",
+      "patente": "AE874ET",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "Mariano Santagata",
+      "patente": "AF665YN",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Martin Diaz",
+      "patente": "AB752GD",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Martin Rodriguez",
+      "patente": "HYT424",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "Matias Piegas",
+      "patente": "AB063SM",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Matias Piegas",
+      "patente": "AB886ZH",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Matias Piegas",
+      "patente": "DMA217",
+      "tipo": "Congelado Sprinter",
+      "activo": true
+    },
+    {
+      "empresa": "Matias Ramirez",
+      "patente": "AB009PG",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "MELGAR WALTER ABEL",
+      "patente": "NID832",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "MENDIETA EMILIO ADRIAN",
+      "patente": "ISJ188",
+      "tipo": "Congelado Sprinter",
+      "activo": true
+    },
+    {
+      "empresa": "Nahuel Fernandez",
+      "patente": "AE665ZJ",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "Ochoa Mariano Ezequiel",
+      "patente": "MAL001",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Oscar Inverno",
+      "patente": "AA822FX",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "PALMIERI JOSE LUIS",
+      "patente": "AG603JM",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "PAZ MONICA LILIANA",
+      "patente": "HMA290",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "QUIROGA FELIX GUILLERMO",
+      "patente": "AD122CP",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Rafael Falcon",
+      "patente": "AA792GV",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "RAIMONDO DANIEL BONIFACIO",
+      "patente": "JCW730",
+      "tipo": "Congelado Sprinter",
+      "activo": true
+    },
+    {
+      "empresa": "RODRIGUEZ FERNANDO CHRISTIAN",
+      "patente": "AC820NX",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Sergio Aquino",
+      "patente": "AD645KZ",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Sergio Aquino",
+      "patente": "AF240OD",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Sergio Aquino",
+      "patente": "AF451VW",
+      "tipo": "Seco",
+      "activo": true
+    },
+    {
+      "empresa": "Sergio Cadavid",
+      "patente": "AA980LS",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Sergio Maidana",
+      "patente": "AB193UE",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "SPRETZ SERGIO GILBERTO",
+      "patente": "AE828NR",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "SUAREZ IVAN DANIEL",
+      "patente": "IQR833",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Veronica Monteagudo",
+      "patente": "AA141XE",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Veronica Monteagudo",
+      "patente": "KWF875",
+      "tipo": "Refrigerado",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "patente": "AA865SO",
+      "tipo": "Congelado Sprinter",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "patente": "AD063PH",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "patente": "AE691MC",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "patente": "AF050MW",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "patente": "AG138FN",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "patente": "AG907NS",
+      "tipo": "SuperCongelado",
+      "activo": true
+    },
+    {
+      "empresa": "Vettore Logistica SRL",
+      "patente": "AI024KG",
+      "tipo": "Congelado",
+      "activo": true
+    },
+    {
+      "empresa": "VITALE CRISTIAN NICOLAS",
+      "patente": "AA818OH",
+      "tipo": "SuperCongelado",
+      "activo": true
+    }
+  ]
+}

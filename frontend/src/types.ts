@@ -16,6 +16,8 @@ export type User = {
   estado: "ACTIVO" | "INACTIVO";
   clienteId?: string | null;
   choferId?: string | null;
+  /** Solo aplica si rol=CHOFER: ve todas las unidades de su empresa */
+  esDuenoFlota?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -53,6 +55,23 @@ export type EstadoCamioneta =
   | "DE_VACACIONES"
   | "FUERA_SERVICIO";
 export type TipoEmpresa = "PROPIA" | "ALIADA";
+export type TipoTransporte =
+  | "CONGELADO"
+  | "SUPERCONGELADO"
+  | "REFRIGERADO"
+  | "SECO";
+
+export const MARCAS_CAMIONETA = [
+  "Renault",
+  "Peugeot",
+  "Fiat",
+  "Volkswagen",
+  "Ford",
+  "Chevrolet",
+  "Mercedes-Benz",
+  "Iveco",
+  "Otra",
+] as const;
 
 export type TipoPedido =
   | "ALTA"
@@ -74,6 +93,8 @@ export type Cliente = {
 export type Empresa = {
   id: string;
   nombre: string;
+  cuit: string | null;
+  contacto: string | null;
   tipo: TipoEmpresa;
 };
 
@@ -93,8 +114,12 @@ export type Chofer = {
   id: string;
   nombre: string;
   dni: string;
+  cuil: string | null;
   licencia: string | null;
+  licenciaVencimiento: string | null;
   telefono: string | null;
+  email: string | null;
+  esDuenoFlota: boolean;
   estado: EstadoChofer;
   asignaciones?: AsignacionFlota[];
 };
@@ -102,9 +127,17 @@ export type Chofer = {
 export type Camioneta = {
   id: string;
   patente: string;
+  marca: string | null;
+  modelo: string | null;
+  anio: number | null;
+  color: string | null;
+  tipoTransporte: TipoTransporte | null;
   datosTecnicos: string | null;
   km: number;
   fechaUltimoAceite: string | null;
+  seguroCompania: string | null;
+  seguroVencimiento: string | null;
+  vtbVencimiento: string | null;
   estado: EstadoCamioneta;
   asignaciones?: AsignacionFlota[];
 };

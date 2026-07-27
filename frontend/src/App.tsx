@@ -7,11 +7,13 @@ import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { M5FichaPage } from "./pages/m5/M5FichaPage";
 import { M2CambiosPage } from "./pages/m2/M2CambiosPage";
 import { M3ComunicacionesPage } from "./pages/m3/M3ComunicacionesPage";
+import { M6MantenimientoPage } from "./pages/m6/M6MantenimientoPage";
 import { M7TalleresPage } from "./pages/m7/M7TalleresPage";
 
 function HomeRedirect() {
   const { user } = useAuth();
   if (user?.rol === "CLIENTE") return <Navigate to="/m2" replace />;
+  if (user?.rol === "CHOFER") return <Navigate to="/m7" replace />;
   return <Navigate to="/m7" replace />;
 }
 
@@ -37,16 +39,7 @@ export default function App() {
               }
             />
             <Route path="/m5" element={<M5FichaPage />} />
-            <Route
-              path="/m6"
-              element={
-                <PlaceholderPage
-                  code="M6"
-                  title="Mantenimiento"
-                  description="Fuera del MVP de Etapa 1. Se implementa en una etapa posterior."
-                />
-              }
-            />
+            <Route path="/m6" element={<M6MantenimientoPage />} />
             <Route path="/m7" element={<M7TalleresPage />} />
           </Route>
         </Route>

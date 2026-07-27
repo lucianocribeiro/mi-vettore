@@ -12,15 +12,18 @@ const router = Router();
 
 const VALID_ROLES = new Set(Object.values(Role));
 
-function publicUser(user: {
-  id: string;
-  email: string;
-  rol: Role;
-  nombre: string | null;
-  estado: UserStatus;
-  clienteId?: string | null;
-  choferId?: string | null;
-}) {
+function publicUser(
+  user: {
+    id: string;
+    email: string;
+    rol: Role;
+    nombre: string | null;
+    estado: UserStatus;
+    clienteId?: string | null;
+    choferId?: string | null;
+  },
+  chofer?: { esDuenoFlota: boolean } | null
+) {
   return {
     id: user.id,
     email: user.email,
@@ -29,6 +32,7 @@ function publicUser(user: {
     estado: user.estado,
     clienteId: user.clienteId ?? null,
     choferId: user.choferId ?? null,
+    esDuenoFlota: chofer?.esDuenoFlota ?? false,
   };
 }
 
@@ -44,7 +48,10 @@ router.post("/login", async (req, res) => {
       return;
     }
 
-    const user = await prisma.usuario.findUnique({ where: { email } });
+    const user = await prisma.usuario.findUnique({
+      where: { email },
+      include: { chofer: true },
+    });
     if (!user) {
       res.status(401).json({ error: "Credenciales inválidas" });
       return;
@@ -67,7 +74,7 @@ router.post("/login", async (req, res) => {
       rol: user.rol,
     });
 
-    res.json({ token, user: publicUser(user) });
+    res.json({ token, user: publicUser(user, user.chofer) });
   } catch (err) {
     console.error("login error", err);
     res.status(500).json({ error: "Error interno" });
@@ -136,12 +143,13 @@ router.get("/me", authenticate, async (req: AuthedRequest, res) => {
   try {
     const user = await prisma.usuario.findUnique({
       where: { id: req.user!.id },
+      include: { chofer: true },
     });
     if (!user || user.estado !== UserStatus.ACTIVO) {
       res.status(401).json({ error: "Sesión inválida" });
       return;
     }
-    res.json({ user: publicUser(user) });
+    res.json({ user: publicUser(user, user.chofer) });
   } catch (err) {
     console.error("me error", err);
     res.status(500).json({ error: "Error interno" });

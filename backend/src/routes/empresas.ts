@@ -48,10 +48,26 @@ router.post("/", ...write, async (req, res) => {
       return;
     }
     const item = await prisma.empresaTransporte.create({
-      data: { nombre, tipo: tipoRaw as TipoEmpresa },
+      data: {
+        nombre,
+        tipo: tipoRaw as TipoEmpresa,
+        cuit: req.body?.cuit ? String(req.body.cuit).replace(/\D/g, "") : null,
+        contacto: req.body?.contacto
+          ? String(req.body.contacto).trim()
+          : null,
+      },
     });
     res.status(201).json(item);
-  } catch (err) {
+  } catch (err: unknown) {
+    if (
+      typeof err === "object" &&
+      err &&
+      "code" in err &&
+      (err as { code: string }).code === "P2002"
+    ) {
+      res.status(409).json({ error: "Ya existe una empresa con ese CUIT" });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "Error al crear empresa" });
   }
@@ -66,8 +82,23 @@ router.put("/:id", ...write, async (req, res) => {
       res.status(404).json({ error: "Empresa no encontrada" });
       return;
     }
-    const data: { nombre?: string; tipo?: TipoEmpresa } = {};
+    const data: {
+      nombre?: string;
+      tipo?: TipoEmpresa;
+      cuit?: string | null;
+      contacto?: string | null;
+    } = {};
     if (req.body?.nombre !== undefined) data.nombre = String(req.body.nombre).trim();
+    if (req.body?.cuit !== undefined) {
+      data.cuit = req.body.cuit
+        ? String(req.body.cuit).replace(/\D/g, "")
+        : null;
+    }
+    if (req.body?.contacto !== undefined) {
+      data.contacto = req.body.contacto
+        ? String(req.body.contacto).trim()
+        : null;
+    }
     if (req.body?.tipo !== undefined) {
       const t = String(req.body.tipo).toUpperCase();
       if (!(t in TipoEmpresa)) {
@@ -81,7 +112,16 @@ router.put("/:id", ...write, async (req, res) => {
       data,
     });
     res.json(item);
-  } catch (err) {
+  } catch (err: unknown) {
+    if (
+      typeof err === "object" &&
+      err &&
+      "code" in err &&
+      (err as { code: string }).code === "P2002"
+    ) {
+      res.status(409).json({ error: "Ya existe una empresa con ese CUIT" });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "Error al actualizar empresa" });
   }

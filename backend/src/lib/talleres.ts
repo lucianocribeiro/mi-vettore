@@ -13,6 +13,17 @@ export function fechaAplicacionCambio(from = new Date()): Date {
   return d;
 }
 
+/** Fallas más comunes + Otros (detalle obligatorio). */
+export const FALLAS_COMUNES = [
+  "Pérdida de gas / equipo de frío",
+  "Frenos",
+  "Neumáticos / gomería",
+  "Batería / no arranca",
+  "Problema eléctrico",
+  "Motor / mecánica general",
+  "Otros",
+] as const;
+
 export const OT_STEPS = [
   {
     key: 0,
@@ -21,18 +32,18 @@ export const OT_STEPS = [
   },
   {
     key: 1,
-    label: "Notificación panel",
-    ownerRoles: null,
+    label: "Notificación ops",
+    ownerRoles: [Role.PABLO, Role.FACU] as Role[] | null,
   },
   {
     key: 2,
-    label: "Evaluación taller",
-    ownerRoles: [Role.FACU],
+    label: "Presupuestos",
+    ownerRoles: [Role.SILVINA],
   },
   {
     key: 3,
-    label: "Presupuesto",
-    ownerRoles: [Role.SILVINA],
+    label: "Elección taller",
+    ownerRoles: [Role.FACU],
   },
   {
     key: 4,
@@ -41,8 +52,8 @@ export const OT_STEPS = [
   },
   {
     key: 5,
-    label: "Cierre y pago",
-    ownerRoles: [Role.SILVINA, Role.PABLO],
+    label: "Pago",
+    ownerRoles: [Role.SILVINA, Role.CARLA],
   },
 ] as const;
 
@@ -58,22 +69,29 @@ export function canCreateSolicitud(rol: Role): boolean {
 
 /** Quién puede avanzar DESDE currentStep hacia el siguiente. */
 export function canAdvanceFromStep(rol: Role, currentStep: number): boolean {
-  if (currentStep === 0) return canCreateSolicitud(rol) || rol === Role.FACU;
-  if (currentStep === 1) {
-    return (
-      rol === Role.PABLO ||
-      rol === Role.FACU ||
-      rol === Role.SILVINA ||
-      rol === Role.PATRICIO ||
-      rol === Role.JULIETA
-    );
-  }
-  if (currentStep === 2) return rol === Role.FACU;
-  if (currentStep === 3) return rol === Role.SILVINA;
+  if (currentStep === 0) return canCreateSolicitud(rol);
+  // Notificación ops: Pablo o Facu confirman / sacan de circulación
+  if (currentStep === 1) return rol === Role.PABLO || rol === Role.FACU;
+  // Silvina carga presupuestos
+  if (currentStep === 2) return rol === Role.SILVINA;
+  // Facu elige presupuesto/taller
+  if (currentStep === 3) return rol === Role.FACU;
+  // Patricio/Julieta aprueban
   if (currentStep === 4) return rol === Role.PATRICIO || rol === Role.JULIETA;
-  if (currentStep === 5) return rol === Role.SILVINA || rol === Role.PABLO;
+  // Pago se cierra con POST /cerrar
+  if (currentStep === 5) return false;
   return false;
 }
+
+export function canCerrarOt(rol: Role): boolean {
+  return rol === Role.SILVINA || rol === Role.CARLA;
+}
+
+/** Aviso al pasar a notificación ops (sacar de circulación). */
+export const NOTIF_OPS_ROLES: Role[] = [Role.PABLO, Role.FACU];
+
+/** Notificación final de pago. */
+export const CIERRE_AVISO_ROLES: Role[] = [Role.SILVINA, Role.CARLA];
 
 export function canRetreat(rol: Role): boolean {
   return (
@@ -81,6 +99,19 @@ export function canRetreat(rol: Role): boolean {
     rol === Role.FACU ||
     rol === Role.SILVINA ||
     rol === Role.PATRICIO ||
-    rol === Role.JULIETA
+    rol === Role.JULIETA ||
+    rol === Role.CARLA
   );
 }
+
+export const MARCAS_CAMIONETA = [
+  "Renault",
+  "Peugeot",
+  "Fiat",
+  "Volkswagen",
+  "Ford",
+  "Chevrolet",
+  "Mercedes-Benz",
+  "Iveco",
+  "Otra",
+] as const;

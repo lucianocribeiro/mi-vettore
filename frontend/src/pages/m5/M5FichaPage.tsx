@@ -61,15 +61,30 @@ export function M5FichaPage() {
   const [fContacto, setFContacto] = useState("");
   const [fSegmento, setFSegmento] = useState<SegmentoCliente>("ESTATICO");
   const [fDni, setFDni] = useState("");
+  const [fCuil, setFCuil] = useState("");
   const [fLicencia, setFLicencia] = useState("");
+  const [fLicenciaVenc, setFLicenciaVenc] = useState("");
   const [fTelefono, setFTelefono] = useState("");
+  const [fEmailChofer, setFEmailChofer] = useState("");
+  const [fEsDueno, setFEsDueno] = useState(false);
   const [fEstadoChofer, setFEstadoChofer] = useState<"ACTIVO" | "INACTIVO">(
     "ACTIVO"
   );
   const [fTipoEmpresa, setFTipoEmpresa] = useState<TipoEmpresa>("PROPIA");
+  const [fCuit, setFCuit] = useState("");
+  const [fContactoEmpresa, setFContactoEmpresa] = useState("");
   const [fPatente, setFPatente] = useState("");
+  const [fMarca, setFMarca] = useState("");
+  const [fModelo, setFModelo] = useState("");
+  const [fAnio, setFAnio] = useState("");
+  const [fColor, setFColor] = useState("");
+  const [fTipoTransporte, setFTipoTransporte] = useState<string>("");
   const [fDatosTecnicos, setFDatosTecnicos] = useState("");
   const [fKm, setFKm] = useState("0");
+  const [fAceite, setFAceite] = useState("");
+  const [fSeguroCia, setFSeguroCia] = useState("");
+  const [fSeguroVenc, setFSeguroVenc] = useState("");
+  const [fVtbVenc, setFVtbVenc] = useState("");
   const [fEstadoCam, setFEstadoCam] = useState<
     "OPERATIVA" | "EN_TALLER" | "DE_VACACIONES" | "FUERA_SERVICIO"
   >("OPERATIVA");
@@ -116,13 +131,28 @@ export function M5FichaPage() {
     setFContacto("");
     setFSegmento("ESTATICO");
     setFDni("");
+    setFCuil("");
     setFLicencia("");
+    setFLicenciaVenc("");
     setFTelefono("");
+    setFEmailChofer("");
+    setFEsDueno(false);
     setFEstadoChofer("ACTIVO");
     setFTipoEmpresa("PROPIA");
+    setFCuit("");
+    setFContactoEmpresa("");
     setFPatente("");
+    setFMarca("");
+    setFModelo("");
+    setFAnio("");
+    setFColor("");
+    setFTipoTransporte("");
     setFDatosTecnicos("");
     setFKm("0");
+    setFAceite("");
+    setFSeguroCia("");
+    setFSeguroVenc("");
+    setFVtbVenc("");
     setFEstadoCam("OPERATIVA");
     setFChoferId("");
     setFEmpresaId("");
@@ -145,8 +175,16 @@ export function M5FichaPage() {
     setFormError(null);
     setFNombre(item.nombre);
     setFDni(item.dni);
+    setFCuil(item.cuil ?? "");
     setFLicencia(item.licencia ?? "");
+    setFLicenciaVenc(
+      item.licenciaVencimiento
+        ? item.licenciaVencimiento.slice(0, 10)
+        : ""
+    );
     setFTelefono(item.telefono ?? "");
+    setFEmailChofer(item.email ?? "");
+    setFEsDueno(!!item.esDuenoFlota);
     setFEstadoChofer(item.estado);
     setForm({ kind: "chofer", item });
   }
@@ -155,14 +193,29 @@ export function M5FichaPage() {
     setFormError(null);
     setFNombre(item.nombre);
     setFTipoEmpresa(item.tipo);
+    setFCuit(item.cuit ?? "");
+    setFContactoEmpresa(item.contacto ?? "");
     setForm({ kind: "empresa", item });
   }
 
   function openEditCamioneta(item: Camioneta) {
     setFormError(null);
     setFPatente(item.patente);
+    setFMarca(item.marca ?? "");
+    setFModelo(item.modelo ?? "");
+    setFAnio(item.anio != null ? String(item.anio) : "");
+    setFColor(item.color ?? "");
+    setFTipoTransporte(item.tipoTransporte ?? "");
     setFDatosTecnicos(item.datosTecnicos ?? "");
     setFKm(String(item.km));
+    setFAceite(
+      item.fechaUltimoAceite ? item.fechaUltimoAceite.slice(0, 10) : ""
+    );
+    setFSeguroCia(item.seguroCompania ?? "");
+    setFSeguroVenc(
+      item.seguroVencimiento ? item.seguroVencimiento.slice(0, 10) : ""
+    );
+    setFVtbVenc(item.vtbVencimiento ? item.vtbVencimiento.slice(0, 10) : "");
     setFEstadoCam(item.estado);
     const a = currentAsignacion(item);
     setFChoferId(a?.choferId ?? "");
@@ -213,8 +266,12 @@ export function M5FichaPage() {
         const body = {
           nombre: fNombre,
           dni: fDni,
+          cuil: fCuil || null,
           licencia: fLicencia || null,
+          licenciaVencimiento: fLicenciaVenc || null,
           telefono: fTelefono || null,
+          email: fEmailChofer || null,
+          esDuenoFlota: fEsDueno,
           estado: fEstadoChofer,
         };
         if (form.item) {
@@ -242,7 +299,12 @@ export function M5FichaPage() {
       }
 
       if (form.kind === "empresa") {
-        const body = { nombre: fNombre, tipo: fTipoEmpresa };
+        const body = {
+          nombre: fNombre,
+          tipo: fTipoEmpresa,
+          cuit: fCuit || null,
+          contacto: fContactoEmpresa || null,
+        };
         if (form.item) {
           const updated = await apiFetch<Empresa>(
             `/api/empresas/${form.item.id}`,
@@ -267,8 +329,17 @@ export function M5FichaPage() {
       if (form.kind === "camioneta") {
         const body = {
           patente: fPatente,
+          marca: fMarca || null,
+          modelo: fModelo || null,
+          anio: fAnio ? Number(fAnio) : null,
+          color: fColor || null,
+          tipoTransporte: fTipoTransporte || null,
           datosTecnicos: fDatosTecnicos || null,
           km: Number(fKm) || 0,
+          fechaUltimoAceite: fAceite || null,
+          seguroCompania: fSeguroCia || null,
+          seguroVencimiento: fSeguroVenc || null,
+          vtbVencimiento: fVtbVenc || null,
           estado: fEstadoCam,
           choferId: fChoferId || undefined,
           empresaId: fEmpresaId || undefined,
@@ -280,8 +351,17 @@ export function M5FichaPage() {
               method: "PUT",
               body: JSON.stringify({
                 patente: body.patente,
+                marca: body.marca,
+                modelo: body.modelo,
+                anio: body.anio,
+                color: body.color,
+                tipoTransporte: body.tipoTransporte,
                 datosTecnicos: body.datosTecnicos,
                 km: body.km,
+                fechaUltimoAceite: body.fechaUltimoAceite,
+                seguroCompania: body.seguroCompania,
+                seguroVencimiento: body.seguroVencimiento,
+                vtbVencimiento: body.vtbVencimiento,
                 estado: body.estado,
               }),
             },
@@ -543,7 +623,9 @@ export function M5FichaPage() {
             >
               <div className="font-semibold text-[var(--vl-heading)]">{c.nombre}</div>
               <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
-                DNI {c.dni} · Licencia {c.licencia || "—"}
+                DNI {c.dni}
+                {c.cuil ? ` · CUIL ${c.cuil}` : ""}
+                {c.esDuenoFlota ? " · titular" : ""}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>
@@ -595,9 +677,11 @@ export function M5FichaPage() {
 
       {!loading && !error && tab === "empresas" && (
         <EntityTable
-          headers={["Nombre", "Tipo", ""]}
+          headers={["Nombre", "CUIT", "Contacto", "Tipo", ""]}
           rows={empresas.map((e) => [
             e.nombre,
+            e.cuit || "—",
+            e.contacto || "—",
             e.tipo.toLowerCase(),
             canEdit ? (
               <Actions
@@ -718,11 +802,26 @@ export function M5FichaPage() {
                   required
                 />
               </Field>
-              <Field label="Licencia">
+              <Field label="CUIL">
+                <input
+                  className={inputClass}
+                  value={fCuil}
+                  onChange={(e) => setFCuil(e.target.value)}
+                />
+              </Field>
+              <Field label="Licencia (categoría)">
                 <input
                   className={inputClass}
                   value={fLicencia}
                   onChange={(e) => setFLicencia(e.target.value)}
+                />
+              </Field>
+              <Field label="Vencimiento licencia">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={fLicenciaVenc}
+                  onChange={(e) => setFLicenciaVenc(e.target.value)}
                 />
               </Field>
               <Field label="Teléfono">
@@ -731,6 +830,24 @@ export function M5FichaPage() {
                   value={fTelefono}
                   onChange={(e) => setFTelefono(e.target.value)}
                 />
+              </Field>
+              <Field label="Email">
+                <input
+                  type="email"
+                  className={inputClass}
+                  value={fEmailChofer}
+                  onChange={(e) => setFEmailChofer(e.target.value)}
+                />
+              </Field>
+              <Field label="Perfil flota">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fEsDueno}
+                    onChange={(e) => setFEsDueno(e.target.checked)}
+                  />
+                  Dueño de empresa (ve todas las unidades)
+                </label>
               </Field>
               <Field label="Estado">
                 <select
@@ -748,18 +865,35 @@ export function M5FichaPage() {
           )}
 
           {form.kind === "empresa" && (
-            <Field label="Tipo">
-              <select
-                className={inputClass}
-                value={fTipoEmpresa}
-                onChange={(e) =>
-                  setFTipoEmpresa(e.target.value as TipoEmpresa)
-                }
-              >
-                <option value="PROPIA">Propia</option>
-                <option value="ALIADA">Aliada</option>
-              </select>
-            </Field>
+            <>
+              <Field label="CUIT">
+                <input
+                  className={inputClass}
+                  value={fCuit}
+                  onChange={(e) => setFCuit(e.target.value)}
+                />
+              </Field>
+              <Field label="Mail contacto">
+                <input
+                  type="email"
+                  className={inputClass}
+                  value={fContactoEmpresa}
+                  onChange={(e) => setFContactoEmpresa(e.target.value)}
+                />
+              </Field>
+              <Field label="Tipo">
+                <select
+                  className={inputClass}
+                  value={fTipoEmpresa}
+                  onChange={(e) =>
+                    setFTipoEmpresa(e.target.value as TipoEmpresa)
+                  }
+                >
+                  <option value="PROPIA">Propia</option>
+                  <option value="ALIADA">Aliada</option>
+                </select>
+              </Field>
+            </>
           )}
 
           {form.kind === "camioneta" && (
@@ -771,6 +905,71 @@ export function M5FichaPage() {
                   onChange={(e) => setFPatente(e.target.value)}
                   required
                 />
+              </Field>
+              <Field label="Marca">
+                <select
+                  className={inputClass}
+                  value={fMarca}
+                  onChange={(e) => setFMarca(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {[
+                    "Renault",
+                    "Peugeot",
+                    "Fiat",
+                    "Volkswagen",
+                    "Ford",
+                    "Chevrolet",
+                    "Mercedes-Benz",
+                    "Iveco",
+                    "Otra",
+                  ].map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Modelo">
+                <input
+                  className={inputClass}
+                  value={fModelo}
+                  onChange={(e) => setFModelo(e.target.value)}
+                />
+              </Field>
+              <Field label="Año">
+                <select
+                  className={inputClass}
+                  value={fAnio}
+                  onChange={(e) => setFAnio(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {Array.from({ length: 20 }, (_, i) => 2026 - i).map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Color">
+                <input
+                  className={inputClass}
+                  value={fColor}
+                  onChange={(e) => setFColor(e.target.value)}
+                />
+              </Field>
+              <Field label="Tipo de servicio">
+                <select
+                  className={inputClass}
+                  value={fTipoTransporte}
+                  onChange={(e) => setFTipoTransporte(e.target.value)}
+                >
+                  <option value="">—</option>
+                  <option value="CONGELADO">Congelado</option>
+                  <option value="SUPERCONGELADO">Supercongelado</option>
+                  <option value="REFRIGERADO">Refrigerado</option>
+                  <option value="SECO">Seco</option>
+                </select>
               </Field>
               <Field label="Datos técnicos">
                 <input
@@ -785,6 +984,37 @@ export function M5FichaPage() {
                   className={inputClass}
                   value={fKm}
                   onChange={(e) => setFKm(e.target.value)}
+                />
+              </Field>
+              <Field label="Último cambio de aceite">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={fAceite}
+                  onChange={(e) => setFAceite(e.target.value)}
+                />
+              </Field>
+              <Field label="Compañía de seguro">
+                <input
+                  className={inputClass}
+                  value={fSeguroCia}
+                  onChange={(e) => setFSeguroCia(e.target.value)}
+                />
+              </Field>
+              <Field label="Vencimiento seguro">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={fSeguroVenc}
+                  onChange={(e) => setFSeguroVenc(e.target.value)}
+                />
+              </Field>
+              <Field label="Vencimiento VTB">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={fVtbVenc}
+                  onChange={(e) => setFVtbVenc(e.target.value)}
                 />
               </Field>
               <Field label="Estado">
@@ -831,6 +1061,7 @@ export function M5FichaPage() {
                   {choferes.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.nombre}
+                      {c.esDuenoFlota ? " (dueño)" : ""}
                     </option>
                   ))}
                 </select>

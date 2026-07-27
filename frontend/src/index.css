@@ -37,10 +37,10 @@
   --vl-shell: #0f172a;
   --vl-shell-border: #1e293b;
   --vl-text: #e2e8f0;
-  --vl-text-muted: #94a3b8;
+  --vl-text-muted: #b6c2d1;
   --vl-card: #111827;
   --vl-card-border: #1f2937;
-  --vl-heading: #f1f5f9;
+  --vl-heading: #f8fafc;
   --vl-login-card: #0f172a;
 }
 
@@ -65,6 +65,19 @@ body {
   color: var(--vl-text);
   -webkit-tap-highlight-color: transparent;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Selects nativos: en Windows el popup suele ser blanco;
+   forzamos texto oscuro en options para que se lean en dark mode */
+select {
+  color: var(--vl-text);
+  background-color: var(--vl-card);
+}
+
+select option,
+select optgroup {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
 }
 
 #root {

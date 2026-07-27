@@ -17,6 +17,12 @@ const includeAsignaciones = {
   },
 };
 
+function parseDate(value: unknown): Date | null {
+  if (!value) return null;
+  const d = new Date(String(value));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 router.get("/", authenticate, async (_req, res) => {
   try {
     const items = await prisma.chofer.findMany({
@@ -64,8 +70,14 @@ router.post("/", ...write, async (req, res) => {
       data: {
         nombre,
         dni,
+        cuil: req.body?.cuil ? String(req.body.cuil).replace(/\D/g, "") : null,
         licencia: req.body?.licencia ? String(req.body.licencia).trim() : null,
+        licenciaVencimiento: parseDate(req.body?.licenciaVencimiento),
         telefono: req.body?.telefono ? String(req.body.telefono).trim() : null,
+        email: req.body?.email
+          ? String(req.body.email).trim().toLowerCase()
+          : null,
+        esDuenoFlota: Boolean(req.body?.esDuenoFlota),
         estado: estadoRaw as EstadoChofer,
       },
       include: includeAsignaciones,
@@ -93,20 +105,30 @@ router.put("/:id", ...write, async (req, res) => {
       res.status(404).json({ error: "Chofer no encontrado" });
       return;
     }
-    const data: {
-      nombre?: string;
-      dni?: string;
-      licencia?: string | null;
-      telefono?: string | null;
-      estado?: EstadoChofer;
-    } = {};
+    const data: Record<string, unknown> = {};
     if (req.body?.nombre !== undefined) data.nombre = String(req.body.nombre).trim();
     if (req.body?.dni !== undefined) data.dni = String(req.body.dni).trim();
+    if (req.body?.cuil !== undefined) {
+      data.cuil = req.body.cuil
+        ? String(req.body.cuil).replace(/\D/g, "")
+        : null;
+    }
     if (req.body?.licencia !== undefined) {
       data.licencia = req.body.licencia ? String(req.body.licencia).trim() : null;
     }
+    if (req.body?.licenciaVencimiento !== undefined) {
+      data.licenciaVencimiento = parseDate(req.body.licenciaVencimiento);
+    }
     if (req.body?.telefono !== undefined) {
       data.telefono = req.body.telefono ? String(req.body.telefono).trim() : null;
+    }
+    if (req.body?.email !== undefined) {
+      data.email = req.body.email
+        ? String(req.body.email).trim().toLowerCase()
+        : null;
+    }
+    if (req.body?.esDuenoFlota !== undefined) {
+      data.esDuenoFlota = Boolean(req.body.esDuenoFlota);
     }
     if (req.body?.estado !== undefined) {
       const s = String(req.body.estado).toUpperCase();

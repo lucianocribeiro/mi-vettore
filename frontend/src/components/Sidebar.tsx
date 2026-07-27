@@ -60,8 +60,8 @@ const NAV: NavItem[] = [
   },
   {
     to: "/m3",
-    label: "Comunicaciones",
-    sub: "M3",
+    label: "Agenda ops",
+    sub: "Ayuda memoria",
     icon: MessageSquare,
     roles: [
       "PABLO",
@@ -89,9 +89,10 @@ const NAV: NavItem[] = [
   {
     to: "/m6",
     label: "Mantenimiento",
-    sub: "M6",
+    sub: "Km / aceite",
     icon: Wrench,
     roles: [
+      "CHOFER",
       "PABLO",
       "SILVINA",
       "FACU",
