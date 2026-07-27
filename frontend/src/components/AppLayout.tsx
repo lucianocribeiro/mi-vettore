@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 import { AppLogo } from "./AppLogo";
 import { Menu } from "./icons";
 import { Sidebar } from "./Sidebar";
@@ -7,6 +8,7 @@ import { ThemeToggle } from "./ThemeToggle";
 
 export function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -41,11 +43,22 @@ export function AppLayout() {
             <AppLogo size={22} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-bold text-[#e8edf5]">
-              Mi Vettore
+            <div className="flex items-center gap-1.5">
+              <div className="truncate text-sm font-bold text-[#e8edf5]">
+                Mi Vettore
+              </div>
+              {user?.esDuenoFlota && (
+                <span className="shrink-0 rounded bg-[#1e4080] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                  Dueño
+                </span>
+              )}
             </div>
             <div className="truncate text-[10px] text-[#6b88aa]">
-              Vettore Logística
+              {user?.nombre
+                ? user.esDuenoFlota
+                  ? `${user.nombre} · titular`
+                  : user.nombre
+                : "Vettore Logística"}
             </div>
           </div>
           <ThemeToggle variant="header" />

@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { ALL_ROLES, ROLE_LABELS, type Role } from "../types";
+import { ROLE_LABELS, type Role } from "../types";
 import { AppLogo } from "./AppLogo";
 import { ThemeToggle } from "./ThemeToggle";
 import {
@@ -128,11 +128,20 @@ export function Sidebar({ open, onClose }: Props) {
           <AppLogo size={22} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-bold leading-tight text-[#e8edf5]">
-            Mi Vettore
+          <div className="flex items-center gap-1.5">
+            <div className="truncate text-sm font-bold leading-tight text-[#e8edf5]">
+              Mi Vettore
+            </div>
+            {user?.esDuenoFlota && (
+              <span className="shrink-0 rounded bg-[#1e4080] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                Dueño
+              </span>
+            )}
           </div>
           <div className="truncate text-[10px] leading-tight text-[var(--vl-brand-sub)]">
-            Vettore Logística
+            {user?.esDuenoFlota
+              ? "Titular de flota"
+              : "Vettore Logística"}
           </div>
         </div>
         <button
@@ -193,35 +202,28 @@ export function Sidebar({ open, onClose }: Props) {
       </nav>
 
       <div className="border-t border-[var(--vl-sidebar-border)] px-4 py-3 safe-bottom">
-        {isDev ? (
-          <>
-            <div className="mb-1 text-[11px] text-[var(--vl-role-label)]">
-              Rol activo (sesión real)
-            </div>
-            <select
-              value={user?.rol}
-              disabled
-              className="w-full rounded-md border border-[var(--vl-sidebar-border)] bg-[var(--vl-sidebar-search)] px-2 py-2 text-xs font-medium text-[#a8c4dc]"
-              title="El rol viene del JWT. Para cambiar, cerrá sesión y logueate con otro usuario."
-            >
-              {ALL_ROLES.map((r: Role) => (
-                <option key={r} value={r}>
-                  {ROLE_LABELS[r]}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1.5 text-[10px] leading-snug text-[#3d5a78]">
-              Demo: el rol lo define el login. Usá otro usuario para cambiar
-              permisos.
-            </p>
-          </>
-        ) : (
-          <div className="text-xs text-[#a8c4dc]">
-            {user?.nombre || ROLE_LABELS[user!.rol]}
-            <div className="mt-0.5 text-[10px] text-[var(--vl-role-label)]">
-              {ROLE_LABELS[user!.rol]}
-            </div>
+        <div className="text-xs text-[#a8c4dc]">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="min-w-0 truncate font-medium text-[#e8edf5]">
+              {user?.nombre || (user ? ROLE_LABELS[user.rol] : "—")}
+            </span>
+            {user?.esDuenoFlota && (
+              <span className="shrink-0 rounded bg-[#1e4080] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                Dueño
+              </span>
+            )}
           </div>
+          <div className="mt-0.5 text-[10px] text-[var(--vl-role-label)]">
+            {user ? ROLE_LABELS[user.rol] : ""}
+            {user?.esDuenoFlota ? " · titular de flota" : ""}
+          </div>
+        </div>
+
+        {isDev && (
+          <p className="mt-2 text-[10px] leading-snug text-[#3d5a78]">
+            Demo: el rol lo define el login. Usá otro usuario para cambiar
+            permisos.
+          </p>
         )}
 
         <button
