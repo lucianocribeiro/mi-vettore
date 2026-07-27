@@ -144,8 +144,8 @@ async function main() {
   await prisma.pedido.deleteMany({});
   await prisma.asignacionFlota.deleteMany({});
   await prisma.camioneta.deleteMany({});
-  // Desvincular usuarios de choferes antes de borrar
-  await prisma.usuario.updateMany({ data: { choferId: null } });
+  // Recrear todos los logins (choferes, clientes, admin)
+  await prisma.usuario.deleteMany({});
   await prisma.chofer.deleteMany({});
   await prisma.empresaTransporte.deleteMany({});
 
@@ -299,65 +299,176 @@ async function main() {
     }
   }
 
-  // Demo chofer: Facundo Rodriguez (varias unidades) si existe, sino el primero
+  // Demo chofer alias: empresa con varias unidades
   const demoChoferRow =
-    [...choferByDni.values()].find((c) =>
-      c.nombre.toLowerCase().includes("facundo rodriguez")
-    ) ??
-    [...choferByDni.values()].find((c) =>
-      (unidadesPorEmpresa.get(c.empresa)?.length ?? 0) > 1
-    ) ??
-    [...choferByDni.values()][0];
+    [...choferByDni.values()].find(
+      (c) => (unidadesPorEmpresa.get(c.empresa)?.length ?? 0) > 1
+    ) ?? [...choferByDni.values()][0];
 
-  for (const u of USERS) {
-    const extra: { clienteId?: string; choferId?: string; nombre?: string } =
-      {};
-    if (u.rol === Role.CLIENTE) extra.clienteId = laDelfina.id;
-    if (u.rol === Role.CHOFER && demoChoferRow) {
-      extra.choferId = demoChoferRow.id;
-      extra.nombre = demoChoferRow.nombre;
+  // --- Logins individuales ---
+  const usedEmails = new Set<string>();
+  const accesos: Array<{
+    tipo: string;
+    email: string;
+    nombre: string;
+    rol: string;
+  }> = [];
+
+  function claimEmail(preferred: string | null | undefined, fallback: string) {
+    const norm = (s: string) => s.trim().toLowerCase();
+    let email = preferred && preferred.includes("@") ? norm(preferred) : norm(fallback);
+    if (!email.includes("@")) email = norm(fallback);
+    let n = 1;
+    const [local, domain] = email.split("@");
+    while (usedEmails.has(email)) {
+      email = `${local}+${n}@${domain}`;
+      n += 1;
     }
+    usedEmails.add(email);
+    return email;
+  }
 
-    await prisma.usuario.upsert({
-      where: { email: u.email },
-      update: {
+  async function createLogin(opts: {
+    email: string;
+    nombre: string;
+    rol: Role;
+    choferId?: string;
+    clienteId?: string;
+    tipoAcceso: string;
+  }) {
+    await prisma.usuario.create({
+      data: {
+        email: opts.email,
         passwordHash,
-        rol: u.rol,
-        nombre: extra.nombre ?? u.nombre,
-        clienteId: extra.clienteId ?? null,
-        choferId: extra.choferId ?? null,
+        rol: opts.rol,
+        nombre: opts.nombre,
+        choferId: opts.choferId ?? null,
+        clienteId: opts.clienteId ?? null,
       },
-      create: {
-        email: u.email,
-        passwordHash,
-        rol: u.rol,
-        nombre: extra.nombre ?? u.nombre,
-        clienteId: extra.clienteId,
-        choferId: extra.choferId,
-      },
+    });
+    accesos.push({
+      tipo: opts.tipoAcceso,
+      email: opts.email,
+      nombre: opts.nombre,
+      rol: opts.rol,
     });
   }
 
-  // Dueño flota demo: primer chofer marcado esDuenoFlota
+  // 1) Administrativos Vettore
+  for (const u of USERS) {
+    if (u.rol === Role.CHOFER || u.rol === Role.CLIENTE) continue;
+    const email = claimEmail(u.email, u.email);
+    await createLogin({
+      email,
+      nombre: u.nombre,
+      rol: u.rol,
+      tipoAcceso: "administrativo",
+    });
+  }
+
+  // 2) Un login por chofer (Excel)
+  for (const ch of flota.choferes) {
+    if (!ch.dni) continue;
+    const row = choferByDni.get(ch.dni);
+    if (!row) continue;
+    const email = claimEmail(ch.email, `${ch.dni}@chofer.vettore.test`);
+    await createLogin({
+      email,
+      nombre: ch.nombre,
+      rol: Role.CHOFER,
+      choferId: row.id,
+      tipoAcceso: ch.nombre.trim().toLowerCase() === ch.empresa.trim().toLowerCase()
+        ? "empresa_titular"
+        : "chofer",
+    });
+  }
+
+  // 2b) Login de empresa (mail de la planilla) → vinculado al titular / primer chofer
+  for (const e of flota.empresas) {
+    if (!e.mail?.includes("@")) continue;
+    const preferred = e.mail.trim().toLowerCase();
+    if (usedEmails.has(preferred)) continue; // ya cubierto por un chofer/titular
+    const titular =
+      [...choferByDni.values()].find(
+        (c) =>
+          c.empresa === e.nombre &&
+          c.nombre.trim().toLowerCase() === e.nombre.trim().toLowerCase()
+      ) ??
+      [...choferByDni.values()].find((c) => c.empresa === e.nombre);
+    if (!titular) continue;
+    const slug =
+      e.nombre
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "")
+        .slice(0, 24) || "empresa";
+    const email = claimEmail(e.mail, `${slug}@empresa.vettore.test`);
+    await createLogin({
+      email,
+      nombre: e.nombre,
+      rol: Role.CHOFER,
+      choferId: titular.id,
+      tipoAcceso: "empresa",
+    });
+  }
+
+  // 3) Alias cómodos de demo (no reemplazan logins individuales)
+  if (demoChoferRow) {
+    const email = claimEmail("chofer@vettore.test", "chofer@vettore.test");
+    await createLogin({
+      email,
+      nombre: "Chofer demo",
+      rol: Role.CHOFER,
+      choferId: demoChoferRow.id,
+      tipoAcceso: "alias_demo",
+    });
+  }
   const dueno = await prisma.chofer.findFirst({
     where: { esDuenoFlota: true },
   });
   if (dueno) {
-    await prisma.usuario.upsert({
-      where: { email: "dueno@vettore.test" },
-      update: {
-        passwordHash,
-        rol: Role.CHOFER,
-        nombre: `${dueno.nombre} (dueño flota)`,
-        choferId: dueno.id,
-      },
-      create: {
-        email: "dueno@vettore.test",
-        passwordHash,
-        rol: Role.CHOFER,
-        nombre: `${dueno.nombre} (dueño flota)`,
-        choferId: dueno.id,
-      },
+    const email = claimEmail("dueno@vettore.test", "dueno@vettore.test");
+    await createLogin({
+      email,
+      nombre: "Chofer dueño de flota",
+      rol: Role.CHOFER,
+      choferId: dueno.id,
+      tipoAcceso: "alias_demo",
+    });
+  }
+
+  // 4) Un login por cliente
+  for (const c of clientesDb) {
+    const full = await prisma.cliente.findUnique({ where: { id: c.id } });
+    if (!full) continue;
+    const slug = full.nombre
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, 24) || "cliente";
+    const email = claimEmail(
+      full.contacto,
+      `${slug}@cliente.vettore.test`
+    );
+    await createLogin({
+      email,
+      nombre: full.nombre,
+      rol: Role.CLIENTE,
+      clienteId: full.id,
+      tipoAcceso: "cliente",
+    });
+  }
+  // Alias cliente demo
+  {
+    const email = claimEmail("cliente@vettore.test", "cliente@vettore.test");
+    await createLogin({
+      email,
+      nombre: "Cliente demo",
+      rol: Role.CLIENTE,
+      clienteId: laDelfina.id,
+      tipoAcceso: "alias_demo",
     });
   }
 
@@ -476,18 +587,43 @@ async function main() {
 
   await prisma.comunicacion.deleteMany({});
 
-  console.log("Seed OK — flota desde Empresas Tte Kairos.xlsx");
-  console.log(`Password demo: ${DEMO_PASSWORD}`);
-  console.log(
-    `Empresas: ${empresaByName.size} · Choferes: ${choferByDni.size} · Unidades: ${camionetas.length} · Asignaciones: ${asignaciones}`
+  const accesosPath = path.join(__dirname, "data", "accesos-generados.json");
+  fs.writeFileSync(
+    accesosPath,
+    JSON.stringify(
+      {
+        password: DEMO_PASSWORD,
+        generadosAt: new Date().toISOString(),
+        resumen: {
+          administrativos: accesos.filter((a) => a.tipo === "administrativo")
+            .length,
+          choferes: accesos.filter((a) => a.tipo === "chofer").length,
+          titularesEmpresa: accesos.filter((a) => a.tipo === "empresa_titular")
+            .length,
+          empresas: accesos.filter((a) => a.tipo === "empresa").length,
+          clientes: accesos.filter((a) => a.tipo === "cliente").length,
+          aliasDemo: accesos.filter((a) => a.tipo === "alias_demo").length,
+          total: accesos.length,
+        },
+        accesos,
+      },
+      null,
+      2
+    ),
+    "utf-8"
   );
+
+  console.log("Seed OK — flota + logins individuales");
+  console.log(`Password para todos: ${DEMO_PASSWORD}`);
+  console.log(
+    `Empresas: ${empresaByName.size} · Choferes: ${choferByDni.size} · Unidades: ${camionetas.length}`
+  );
+  const n = (t: string) => accesos.filter((a) => a.tipo === t).length;
+  console.log(
+    `Logins: ${accesos.length} (admin ${n("administrativo")} · chofer ${n("chofer")} · titular ${n("empresa_titular")} · empresa ${n("empresa")} · cliente ${n("cliente")} · alias ${n("alias_demo")})`
+  );
+  console.log(`Listado: ${accesosPath}`);
   if (skippedDup) console.log(`Patentes duplicadas omitidas: ${skippedDup}`);
-  console.log(
-    `Chofer demo: chofer@vettore.test → ${demoChoferRow?.nombre ?? "—"} (${demoChoferRow?.empresa ?? ""})`
-  );
-  console.log("Usuarios ops:");
-  for (const u of USERS) console.log(`  ${u.email} → ${u.rol}`);
-  if (dueno) console.log(`  dueno@vettore.test → ${dueno.nombre}`);
 }
 
 main()

@@ -139,6 +139,68 @@ router.post("/register", async (req, res) => {
   }
 });
 
+/** Lista pública de choferes demo (solo etapa demo) para acceso rápido por botón. */
+router.get("/demo-choferes", async (_req, res) => {
+  try {
+    const now = new Date();
+    const choferes = await prisma.chofer.findMany({
+      where: { estado: "ACTIVO" },
+      include: {
+        usuarios: {
+          where: { estado: UserStatus.ACTIVO, rol: Role.CHOFER },
+          orderBy: { email: "asc" },
+        },
+        asignaciones: {
+          where: {
+            periodoDesde: { lte: now },
+            OR: [{ periodoHasta: null }, { periodoHasta: { gt: now } }],
+          },
+          include: { empresa: true },
+          take: 1,
+          orderBy: { periodoDesde: "desc" },
+        },
+      },
+      orderBy: { nombre: "asc" },
+    });
+
+    const list = choferes
+      .map((ch) => {
+        const preferred =
+          ch.usuarios.find(
+            (u) =>
+              u.email !== "chofer@vettore.test" &&
+              u.email !== "dueno@vettore.test" &&
+              (ch.email
+                ? u.email === ch.email.toLowerCase()
+                : u.email.endsWith("@chofer.vettore.test"))
+          ) ??
+          ch.usuarios.find(
+            (u) =>
+              u.email !== "chofer@vettore.test" &&
+              u.email !== "dueno@vettore.test"
+          );
+        if (!preferred) return null;
+        return {
+          email: preferred.email,
+          nombre: ch.nombre,
+          esDuenoFlota: ch.esDuenoFlota,
+          dni: ch.dni,
+          empresa: ch.asignaciones[0]?.empresa.nombre ?? null,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+
+    res.json({
+      passwordHint: "vettore123",
+      total: list.length,
+      choferes: list,
+    });
+  } catch (err) {
+    console.error("demo-choferes error", err);
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
 router.get("/me", authenticate, async (req: AuthedRequest, res) => {
   try {
     const user = await prisma.usuario.findUnique({
