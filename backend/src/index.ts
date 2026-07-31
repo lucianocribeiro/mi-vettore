@@ -17,6 +17,7 @@ import { comunicacionesRouter } from "./routes/comunicaciones.js";
 import { avisosRouter } from "./routes/avisos.js";
 import { startComunicacionesScheduler } from "./lib/comunicaciones-scheduler.js";
 import { isSmtpConfigured } from "./lib/mailer.js";
+import { getUploadsRoot } from "./lib/uploads.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -39,7 +40,7 @@ app.use(
   })
 );
 app.use(express.json());
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+app.use("/uploads", express.static(getUploadsRoot()));
 
 app.get("/api/health", (_req, res) => {
   res.json({

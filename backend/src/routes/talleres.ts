@@ -1,6 +1,5 @@
 import { Router } from "express";
 import type { Request } from "express";
-import fs from "fs";
 import path from "path";
 import multer from "multer";
 import {
@@ -16,6 +15,7 @@ import { prisma } from "../lib/prisma.js";
 import { choferPuedeEditarCamioneta } from "../lib/flota.js";
 import { sendMail } from "../lib/mailer.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
+import { ensureUploadDirs } from "../lib/uploads.js";
 import {
   canAdvanceFromStep,
   canCerrarOt,
@@ -30,13 +30,9 @@ import {
 
 const router = Router();
 
-const uploadsRoot = path.join(process.cwd(), "uploads");
+const uploadsRoot = ensureUploadDirs("presupuestos", "facturas");
 const presupuestosDir = path.join(uploadsRoot, "presupuestos");
 const facturasDir = path.join(uploadsRoot, "facturas");
-
-for (const dir of [presupuestosDir, facturasDir]) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
 
 function pdfOnly(
   _req: Request,
