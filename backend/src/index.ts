@@ -78,11 +78,16 @@ if (serveFrontend && fs.existsSync(frontendDist)) {
   console.log(`[static] sirviendo frontend desde ${frontendDist}`);
 }
 
-app.listen(PORT, () => {
-  console.log(`Mi Vettore API escuchando en http://localhost:${PORT}`);
-  console.log(
-    `Email: ${isSmtpConfigured() ? "SMTP activo" : "modo simulado (sin SMTP_*)"}`
-  );
-  console.log(`CORS: ${corsOrigins.join(", ")}`);
-  startComunicacionesScheduler();
-});
+export default app;
+
+const isVercel = !!process.env.VERCEL;
+if (!isVercel) {
+  app.listen(PORT, () => {
+    console.log(`Mi Vettore API escuchando en http://localhost:${PORT}`);
+    console.log(
+      `Email: ${isSmtpConfigured() ? "SMTP activo" : "modo simulado (sin SMTP_*)"}`
+    );
+    console.log(`CORS: ${corsOrigins.join(", ")}`);
+    startComunicacionesScheduler();
+  });
+}
