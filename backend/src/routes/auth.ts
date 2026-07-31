@@ -12,6 +12,18 @@ const router = Router();
 
 const VALID_ROLES = new Set(Object.values(Role));
 
+async function empresaNombreForChofer(
+  choferId: string | null | undefined
+): Promise<string | null> {
+  if (!choferId) return null;
+  const asig = await prisma.asignacionFlota.findFirst({
+    where: { choferId, periodoHasta: null },
+    include: { empresa: true },
+    orderBy: { periodoDesde: "desc" },
+  });
+  return asig?.empresa.nombre ?? null;
+}
+
 function publicUser(
   user: {
     id: string;
@@ -22,7 +34,8 @@ function publicUser(
     clienteId?: string | null;
     choferId?: string | null;
   },
-  chofer?: { esDuenoFlota: boolean } | null
+  chofer?: { esDuenoFlota: boolean } | null,
+  empresaNombre?: string | null
 ) {
   return {
     id: user.id,
@@ -33,6 +46,7 @@ function publicUser(
     clienteId: user.clienteId ?? null,
     choferId: user.choferId ?? null,
     esDuenoFlota: chofer?.esDuenoFlota ?? false,
+    empresaNombre: empresaNombre ?? null,
   };
 }
 
@@ -74,7 +88,8 @@ router.post("/login", async (req, res) => {
       rol: user.rol,
     });
 
-    res.json({ token, user: publicUser(user, user.chofer) });
+    const empresaNombre = await empresaNombreForChofer(user.choferId);
+    res.json({ token, user: publicUser(user, user.chofer, empresaNombre) });
   } catch (err) {
     console.error("login error", err);
     res.status(500).json({ error: "Error interno" });
@@ -211,7 +226,8 @@ router.get("/me", authenticate, async (req: AuthedRequest, res) => {
       res.status(401).json({ error: "Sesión inválida" });
       return;
     }
-    res.json({ user: publicUser(user, user.chofer) });
+    const empresaNombre = await empresaNombreForChofer(user.choferId);
+    res.json({ user: publicUser(user, user.chofer, empresaNombre) });
   } catch (err) {
     console.error("me error", err);
     res.status(500).json({ error: "Error interno" });

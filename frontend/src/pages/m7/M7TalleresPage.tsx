@@ -7,9 +7,10 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  FileText,
   Lock,
-  Paperclip,
   Plus,
+  Upload,
   X,
 } from "../../components/icons";
 import { apiFetch, ApiError } from "../../lib/api";
@@ -669,63 +670,130 @@ export function M7TalleresPage() {
                 )}
 
                 {ot.currentStep === 2 && (
-                  <div className="mt-3 space-y-3 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
-                    {(ot.presupuestos ?? []).map((p, idx) => (
-                      <div
-                        key={p.id}
-                        className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                      >
-                        <span>
-                          #{idx + 1} {p.taller} — {money(p.monto)}
-                          <span className="ml-2 text-xs text-[var(--vl-text-muted)]">
-                            <Paperclip size={12} className="inline" /> {p.archivo}
-                          </span>
-                        </span>
+                  <div className="mt-4 space-y-4">
+                    <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+                      <strong>Paso de Silvina:</strong> elegí taller, monto y
+                      subí el PDF. Podés cargar hasta 3 presupuestos.
+                    </div>
+
+                    {(ot.presupuestos ?? []).length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+                          Cargados ({ot.presupuestos.length}/3)
+                        </div>
+                        {(ot.presupuestos ?? []).map((p, idx) => (
+                          <div
+                            key={p.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2.5 text-sm dark:border-emerald-900 dark:bg-emerald-950/30"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-semibold text-[var(--vl-heading)]">
+                                #{idx + 1} · {p.taller}
+                              </div>
+                              <div className="mt-0.5 flex items-center gap-1 text-xs text-[var(--vl-text-muted)]">
+                                <FileText size={12} /> {p.archivo}
+                              </div>
+                            </div>
+                            <div className="text-sm font-bold text-emerald-800 dark:text-emerald-300">
+                              {money(p.monto)}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
+
                     {rol === "SILVINA" && (ot.presupuestos?.length ?? 0) < 3 && (
-                      <div className="space-y-2 border-t border-[var(--vl-card-border)] pt-3">
-                        <select
-                          value={presTaller}
-                          onChange={(e) => setPresTaller(e.target.value)}
-                          className="w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
-                        >
-                          {TALLERES.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          placeholder="Monto"
-                          value={presMonto}
-                          onChange={(e) => setPresMonto(e.target.value)}
-                          className="w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
-                        />
-                        <input
-                          type="file"
-                          accept="application/pdf,.pdf"
-                          onChange={(e) =>
-                            setPresFile(e.target.files?.[0] ?? null)
-                          }
-                          className="text-xs"
-                        />
+                      <div className="space-y-3 rounded-xl border-2 border-[#1e4080]/40 bg-[var(--vl-card)] p-4">
+                        <div className="text-sm font-semibold text-[var(--vl-heading)]">
+                          Subir presupuesto{" "}
+                          {(ot.presupuestos?.length ?? 0) + 1} de 3
+                        </div>
+
+                        <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                          1. Taller
+                          <select
+                            value={presTaller}
+                            onChange={(e) => setPresTaller(e.target.value)}
+                            className="mt-1 min-h-11 w-full rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                          >
+                            {TALLERES.map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                          2. Monto ($)
+                          <input
+                            type="number"
+                            min={1}
+                            step="0.01"
+                            placeholder="Ej: 150000"
+                            value={presMonto}
+                            onChange={(e) => setPresMonto(e.target.value)}
+                            className="mt-1 min-h-11 w-full rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                          />
+                        </label>
+
+                        <div>
+                          <div className="mb-1 text-xs font-medium text-[var(--vl-text-muted)]">
+                            3. Archivo PDF
+                          </div>
+                          <label className="flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#1e4080] bg-[#1e4080]/10 px-4 py-3 text-sm font-semibold text-[#1e4080] transition hover:bg-[#1e4080]/15 dark:border-sky-400 dark:text-sky-300 dark:hover:bg-sky-950/40">
+                            <Upload size={18} />
+                            {presFile
+                              ? "Cambiar PDF seleccionado"
+                              : "Elegir archivo PDF"}
+                            <input
+                              type="file"
+                              accept="application/pdf,.pdf"
+                              className="sr-only"
+                              onChange={(e) =>
+                                setPresFile(e.target.files?.[0] ?? null)
+                              }
+                            />
+                          </label>
+                          {presFile ? (
+                            <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                              <Check size={14} /> {presFile.name}
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-xs text-[var(--vl-text-muted)]">
+                              Solo PDF. Tocá el botón azul para seleccionar.
+                            </p>
+                          )}
+                        </div>
+
                         <button
                           type="button"
                           disabled={!presFile || !presMonto || busy}
                           onClick={() => void uploadPresupuesto()}
-                          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-4 text-sm font-semibold text-white hover:bg-[#18356c] disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          Subir presupuesto {(ot.presupuestos?.length ?? 0) + 1}/3
+                          <Upload size={16} />
+                          {busy
+                            ? "Subiendo…"
+                            : `Confirmar y subir (${(ot.presupuestos?.length ?? 0) + 1}/3)`}
                         </button>
                       </div>
                     )}
+
                     {rol !== "SILVINA" && (ot.presupuestos?.length ?? 0) === 0 && (
-                      <div className="text-xs text-[var(--vl-text-muted)]">
-                        Esperando presupuestos de Silvina.
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                        Esperando que Silvina cargue los presupuestos.
                       </div>
                     )}
+
+                    {rol === "SILVINA" &&
+                      (ot.presupuestos?.length ?? 0) >= 1 &&
+                      (ot.presupuestos?.length ?? 0) < 3 && (
+                        <p className="text-xs text-[var(--vl-text-muted)]">
+                          Ya podés avanzar con al menos 1 presupuesto, o seguir
+                          cargando hasta 3.
+                        </p>
+                      )}
                   </div>
                 )}
 
@@ -831,8 +899,8 @@ export function M7TalleresPage() {
                           </>
                         )}
                         {ot.facturaPDF ? (
-                          <div className="text-sm">
-                            <Paperclip size={14} className="mr-1 inline" />
+                          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+                            <FileText size={16} />
                             {ot.facturaPDF}
                           </div>
                         ) : (
@@ -842,23 +910,40 @@ export function M7TalleresPage() {
                               value={trabajoDraft}
                               onChange={(e) => setTrabajoDraft(e.target.value)}
                               placeholder="Descripción del trabajo (opcional)"
-                              className="w-full rounded-md border border-[var(--vl-card-border)] p-1.5 text-sm"
+                              className="min-h-11 w-full rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-3 text-sm"
                             />
-                            <input
-                              type="file"
-                              accept="application/pdf,.pdf"
-                              onChange={(e) =>
-                                setFacturaFile(e.target.files?.[0] ?? null)
-                              }
-                              className="text-xs"
-                            />
+                            <div>
+                              <div className="mb-1 text-xs font-medium text-[var(--vl-text-muted)]">
+                                Factura PDF
+                              </div>
+                              <label className="flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#1e4080] bg-[#1e4080]/10 px-4 py-3 text-sm font-semibold text-[#1e4080] transition hover:bg-[#1e4080]/15 dark:border-sky-400 dark:text-sky-300">
+                                <Upload size={18} />
+                                {facturaFile
+                                  ? "Cambiar factura PDF"
+                                  : "Elegir factura PDF"}
+                                <input
+                                  type="file"
+                                  accept="application/pdf,.pdf"
+                                  className="sr-only"
+                                  onChange={(e) =>
+                                    setFacturaFile(e.target.files?.[0] ?? null)
+                                  }
+                                />
+                              </label>
+                              {facturaFile && (
+                                <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                  <Check size={14} /> {facturaFile.name}
+                                </p>
+                              )}
+                            </div>
                             <button
                               type="button"
                               disabled={!facturaFile || busy}
                               onClick={() => void uploadFactura()}
-                              className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-4 text-sm font-semibold text-white hover:bg-[#18356c] disabled:opacity-40"
                             >
-                              Subir factura PDF
+                              <Upload size={16} />
+                              {busy ? "Subiendo…" : "Confirmar factura"}
                             </button>
                           </>
                         )}
@@ -892,24 +977,26 @@ export function M7TalleresPage() {
                 )}
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-[var(--vl-text-muted)]">
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-3">
+                  <span className="text-xs text-[var(--vl-text-muted)]">
                     Valor autorizado
                   </span>
-                  <div className="font-semibold text-[var(--vl-heading)]">
+                  <div className="mt-1 text-base font-bold text-[var(--vl-heading)]">
                     {money(ot.montoAutorizado)}
                   </div>
                 </div>
-                <div>
-                  <span className="text-[var(--vl-text-muted)]">Valor final</span>
-                  <div className="font-semibold text-[var(--vl-heading)]">
+                <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-3">
+                  <span className="text-xs text-[var(--vl-text-muted)]">
+                    Valor final
+                  </span>
+                  <div className="mt-1 text-base font-bold text-[var(--vl-heading)]">
                     {money(ot.valorFinal)}
                   </div>
                 </div>
               </div>
 
-              <div className="mt-5 flex flex-wrap gap-2">
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <button
                   type="button"
                   onClick={() => void retroceder()}
@@ -919,18 +1006,19 @@ export function M7TalleresPage() {
                     !canRetreat(rol) ||
                     busy
                   }
-                  className="inline-flex items-center gap-1 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-medium disabled:opacity-30"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-card)] px-4 text-sm font-semibold text-[var(--vl-heading)] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-900/40"
                 >
-                  <ChevronLeft size={13} /> Retroceder
+                  <ChevronLeft size={18} /> Volver etapa anterior
                 </button>
                 {ot.currentStep < 5 && (
                   <button
                     type="button"
                     onClick={() => void avanzar()}
                     disabled={!canAdvanceUi || busy}
-                    className="inline-flex items-center gap-1 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-30 dark:bg-slate-100 dark:text-slate-900"
+                    className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-5 text-sm font-semibold text-white shadow-sm hover:bg-[#18356c] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:opacity-50 dark:disabled:bg-slate-700"
                   >
-                    Avanzar etapa <ChevronRight size={13} />
+                    {busy ? "Procesando…" : "Continuar a la siguiente etapa"}
+                    <ChevronRight size={18} />
                   </button>
                 )}
                 {ot.currentStep === 5 && !ot.cerradaAt && (
@@ -938,12 +1026,20 @@ export function M7TalleresPage() {
                     type="button"
                     onClick={() => void cerrarOt()}
                     disabled={!canCerrarUi || busy}
-                    className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-30"
+                    className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <Check size={13} /> Cerrar pago
+                    <Check size={18} /> Confirmar y cerrar pago
                   </button>
                 )}
               </div>
+              {!canAdvanceUi &&
+                ot.currentStep < 5 &&
+                !ot.cerradaAt &&
+                roleCanAdvance && (
+                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                    Completá lo pendiente de esta etapa para poder continuar.
+                  </p>
+                )}
             </div>
           )}
         </div>
@@ -1096,11 +1192,14 @@ function NuevaSolicitudForm({
         >
           {camionetas.map((c) => {
             const asg = currentAsignacion(c);
+            const parts = [
+              c.patente,
+              asg?.chofer?.nombre ? `Chofer: ${asg.chofer.nombre}` : null,
+              asg?.empresa?.nombre ? asg.empresa.nombre : null,
+            ].filter(Boolean);
             return (
               <option key={c.id} value={c.id}>
-                {c.patente}
-                {c.marca ? ` · ${c.marca}` : ""}
-                {asg?.empresa ? ` — ${asg.empresa.nombre}` : ""}
+                {parts.join(" · ")}
               </option>
             );
           })}
@@ -1140,27 +1239,35 @@ function NuevaSolicitudForm({
           <legend className="text-xs font-medium text-[var(--vl-text-muted)]">
             ¿La camioneta está habilitada para circular?
           </legend>
-          <div className="mt-2 flex gap-2">
-            {(
-              [
-                { v: true, label: "Sí" },
-                { v: false, label: "No" },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={String(opt.v)}
-                type="button"
-                onClick={() => setHabilitadaCircular(opt.v)}
-                className={`rounded-full border px-4 py-1.5 text-xs font-medium ${
-                  habilitadaCircular === opt.v
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setHabilitadaCircular(true)}
+              className={`min-h-12 rounded-xl border-2 px-3 py-2 text-sm font-semibold transition ${
+                habilitadaCircular
+                  ? "border-emerald-600 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/50 dark:text-emerald-200"
+                  : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+              }`}
+            >
+              Sí, puede circular
+            </button>
+            <button
+              type="button"
+              onClick={() => setHabilitadaCircular(false)}
+              className={`min-h-12 rounded-xl border-2 px-3 py-2 text-sm font-semibold transition ${
+                !habilitadaCircular
+                  ? "border-red-600 bg-red-50 text-red-800 dark:border-red-500 dark:bg-red-950/50 dark:text-red-200"
+                  : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+              }`}
+            >
+              No, fuera de servicio
+            </button>
           </div>
+          <p className="mt-2 text-[11px] text-[var(--vl-text-muted)]">
+            {habilitadaCircular
+              ? "La unidad sigue en circulación mientras se gestiona el taller."
+              : "Ops deberá sacarla de circulación en el panel de tráfico."}
+          </p>
         </fieldset>
 
         {err && <p className="mb-2 text-sm text-red-600">{err}</p>}

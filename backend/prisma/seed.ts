@@ -22,6 +22,19 @@ const DEMO_PASSWORD = "vettore123";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FLOTA_JSON = path.join(__dirname, "data", "flota-kairos.json");
 
+/** Inicial mayúscula por palabra (estándar reunión 31/7). */
+function titleCaseNombre(raw: string): string {
+  return raw
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => {
+      const lower = w.toLocaleLowerCase("es-AR");
+      return lower.charAt(0).toLocaleUpperCase("es-AR") + lower.slice(1);
+    })
+    .join(" ");
+}
+
 type FlotaJson = {
   empresas: Array<{
     cuit: string | null;
@@ -152,19 +165,22 @@ async function main() {
   // --- Empresas desde Excel ---
   const empresaByName = new Map<string, { id: string; nombre: string }>();
   for (const e of flota.empresas) {
+    const nombre = titleCaseNombre(e.nombre);
     const tipo =
-      e.nombre.toLowerCase().includes("vettore")
+      nombre.toLowerCase().includes("vettore")
         ? TipoEmpresa.PROPIA
         : TipoEmpresa.ALIADA;
     const created = await prisma.empresaTransporte.create({
       data: {
-        nombre: e.nombre,
+        nombre,
         cuit: e.cuit,
         contacto: e.mail,
         tipo,
       },
     });
-    empresaByName.set(e.nombre, created);
+    // Clave original + normalizada para cruzar con hojas Choferes/Unidades
+    empresaByName.set(e.nombre.trim(), created);
+    empresaByName.set(nombre, created);
   }
 
   // --- Choferes desde Excel (clave DNI) ---
@@ -176,27 +192,34 @@ async function main() {
 
   for (const ch of flota.choferes) {
     if (!ch.dni) continue;
+    const nombre = titleCaseNombre(ch.nombre);
+    const empresaNombre = titleCaseNombre(ch.empresa);
     const created = await prisma.chofer.create({
       data: {
-        nombre: ch.nombre,
+        nombre,
         dni: ch.dni,
         cuil: ch.cuil,
         email: ch.email?.toLowerCase() ?? null,
         estado: ch.activo ? EstadoChofer.ACTIVO : EstadoChofer.INACTIVO,
         // Titular ≈ mismo nombre que la empresa de transporte
         esDuenoFlota:
-          ch.nombre.trim().toLowerCase() === ch.empresa.trim().toLowerCase(),
+          nombre.trim().toLowerCase() === empresaNombre.trim().toLowerCase(),
       },
     });
 
     choferByDni.set(ch.dni, {
       id: created.id,
       nombre: created.nombre,
-      empresa: ch.empresa,
+      empresa: empresaNombre,
     });
-    const list = choferesPorEmpresa.get(ch.empresa) ?? [];
+    const list = choferesPorEmpresa.get(empresaNombre) ?? [];
     list.push(created.id);
-    choferesPorEmpresa.set(ch.empresa, list);
+    choferesPorEmpresa.set(empresaNombre, list);
+    // También por nombre original del Excel
+    const listRaw = choferesPorEmpresa.get(ch.empresa.trim()) ?? list;
+    if (!choferesPorEmpresa.has(ch.empresa.trim())) {
+      choferesPorEmpresa.set(ch.empresa.trim(), listRaw);
+    }
   }
 
   // --- Unidades desde Excel ---
@@ -234,7 +257,7 @@ async function main() {
     camionetas.push({
       id: created.id,
       patente: created.patente,
-      empresa: u.empresa,
+      empresa: titleCaseNombre(u.empresa),
     });
   }
 
@@ -251,8 +274,13 @@ async function main() {
   let asignaciones = 0;
 
   for (const [empresaNombre, unitIds] of unidadesPorEmpresa) {
-    const emp = empresaByName.get(empresaNombre);
-    const choferIds = choferesPorEmpresa.get(empresaNombre) ?? [];
+    const emp =
+      empresaByName.get(empresaNombre) ??
+      empresaByName.get(titleCaseNombre(empresaNombre));
+    const choferIds =
+      choferesPorEmpresa.get(empresaNombre) ??
+      choferesPorEmpresa.get(titleCaseNombre(empresaNombre)) ??
+      [];
     if (!emp || unitIds.length === 0 || choferIds.length === 0) {
       console.warn(
         `Sin asignación posible: ${empresaNombre} (units=${unitIds.length}, choferes=${choferIds.length})`
@@ -366,7 +394,7 @@ async function main() {
     });
   }
 
-  // 2) Un login por chofer (Excel)
+    // 2) Un login por chofer (Excel)
   for (const ch of flota.choferes) {
     if (!ch.dni) continue;
     const row = choferByDni.get(ch.dni);
@@ -374,12 +402,14 @@ async function main() {
     const email = claimEmail(ch.email, `${ch.dni}@chofer.vettore.test`);
     await createLogin({
       email,
-      nombre: ch.nombre,
+      nombre: titleCaseNombre(ch.nombre),
       rol: Role.CHOFER,
       choferId: row.id,
-      tipoAcceso: ch.nombre.trim().toLowerCase() === ch.empresa.trim().toLowerCase()
-        ? "empresa_titular"
-        : "chofer",
+      tipoAcceso:
+        titleCaseNombre(ch.nombre).toLowerCase() ===
+        titleCaseNombre(ch.empresa).toLowerCase()
+          ? "empresa_titular"
+          : "chofer",
     });
   }
 
@@ -388,16 +418,17 @@ async function main() {
     if (!e.mail?.includes("@")) continue;
     const preferred = e.mail.trim().toLowerCase();
     if (usedEmails.has(preferred)) continue; // ya cubierto por un chofer/titular
+    const empNombre = titleCaseNombre(e.nombre);
     const titular =
       [...choferByDni.values()].find(
         (c) =>
-          c.empresa === e.nombre &&
-          c.nombre.trim().toLowerCase() === e.nombre.trim().toLowerCase()
+          c.empresa === empNombre &&
+          c.nombre.trim().toLowerCase() === empNombre.trim().toLowerCase()
       ) ??
-      [...choferByDni.values()].find((c) => c.empresa === e.nombre);
+      [...choferByDni.values()].find((c) => c.empresa === empNombre);
     if (!titular) continue;
     const slug =
-      e.nombre
+      empNombre
         .toLowerCase()
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
@@ -406,7 +437,7 @@ async function main() {
     const email = claimEmail(e.mail, `${slug}@empresa.vettore.test`);
     await createLogin({
       email,
-      nombre: e.nombre,
+      nombre: empNombre,
       rol: Role.CHOFER,
       choferId: titular.id,
       tipoAcceso: "empresa",
@@ -616,7 +647,7 @@ async function main() {
   console.log("Seed OK — flota + logins individuales");
   console.log(`Password para todos: ${DEMO_PASSWORD}`);
   console.log(
-    `Empresas: ${empresaByName.size} · Choferes: ${choferByDni.size} · Unidades: ${camionetas.length}`
+    `Empresas: ${flota.empresas.length} · Choferes: ${choferByDni.size} · Unidades: ${camionetas.length}`
   );
   const n = (t: string) => accesos.filter((a) => a.tipo === t).length;
   console.log(

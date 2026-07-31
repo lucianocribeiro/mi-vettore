@@ -18,6 +18,8 @@ export type User = {
   choferId?: string | null;
   /** Solo aplica si rol=CHOFER: ve todas las unidades de su empresa */
   esDuenoFlota?: boolean;
+  /** Empresa de transporte vigente (asignación actual) */
+  empresaNombre?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };

@@ -253,6 +253,31 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
       });
     });
 
+    // Aviso + mail a ops al crear la OT (reunión 31/7)
+    const patente = ot.solicitud.camioneta.patente;
+    await prisma.avisoInterno.createMany({
+      data: NOTIF_OPS_ROLES.map((rolDestino) => ({
+        rolDestino,
+        titulo: `Nueva OT ${ot.numeroOT}`,
+        mensaje: `Solicitud nueva: ${patente} — ${falla}. Habilitada circular: ${
+          habilitadaCircular ? "Sí" : "No"
+        }.`,
+        otId: ot.id,
+      })),
+    });
+    const ops = await prisma.usuario.findMany({
+      where: { rol: { in: NOTIF_OPS_ROLES }, estado: "ACTIVO" },
+    });
+    for (const u of ops) {
+      await sendMail({
+        to: u.email,
+        subject: `[Vettore] Nueva OT ${ot.numeroOT} — ${patente}`,
+        text: `Se creó la OT ${ot.numeroOT} para ${patente}.\nFalla: ${falla}\nHabilitada circular: ${
+          habilitadaCircular ? "Sí" : "No"
+        }.\nRevisá la app.`,
+      });
+    }
+
     res.status(201).json(ot);
   } catch (err) {
     console.error(err);

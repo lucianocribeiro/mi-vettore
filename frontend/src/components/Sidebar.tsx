@@ -139,9 +139,11 @@ export function Sidebar({ open, onClose }: Props) {
             )}
           </div>
           <div className="truncate text-[10px] leading-tight text-[var(--vl-brand-sub)]">
-            {user?.esDuenoFlota
-              ? "Titular de flota"
-              : "Vettore Logística"}
+            {user?.empresaNombre
+              ? user.empresaNombre
+              : user?.esDuenoFlota
+                ? "Titular de flota"
+                : "Vettore Logística"}
           </div>
         </div>
         <button
@@ -214,7 +216,11 @@ export function Sidebar({ open, onClose }: Props) {
             )}
           </div>
           <div className="mt-0.5 text-[10px] text-[var(--vl-role-label)]">
-            {user ? ROLE_LABELS[user.rol] : ""}
+            {user?.empresaNombre
+              ? user.empresaNombre
+              : user
+                ? ROLE_LABELS[user.rol]
+                : ""}
             {user?.esDuenoFlota ? " · titular de flota" : ""}
           </div>
         </div>

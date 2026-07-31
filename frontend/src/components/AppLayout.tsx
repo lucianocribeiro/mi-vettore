@@ -54,11 +54,13 @@ export function AppLayout() {
               )}
             </div>
             <div className="truncate text-[10px] text-[#6b88aa]">
-              {user?.nombre
-                ? user.esDuenoFlota
-                  ? `${user.nombre} · titular`
-                  : user.nombre
-                : "Vettore Logística"}
+              {user?.empresaNombre
+                ? user.empresaNombre
+                : user?.nombre
+                  ? user.esDuenoFlota
+                    ? `${user.nombre} · titular`
+                    : user.nombre
+                  : "Vettore Logística"}
             </div>
           </div>
           <ThemeToggle variant="header" />

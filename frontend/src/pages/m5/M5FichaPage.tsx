@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import {
   Badge,
   ESTADO_CAMIONETA_STYLE,
   ESTADO_CHOFER_STYLE,
 } from "../../components/Badge";
+import {
+  EMPTY_FLOTA_FILTERS,
+  FlotaUnitFilterBar,
+  filterCamionetas,
+  type FlotaUnitFilters,
+} from "../../components/FlotaUnitFilterBar";
 import { Plus } from "../../components/icons";
 import { apiFetch, ApiError } from "../../lib/api";
 import {
@@ -46,6 +52,9 @@ export function M5FichaPage() {
   const [usuarios, setUsuarios] = useState<User[]>([]);
 
   const [drawer, setDrawer] = useState<DrawerOpen>(null);
+  const [unitFilters, setUnitFilters] =
+    useState<FlotaUnitFilters>(EMPTY_FLOTA_FILTERS);
+  const [choferQuery, setChoferQuery] = useState("");
   const [form, setForm] = useState<
     | null
     | { kind: "cliente"; item?: Cliente }
@@ -480,6 +489,30 @@ export function M5FichaPage() {
     { id: "usuarios", label: "Usuarios" },
   ];
 
+  const camionetasFiltradas = useMemo(
+    () => filterCamionetas(camionetas, unitFilters),
+    [camionetas, unitFilters]
+  );
+
+  const choferesFiltrados = useMemo(() => {
+    const q = choferQuery.trim().toLowerCase();
+    if (!q) return choferes;
+    return choferes.filter((c) => {
+      const hay = [
+        c.nombre,
+        c.dni,
+        c.cuil,
+        c.email,
+        c.telefono,
+        c.esDuenoFlota ? "dueño titular" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [choferes, choferQuery]);
+
   return (
     <div>
       <div className="mb-5 sm:mb-6">
@@ -566,25 +599,106 @@ export function M5FichaPage() {
       )}
 
       {!loading && !error && tab === "camioneta" && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {camionetas.map((c) => {
-            const a = currentAsignacion(c);
-            return (
+        <>
+          <FlotaUnitFilterBar
+            value={unitFilters}
+            onChange={setUnitFilters}
+            total={camionetas.length}
+            shown={camionetasFiltradas.length}
+          />
+          {camionetasFiltradas.length === 0 ? (
+            <p className="text-sm text-[var(--vl-text-muted)]">
+              No hay unidades con esos filtros.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {camionetasFiltradas.map((c) => {
+                const a = currentAsignacion(c);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setDrawer({ tipo: "camioneta", item: c })}
+                    className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4 text-left transition hover:border-slate-400 hover:shadow-sm dark:hover:border-slate-500"
+                  >
+                    <div className="font-semibold text-[var(--vl-heading)]">
+                      {c.patente}
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
+                      {a?.empresa?.nombre ?? "Sin empresa"} ·{" "}
+                      {a?.chofer?.nombre ?? "Sin chofer"} ·{" "}
+                      {c.km.toLocaleString("es-AR")} km
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
+                        {c.estado.replace("_", " ").toLowerCase()}
+                      </Badge>
+                      {c.tipoTransporte && (
+                        <span className="text-[var(--vl-text-muted)]">
+                          {c.tipoTransporte.replace(/_/g, " ").toLowerCase()}
+                        </span>
+                      )}
+                      {canEdit && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditCamioneta(c);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.stopPropagation();
+                              openEditCamioneta(c);
+                            }
+                          }}
+                          className="text-slate-400 underline-offset-2 hover:text-slate-700 hover:underline"
+                        >
+                          Editar
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {!loading && !error && tab === "chofer" && (
+        <>
+          <div className="mb-4">
+            <input
+              type="search"
+              value={choferQuery}
+              onChange={(e) => setChoferQuery(e.target.value)}
+              placeholder="Buscar chofer por nombre, DNI, CUIL…"
+              className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
+            />
+            <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+              Mostrando {choferesFiltrados.length} de {choferes.length}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {choferesFiltrados.map((c) => (
               <button
                 key={c.id}
                 type="button"
-                onClick={() => setDrawer({ tipo: "camioneta", item: c })}
+                onClick={() => setDrawer({ tipo: "chofer", item: c })}
                 className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4 text-left transition hover:border-slate-400 hover:shadow-sm dark:hover:border-slate-500"
               >
-                <div className="font-semibold text-[var(--vl-heading)]">{c.patente}</div>
+                <div className="font-semibold text-[var(--vl-heading)]">
+                  {c.nombre}
+                </div>
                 <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
-                  {a?.empresa?.nombre ?? "Sin empresa"} ·{" "}
-                  {a?.chofer?.nombre ?? "Sin chofer"} ·{" "}
-                  {c.km.toLocaleString("es-AR")} km
+                  DNI {c.dni}
+                  {c.cuil ? ` · CUIL ${c.cuil}` : ""}
+                  {c.esDuenoFlota ? " · titular" : ""}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
-                    {c.estado.replace("_", " ").toLowerCase()}
+                  <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>
+                    {c.estado.toLowerCase()}
                   </Badge>
                   {canEdit && (
                     <span
@@ -592,12 +706,12 @@ export function M5FichaPage() {
                       tabIndex={0}
                       onClick={(e) => {
                         e.stopPropagation();
-                        openEditCamioneta(c);
+                        openEditChofer(c);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.stopPropagation();
-                          openEditCamioneta(c);
+                          openEditChofer(c);
                         }
                       }}
                       className="text-slate-400 underline-offset-2 hover:text-slate-700 hover:underline"
@@ -607,53 +721,9 @@ export function M5FichaPage() {
                   )}
                 </div>
               </button>
-            );
-          })}
-        </div>
-      )}
-
-      {!loading && !error && tab === "chofer" && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {choferes.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setDrawer({ tipo: "chofer", item: c })}
-              className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4 text-left transition hover:border-slate-400 hover:shadow-sm dark:hover:border-slate-500"
-            >
-              <div className="font-semibold text-[var(--vl-heading)]">{c.nombre}</div>
-              <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
-                DNI {c.dni}
-                {c.cuil ? ` · CUIL ${c.cuil}` : ""}
-                {c.esDuenoFlota ? " · titular" : ""}
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>
-                  {c.estado.toLowerCase()}
-                </Badge>
-                {canEdit && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEditChofer(c);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.stopPropagation();
-                        openEditChofer(c);
-                      }
-                    }}
-                    className="text-slate-400 underline-offset-2 hover:text-slate-700 hover:underline"
-                  >
-                    Editar
-                  </span>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
 
       {!loading && !error && tab === "clientes" && (
