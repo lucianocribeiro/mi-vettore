@@ -7,8 +7,10 @@ import {
   EstadoCamioneta,
   EstadoPedido,
   OrigenPedido,
+  Prisma,
   SolicitanteTaller,
   TipoPedido,
+  type PresupuestoOt,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { choferPuedeEditarCamioneta } from "../lib/flota.js";
@@ -229,7 +231,7 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
 
     const numeroOT = await nextNumeroOT();
 
-    const ot = await prisma.$transaction(async (tx) => {
+    const ot = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const solicitud = await tx.solicitudTaller.create({
         data: {
           camionetaId,
@@ -312,7 +314,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
         return;
       }
       const elegId = String(req.body.presupuestoElegidoId);
-      const pres = ot.presupuestos.find((p) => p.id === elegId);
+      const pres = ot.presupuestos.find((p: PresupuestoOt) => p.id === elegId);
       if (!pres) {
         res.status(400).json({ error: "Presupuesto inválido" });
         return;
@@ -630,7 +632,7 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
 
     const nextStep = ot.currentStep + 1;
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // 0→1: notificar Pablo/Facu + sacar de circulación + pedido sistema
       if (ot.currentStep === 0) {
         const sol = ot.solicitud;
@@ -754,7 +756,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       ot.tallerAsignado ?? "—"
     }. Valor: ${ot.valorFinal ?? ot.montoAutorizado ?? "—"}.`;
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.avisoInterno.createMany({
         data: CIERRE_AVISO_ROLES.map((rolDestino) => ({
           rolDestino,
