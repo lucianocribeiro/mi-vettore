@@ -65,6 +65,21 @@ npm run dev
    ```
 4. Postgres (opcional): en `schema.prisma` cambiar `provider` a `postgresql` y `DATABASE_URL` a la connection string; luego `npx prisma migrate deploy`.
 
+## Deploy Vercel (Services)
+
+Este monorepo usa `vercel.json` con **Services** (frontend Vite + backend Express).
+
+1. En el proyecto Vercel → **Settings → Build and Deployment → Framework Preset = Services**.
+2. Variables de entorno (Production):
+   - `DATABASE_URL` (Supabase Postgres cuando esté; SQLite no sirve en Vercel)
+   - `JWT_SECRET`
+   - `APP_PUBLIC_URL` = URL del deployment
+   - `CORS_ORIGINS` = misma URL
+3. **No uses “Redeploy”** sobre un deploy fallido viejo: eso vuelve a compilar el **mismo commit**.
+   - Andá a **Deployments** → asegurate de desplegar el commit más reciente de `main`
+     (hoy debe ser posterior a `d596a65`), o **Deploy** / push nuevo a `main`.
+4. El backend corre `npx prisma generate` en el install; sin eso fallan los imports de `@prisma/client`.
+
 ## Scripts
 
 | Comando | Descripción |
