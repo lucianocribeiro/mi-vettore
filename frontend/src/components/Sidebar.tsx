@@ -42,15 +42,7 @@ const NAV: NavItem[] = [
     label: "Sugerencias",
     sub: "Ver feedback",
     icon: MessageSquare,
-    roles: [
-      "PABLO",
-      "SILVINA",
-      "FACU",
-      "PATRICIO",
-      "JULIETA",
-      "CARLA",
-      "SUGERENCIAS",
-    ],
+    roles: ["SUGERENCIAS"],
   },
   {
     to: "/m2",

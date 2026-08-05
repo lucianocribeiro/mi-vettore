@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch, ApiError } from "../lib/api";
-import { canViewSugerencias, isSugerenciasOnly } from "../types";
+import { isSugerenciasOnly } from "../types";
 import { AppLogo } from "./AppLogo";
 import { MessageSquare, Menu, X } from "./icons";
 import { Sidebar } from "./Sidebar";
@@ -12,8 +12,6 @@ export function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [sugerenciaOpen, setSugerenciaOpen] = useState(false);
   const { user, token } = useAuth();
-  const navigate = useNavigate();
-  const canInbox = canViewSugerencias(user?.rol);
   const onlySugerencias = isSugerenciasOnly(user?.rol);
 
   useEffect(() => {
@@ -92,14 +90,11 @@ export function AppLayout() {
       {user && !onlySugerencias && (
         <button
           type="button"
-          onClick={() => {
-            if (canInbox) navigate("/sugerencias");
-            else setSugerenciaOpen(true);
-          }}
+          onClick={() => setSugerenciaOpen(true)}
           className="fixed bottom-5 right-5 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-[#1e4080] px-4 text-sm font-semibold text-white shadow-lg hover:bg-[#18356c] safe-bottom"
         >
           <MessageSquare size={16} />
-          {canInbox ? "Ver sugerencias" : "Sugerencia"}
+          Sugerencia
         </button>
       )}
 

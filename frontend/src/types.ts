@@ -57,11 +57,8 @@ export const INTERNAL_OPS_ROLES: Role[] = [
   "CARLA",
 ];
 
-/** Pueden ver el inbox de sugerencias. */
-export const SUGERENCIAS_VIEW_ROLES: Role[] = [
-  ...INTERNAL_OPS_ROLES,
-  "SUGERENCIAS",
-];
+/** Solo el rol SUGERENCIAS ve el inbox de feedback. */
+export const SUGERENCIAS_VIEW_ROLES: Role[] = ["SUGERENCIAS"];
 
 export function canWriteMaster(rol?: Role | null): boolean {
   return !!rol && MASTER_WRITE_ROLES.includes(rol);
@@ -72,7 +69,7 @@ export function isInternalOps(rol?: Role | null): boolean {
 }
 
 export function canViewSugerencias(rol?: Role | null): boolean {
-  return !!rol && SUGERENCIAS_VIEW_ROLES.includes(rol);
+  return rol === "SUGERENCIAS";
 }
 
 export function isSugerenciasOnly(rol?: Role | null): boolean {

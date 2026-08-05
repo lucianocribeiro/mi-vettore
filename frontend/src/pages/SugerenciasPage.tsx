@@ -62,7 +62,7 @@ export function SugerenciasPage() {
         </div>
         <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
           Comentarios enviados desde el botón flotante «Sugerencia» (cualquier
-          usuario). Acá los ves vos como ops.
+          usuario). Solo este rol puede leerlos.
         </p>
         <button
           type="button"
