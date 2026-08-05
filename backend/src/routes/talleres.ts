@@ -655,17 +655,13 @@ router.post(
         res.status(400).json({ error: "Monto inválido" });
         return;
       }
-      if (!descripcion) {
-        res.status(400).json({ error: "Descripción obligatoria" });
-        return;
-      }
 
       await prisma.presupuestoOt.create({
         data: {
           otId: ot.id,
           taller,
           monto,
-          descripcion,
+          descripcion: descripcion || null,
           archivo: req.file ? req.file.filename : null,
         },
       });
@@ -809,11 +805,6 @@ router.post(
   },
   async (req: AuthedRequest, res) => {
     try {
-      const rol = req.user!.rol;
-      if (rol !== "PATRICIO" && rol !== "JULIETA" && rol !== "SILVINA") {
-        res.status(403).json({ error: "Sin permiso para cargar factura" });
-        return;
-      }
       const ot = await prisma.ordenTrabajo.findUnique({
         where: { id: req.params.id },
       });
@@ -825,6 +816,23 @@ router.post(
         res.status(400).json({ error: "Factura PDF obligatoria" });
         return;
       }
+
+      const rol = req.user!.rol;
+      const overrideComentario = parseOverrideComentario(req.body);
+      const gate = await gateOrOverride({
+        rol,
+        allowed:
+          rol === "PATRICIO" || rol === "JULIETA" || rol === "SILVINA",
+        userId: req.user!.id,
+        otId: ot.id,
+        accion: "Cargar factura PDF",
+        overrideComentario,
+      });
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
+        return;
+      }
+
       const trabajoDescripcion = String(
         req.body?.trabajoDescripcion ?? ot.trabajoDescripcion ?? ""
       ).trim();

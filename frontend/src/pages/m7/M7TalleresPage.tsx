@@ -391,6 +391,7 @@ export function M7TalleresPage() {
         (c) => uploadPresupuesto(c),
         "No se pudo adjuntar"
       );
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -423,6 +424,7 @@ export function M7TalleresPage() {
         (c) => guardarSinPresupuesto(c),
         "No se pudo guardar"
       );
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -446,6 +448,7 @@ export function M7TalleresPage() {
       replaceOt(updated);
     } catch (err) {
       handleActionError(err, (c) => saveEleccionFacu(c), "No se pudo guardar");
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -472,6 +475,7 @@ export function M7TalleresPage() {
         (c) => uploadFactura(c),
         "No se pudo adjuntar factura"
       );
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -936,11 +940,17 @@ export function M7TalleresPage() {
                       </div>
                     )}
 
-                    {rol === "SILVINA" && (
+                    {canOperateTalleres(rol) && (
                       <div className="space-y-3 rounded-xl border-2 border-[#1e4080]/40 bg-[var(--vl-card)] p-4">
                         <div className="text-sm font-semibold text-[var(--vl-heading)]">
                           Subir presupuesto
                         </div>
+                        {!roleCanAdvance && (
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            Habitualmente lo hace Silvina. Si cargás vos, te
+                            pediremos el motivo.
+                          </p>
+                        )}
 
                         <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
                           Taller
@@ -1056,9 +1066,11 @@ export function M7TalleresPage() {
                       </div>
                     )}
 
-                    {rol !== "SILVINA" && (ot.presupuestos?.length ?? 0) === 0 && !ot.sinPresupuesto && (
+                    {!canOperateTalleres(rol) &&
+                      (ot.presupuestos?.length ?? 0) === 0 &&
+                      !ot.sinPresupuesto && (
                       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                        Esperando que Silvina cargue los presupuestos.
+                        Esperando que se carguen los presupuestos.
                       </div>
                     )}
                   </div>
@@ -1068,7 +1080,8 @@ export function M7TalleresPage() {
                   <div className="mt-3 space-y-3 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
                     {(ot.presupuestos ?? []).length === 0 && (
                       <div className="text-xs text-amber-700">
-                        No hay presupuestos cargados.
+                        No hay presupuestos cargados. Podés volver a la etapa
+                        anterior para cargarlos, o avanzar con motivo.
                       </div>
                     )}
                     {(ot.presupuestos ?? []).map((p) => (
@@ -1083,7 +1096,7 @@ export function M7TalleresPage() {
                         <input
                           type="radio"
                           name="presupuesto"
-                          disabled={rol !== "FACU" || busy}
+                          disabled={!canOperateTalleres(rol) || busy}
                           checked={elegidoId === p.id}
                           onChange={() => {
                             setElegidoId(p.id);
@@ -1099,8 +1112,14 @@ export function M7TalleresPage() {
                         </span>
                       </label>
                     ))}
-                    {rol === "FACU" && (
+                    {canOperateTalleres(rol) && (
                       <div className="grid gap-2 sm:grid-cols-2">
+                        {!roleCanAdvance && (
+                          <p className="text-xs text-amber-700 dark:text-amber-300 sm:col-span-2">
+                            Habitualmente lo hace Facu. Si guardás vos, te
+                            pediremos el motivo.
+                          </p>
+                        )}
                         <div>
                           <label className="text-xs text-[var(--vl-text-muted)]">
                             Valor del arreglo
@@ -1142,8 +1161,14 @@ export function M7TalleresPage() {
                       Autorizado: {money(aprobado)} · Taller:{" "}
                       {ot.tallerAsignado ?? "—"}
                     </div>
-                    {(rol === "PATRICIO" || rol === "JULIETA") && (
+                    {canOperateTalleres(rol) ? (
                       <>
+                        {!roleCanAdvance && (
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            Habitualmente aprueban Patricio/Julieta. Si
+                            completás vos, al continuar te pediremos el motivo.
+                          </p>
+                        )}
                         <input
                           type="number"
                           value={valorFinalDraft}
@@ -1169,10 +1194,9 @@ export function M7TalleresPage() {
                           La factura PDF se carga en la etapa de Pago.
                         </p>
                       </>
-                    )}
-                    {rol !== "PATRICIO" && rol !== "JULIETA" && (
+                    ) : (
                       <div className="text-xs text-[var(--vl-text-muted)]">
-                        Solo Patricio/Julieta aprueban el valor final.
+                        Esperando aprobación del valor final.
                       </div>
                     )}
                   </div>
@@ -1193,8 +1217,14 @@ export function M7TalleresPage() {
                         Factura: {ot.facturaPDF}. Silvina o Carla cierran el
                         pago.
                       </div>
-                    ) : rol === "PATRICIO" || rol === "JULIETA" || rol === "SILVINA" ? (
+                    ) : canOperateTalleres(rol) ? (
                       <>
+                        {!canCerrarOt(rol) && (
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            Habitualmente cierran Silvina/Carla. Si cargás
+                            factura o cerrás vos, te pediremos el motivo.
+                          </p>
+                        )}
                         <textarea
                           rows={2}
                           value={trabajoDraft}
@@ -1238,8 +1268,7 @@ export function M7TalleresPage() {
                       </>
                     ) : (
                       <div className="text-xs text-[var(--vl-text-muted)]">
-                        Falta la factura PDF. Silvina o Dirección la cargan
-                        para poder cerrar el pago.
+                        Falta la factura PDF.
                       </div>
                     )}
                   </div>
