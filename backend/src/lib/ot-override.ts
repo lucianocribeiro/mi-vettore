@@ -2,7 +2,7 @@ import type { Role } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { canAdvanceFromStep, canCerrarOt } from "./talleres.js";
 
-const MIN_OVERRIDE = 10;
+const MIN_OVERRIDE = 3;
 
 export function parseOverrideComentario(body: unknown): string | null {
   if (!body || typeof body !== "object") return null;

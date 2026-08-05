@@ -149,8 +149,8 @@ type OrdenTrabajo = {
   auditorias?: OtAuditoria[];
 };
 
-/** Comentario mínimo exigido por el backend para acciones fuera del rol habitual. */
-const OVERRIDE_MIN_LEN = 10;
+/** Comentario mínimo para acciones fuera del rol / etapa incompleta. */
+const OVERRIDE_MIN_LEN = 3;
 
 function isOverrideRequiredError(err: unknown): err is ApiError {
   return (
@@ -266,14 +266,18 @@ export function M7TalleresPage() {
 
   async function confirmOverride() {
     if (!overrideReq) return;
+    const comentario = overrideComentario.trim();
+    if (comentario.length < OVERRIDE_MIN_LEN) return;
     const req = overrideReq;
     setOverrideBusy(true);
-    setOverrideReq(null);
     try {
-      await req.run(overrideComentario.trim());
+      await req.run(comentario);
+      setOverrideReq(null);
+      setOverrideComentario("");
+    } catch {
+      // Si falla, dejamos el modal abierto para reintentar.
     } finally {
       setOverrideBusy(false);
-      setOverrideComentario("");
     }
   }
 
@@ -530,6 +534,7 @@ export function M7TalleresPage() {
       replaceOt(updated);
     } catch (err) {
       handleActionError(err, (c) => avanzar(c), "No se pudo avanzar");
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -559,6 +564,7 @@ export function M7TalleresPage() {
       replaceOt(updated);
     } catch (err) {
       handleActionError(err, (c) => cerrarOt(c), "No se pudo cerrar el pago");
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -591,6 +597,7 @@ export function M7TalleresPage() {
       replaceOt(updated);
     } catch (err) {
       handleActionError(err, (c) => retroceder(c), "No se pudo retroceder");
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -1366,9 +1373,17 @@ export function M7TalleresPage() {
               rows={3}
               value={overrideComentario}
               onChange={(e) => setOverrideComentario(e.target.value)}
-              placeholder={`Comentario obligatorio (mín. ${OVERRIDE_MIN_LEN} caracteres)`}
+              placeholder={`Motivo (mín. ${OVERRIDE_MIN_LEN} caracteres)`}
               className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]"
+              autoFocus
             />
+            {overrideComentario.trim().length > 0 &&
+              overrideComentario.trim().length < OVERRIDE_MIN_LEN && (
+                <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
+                  Escribí al menos {OVERRIDE_MIN_LEN} caracteres (
+                  {OVERRIDE_MIN_LEN - overrideComentario.trim().length} más).
+                </p>
+              )}
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
@@ -1383,7 +1398,10 @@ export function M7TalleresPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setOverrideReq(null)}
+                onClick={() => {
+                  setOverrideReq(null);
+                  setOverrideComentario("");
+                }}
                 className="min-h-11 rounded-md border border-[var(--vl-card-border)] px-3 py-2 text-sm text-[var(--vl-text)]"
               >
                 Cancelar
