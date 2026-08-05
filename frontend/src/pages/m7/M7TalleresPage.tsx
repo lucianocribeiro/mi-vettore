@@ -37,9 +37,10 @@ const FALLAS_COMUNES = [
   "Otros",
 ] as const;
 
-/** WhatsApp/tel admin — botón de emergencia (placeholder no operativo). */
+/** WhatsApp/tel admin — botón de emergencia. */
 const EMERGENCIA_WHATSAPP = "5491112345678";
 const EMERGENCIA_TEL = "+541112345678";
+const EMERGENCIA_WA_LINK = `https://wa.me/${EMERGENCIA_WHATSAPP}`;
 
 const OT_STEPS = [
   {
@@ -56,7 +57,8 @@ const OT_STEPS = [
   {
     label: "Presupuestos",
     owner: "Silvina",
-    detail: "Silvina pide y sube hasta 3 presupuestos PDF con taller y monto.",
+    detail:
+      "Carga monto, descripción y taller (PDF opcional). Se pueden cargar varios o marcar sin presupuesto.",
   },
   {
     label: "Elección taller",
@@ -66,12 +68,12 @@ const OT_STEPS = [
   {
     label: "Aprobación",
     owner: "Patricio / Julieta",
-    detail: "Dirección aprueba el gasto y se carga la factura PDF.",
+    detail: "Dirección aprueba el gasto.",
   },
   {
     label: "Pago",
     owner: "Silvina / Carla",
-    detail: "Notificación final a Silvina y Carla para proceder con el pago.",
+    detail: "Se carga la factura PDF y se confirma el pago (aviso a Silvina y Carla).",
   },
 ] as const;
 
@@ -99,7 +101,8 @@ type PresupuestoOt = {
   id: string;
   taller: string;
   monto: number;
-  archivo: string;
+  descripcion?: string | null;
+  archivo: string | null;
 };
 
 type Solicitud = {
@@ -111,6 +114,14 @@ type Solicitud = {
   inhabilitado: boolean;
   camioneta: { id: string; patente: string };
   chofer: { id: string; nombre: string } | null;
+};
+
+type OtAuditoria = {
+  id: string;
+  accion: string;
+  comentario: string;
+  createdAt: string;
+  user?: { nombre: string | null; email: string } | null;
 };
 
 type OrdenTrabajo = {
@@ -130,9 +141,23 @@ type OrdenTrabajo = {
   incrementoJustificacion: string | null;
   facturaPDF: string | null;
   trabajoDescripcion: string | null;
+  sinPresupuesto?: boolean;
+  sinPresupuestoMotivo?: string | null;
   cerradaAt: string | null;
   solicitud: Solicitud;
+  auditorias?: OtAuditoria[];
 };
+
+/** Comentario mínimo exigido por el backend para acciones fuera del rol habitual. */
+const OVERRIDE_MIN_LEN = 10;
+
+function isOverrideRequiredError(err: unknown): err is ApiError {
+  return (
+    err instanceof ApiError &&
+    err.status === 403 &&
+    err.message.toLowerCase().includes("overridecomentario")
+  );
+}
 
 function canCreateSolicitud(rol?: Role | null) {
   return (
@@ -191,11 +216,47 @@ export function M7TalleresPage() {
   const [plazoDraft, setPlazoDraft] = useState("");
   const [presTaller, setPresTaller] = useState(TALLERES[0]);
   const [presMonto, setPresMonto] = useState("");
+  const [presDescripcion, setPresDescripcion] = useState("");
   const [presFile, setPresFile] = useState<File | null>(null);
+  const [sinPresupuesto, setSinPresupuestoFlag] = useState(false);
+  const [sinPresupuestoMotivo, setSinPresupuestoMotivo] = useState("");
   const [valorFinalDraft, setValorFinalDraft] = useState("");
   const [justifDraft, setJustifDraft] = useState("");
   const [trabajoDraft, setTrabajoDraft] = useState("");
   const [facturaFile, setFacturaFile] = useState<File | null>(null);
+
+  const [overrideReq, setOverrideReq] = useState<{
+    message: string;
+    run: (comentario: string) => Promise<void>;
+  } | null>(null);
+  const [overrideComentario, setOverrideComentario] = useState("");
+  const [overrideBusy, setOverrideBusy] = useState(false);
+
+  function handleActionError(
+    err: unknown,
+    retry: (comentario: string) => Promise<void>,
+    fallbackMsg: string
+  ) {
+    if (isOverrideRequiredError(err)) {
+      setOverrideComentario("");
+      setOverrideReq({ message: err.message, run: retry });
+      return;
+    }
+    alert(err instanceof ApiError ? err.message : fallbackMsg);
+  }
+
+  async function confirmOverride() {
+    if (!overrideReq) return;
+    const req = overrideReq;
+    setOverrideBusy(true);
+    setOverrideReq(null);
+    try {
+      await req.run(overrideComentario.trim());
+    } finally {
+      setOverrideBusy(false);
+      setOverrideComentario("");
+    }
+  }
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -271,20 +332,25 @@ export function M7TalleresPage() {
     setPresFile(null);
     setFacturaFile(null);
     setPresMonto("");
+    setPresDescripcion("");
+    setSinPresupuestoFlag(!!ot.sinPresupuesto);
+    setSinPresupuestoMotivo(ot.sinPresupuestoMotivo ?? "");
   }, [ot?.id, ot?.currentStep]);
 
   function replaceOt(updated: OrdenTrabajo) {
     setOts((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
   }
 
-  async function uploadPresupuesto() {
-    if (!token || !ot || !presFile || !presMonto) return;
+  async function uploadPresupuesto(overrideComentarioArg?: string) {
+    if (!token || !ot || !presTaller || !presMonto) return;
     setBusy(true);
     try {
       const fd = new FormData();
-      fd.append("archivo", presFile);
+      if (presFile) fd.append("archivo", presFile);
       fd.append("taller", presTaller);
       fd.append("monto", presMonto);
+      if (presDescripcion.trim()) fd.append("descripcion", presDescripcion.trim());
+      if (overrideComentarioArg) fd.append("overrideComentario", overrideComentarioArg);
       const updated = await apiFetch<OrdenTrabajo>(
         `/api/talleres/${ot.id}/presupuestos`,
         { method: "POST", body: fd },
@@ -293,14 +359,51 @@ export function M7TalleresPage() {
       replaceOt(updated);
       setPresFile(null);
       setPresMonto("");
+      setPresDescripcion("");
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo adjuntar");
+      handleActionError(
+        err,
+        (c) => uploadPresupuesto(c),
+        "No se pudo adjuntar"
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  async function saveEleccionFacu() {
+  async function guardarSinPresupuesto(overrideComentarioArg?: string) {
+    if (!token || !ot) return;
+    if (!sinPresupuestoMotivo.trim()) {
+      alert("Indicá el motivo de no tener presupuesto");
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await apiFetch<OrdenTrabajo>(
+        `/api/talleres/${ot.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            sinPresupuesto: true,
+            sinPresupuestoMotivo: sinPresupuestoMotivo.trim(),
+            overrideComentario: overrideComentarioArg,
+          }),
+        },
+        token
+      );
+      replaceOt(updated);
+    } catch (err) {
+      handleActionError(
+        err,
+        (c) => guardarSinPresupuesto(c),
+        "No se pudo guardar"
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveEleccionFacu(overrideComentarioArg?: string) {
     if (!token || !ot || !elegidoId) return;
     setBusy(true);
     try {
@@ -309,6 +412,7 @@ export function M7TalleresPage() {
       };
       if (montoAuthDraft) body.montoAutorizado = Number(montoAuthDraft);
       if (plazoDraft) body.plazoEntrega = plazoDraft;
+      if (overrideComentarioArg) body.overrideComentario = overrideComentarioArg;
       const updated = await apiFetch<OrdenTrabajo>(
         `/api/talleres/${ot.id}`,
         { method: "PATCH", body: JSON.stringify(body) },
@@ -316,19 +420,20 @@ export function M7TalleresPage() {
       );
       replaceOt(updated);
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo guardar");
+      handleActionError(err, (c) => saveEleccionFacu(c), "No se pudo guardar");
     } finally {
       setBusy(false);
     }
   }
 
-  async function uploadFactura() {
+  async function uploadFactura(overrideComentarioArg?: string) {
     if (!token || !ot || !facturaFile) return;
     setBusy(true);
     try {
       const fd = new FormData();
       fd.append("archivo", facturaFile);
       fd.append("trabajoDescripcion", trabajoDraft);
+      if (overrideComentarioArg) fd.append("overrideComentario", overrideComentarioArg);
       const updated = await apiFetch<OrdenTrabajo>(
         `/api/talleres/${ot.id}/factura`,
         { method: "POST", body: fd },
@@ -337,13 +442,17 @@ export function M7TalleresPage() {
       replaceOt(updated);
       setFacturaFile(null);
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo adjuntar factura");
+      handleActionError(
+        err,
+        (c) => uploadFactura(c),
+        "No se pudo adjuntar factura"
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  async function avanzar() {
+  async function avanzar(overrideComentarioArg?: string) {
     if (!token || !ot) return;
     setBusy(true);
     try {
@@ -366,6 +475,7 @@ export function M7TalleresPage() {
         body.valorFinal = Number(valorFinalDraft);
         body.incrementoJustificacion = justifDraft;
       }
+      if (overrideComentarioArg) body.overrideComentario = overrideComentarioArg;
       const updated = await apiFetch<OrdenTrabajo>(
         `/api/talleres/${ot.id}/avanzar`,
         { method: "POST", body: JSON.stringify(body) },
@@ -373,42 +483,48 @@ export function M7TalleresPage() {
       );
       replaceOt(updated);
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo avanzar");
+      handleActionError(err, (c) => avanzar(c), "No se pudo avanzar");
     } finally {
       setBusy(false);
     }
   }
 
-  async function cerrarOt() {
+  async function cerrarOt(overrideComentarioArg?: string) {
     if (!token || !ot) return;
     setBusy(true);
     try {
       const updated = await apiFetch<OrdenTrabajo>(
         `/api/talleres/${ot.id}/cerrar`,
-        { method: "POST", body: "{}" },
+        {
+          method: "POST",
+          body: JSON.stringify({ overrideComentario: overrideComentarioArg }),
+        },
         token
       );
       replaceOt(updated);
       alert("Pago cerrado. Aviso enviado a Silvina y Carla.");
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo cerrar");
+      handleActionError(err, (c) => cerrarOt(c), "No se pudo cerrar");
     } finally {
       setBusy(false);
     }
   }
 
-  async function retroceder() {
+  async function retroceder(overrideComentarioArg?: string) {
     if (!token || !ot) return;
     setBusy(true);
     try {
       const updated = await apiFetch<OrdenTrabajo>(
         `/api/talleres/${ot.id}/retroceder`,
-        { method: "POST", body: "{}" },
+        {
+          method: "POST",
+          body: JSON.stringify({ overrideComentario: overrideComentarioArg }),
+        },
         token
       );
       replaceOt(updated);
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo retroceder");
+      handleActionError(err, (c) => retroceder(c), "No se pudo retroceder");
     } finally {
       setBusy(false);
     }
@@ -431,7 +547,9 @@ export function M7TalleresPage() {
     (ot.currentStep !== 3 ||
       (!!elegidoId && Number(montoAuthDraft) > 0)) &&
     (ot.currentStep !== 4 ||
-      (!!ot.facturaPDF && (!needsJustif || !!justifDraft.trim())));
+      (Number.isFinite(valorFinalNum) &&
+        valorFinalNum > 0 &&
+        (!needsJustif || !!justifDraft.trim())));
 
   const canCerrarUi =
     !!ot &&
@@ -673,13 +791,21 @@ export function M7TalleresPage() {
                   <div className="mt-4 space-y-4">
                     <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
                       <strong>Paso de Silvina:</strong> elegí taller, monto y
-                      subí el PDF. Podés cargar hasta 3 presupuestos.
+                      subí el presupuesto (PDF opcional). Sin límite de
+                      presupuestos cargados.
                     </div>
+
+                    {ot.sinPresupuesto && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                        <strong>Sin presupuesto disponible.</strong>{" "}
+                        {ot.sinPresupuestoMotivo}
+                      </div>
+                    )}
 
                     {(ot.presupuestos ?? []).length > 0 && (
                       <div className="space-y-2">
                         <div className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
-                          Cargados ({ot.presupuestos.length}/3)
+                          Cargados ({ot.presupuestos.length})
                         </div>
                         {(ot.presupuestos ?? []).map((p, idx) => (
                           <div
@@ -690,9 +816,16 @@ export function M7TalleresPage() {
                               <div className="font-semibold text-[var(--vl-heading)]">
                                 #{idx + 1} · {p.taller}
                               </div>
-                              <div className="mt-0.5 flex items-center gap-1 text-xs text-[var(--vl-text-muted)]">
-                                <FileText size={12} /> {p.archivo}
-                              </div>
+                              {p.descripcion && (
+                                <div className="mt-0.5 text-xs text-[var(--vl-text-muted)]">
+                                  {p.descripcion}
+                                </div>
+                              )}
+                              {p.archivo && (
+                                <div className="mt-0.5 flex items-center gap-1 text-xs text-[var(--vl-text-muted)]">
+                                  <FileText size={12} /> {p.archivo}
+                                </div>
+                              )}
                             </div>
                             <div className="text-sm font-bold text-emerald-800 dark:text-emerald-300">
                               {money(p.monto)}
@@ -702,15 +835,14 @@ export function M7TalleresPage() {
                       </div>
                     )}
 
-                    {rol === "SILVINA" && (ot.presupuestos?.length ?? 0) < 3 && (
+                    {rol === "SILVINA" && (
                       <div className="space-y-3 rounded-xl border-2 border-[#1e4080]/40 bg-[var(--vl-card)] p-4">
                         <div className="text-sm font-semibold text-[var(--vl-heading)]">
-                          Subir presupuesto{" "}
-                          {(ot.presupuestos?.length ?? 0) + 1} de 3
+                          Subir presupuesto
                         </div>
 
                         <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                          1. Taller
+                          Taller
                           <select
                             value={presTaller}
                             onChange={(e) => setPresTaller(e.target.value)}
@@ -725,7 +857,7 @@ export function M7TalleresPage() {
                         </label>
 
                         <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                          2. Monto ($)
+                          Monto ($)
                           <input
                             type="number"
                             min={1}
@@ -737,9 +869,20 @@ export function M7TalleresPage() {
                           />
                         </label>
 
+                        <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                          Descripción
+                          <textarea
+                            rows={2}
+                            placeholder="Detalle del trabajo cotizado (opcional)"
+                            value={presDescripcion}
+                            onChange={(e) => setPresDescripcion(e.target.value)}
+                            className="mt-1 w-full rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]"
+                          />
+                        </label>
+
                         <div>
                           <div className="mb-1 text-xs font-medium text-[var(--vl-text-muted)]">
-                            3. Archivo PDF
+                            Archivo PDF (opcional)
                           </div>
                           <label className="flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#1e4080] bg-[#1e4080]/10 px-4 py-3 text-sm font-semibold text-[#1e4080] transition hover:bg-[#1e4080]/15 dark:border-sky-400 dark:text-sky-300 dark:hover:bg-sky-950/40">
                             <Upload size={18} />
@@ -761,39 +904,62 @@ export function M7TalleresPage() {
                             </p>
                           ) : (
                             <p className="mt-2 text-xs text-[var(--vl-text-muted)]">
-                              Solo PDF. Tocá el botón azul para seleccionar.
+                              Solo PDF. El archivo es opcional.
                             </p>
                           )}
                         </div>
 
                         <button
                           type="button"
-                          disabled={!presFile || !presMonto || busy}
+                          disabled={!presMonto || !presTaller || busy}
                           onClick={() => void uploadPresupuesto()}
                           className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-4 text-sm font-semibold text-white hover:bg-[#18356c] disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <Upload size={16} />
-                          {busy
-                            ? "Subiendo…"
-                            : `Confirmar y subir (${(ot.presupuestos?.length ?? 0) + 1}/3)`}
+                          {busy ? "Subiendo…" : "Confirmar y subir"}
                         </button>
+
+                        <div className="border-t border-[var(--vl-card-border)] pt-3">
+                          <label className="flex items-center gap-2 text-sm font-medium text-[var(--vl-heading)]">
+                            <input
+                              type="checkbox"
+                              checked={sinPresupuesto}
+                              onChange={(e) =>
+                                setSinPresupuestoFlag(e.target.checked)
+                              }
+                            />
+                            No hay presupuesto disponible
+                          </label>
+                          {sinPresupuesto && (
+                            <>
+                              <textarea
+                                rows={2}
+                                placeholder="Motivo (obligatorio)"
+                                value={sinPresupuestoMotivo}
+                                onChange={(e) =>
+                                  setSinPresupuestoMotivo(e.target.value)
+                                }
+                                className="mt-2 w-full rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]"
+                              />
+                              <button
+                                type="button"
+                                disabled={!sinPresupuestoMotivo.trim() || busy}
+                                onClick={() => void guardarSinPresupuesto()}
+                                className="mt-2 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-amber-400 bg-amber-50 px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+                              >
+                                Guardar «sin presupuesto»
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     )}
 
-                    {rol !== "SILVINA" && (ot.presupuestos?.length ?? 0) === 0 && (
+                    {rol !== "SILVINA" && (ot.presupuestos?.length ?? 0) === 0 && !ot.sinPresupuesto && (
                       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
                         Esperando que Silvina cargue los presupuestos.
                       </div>
                     )}
-
-                    {rol === "SILVINA" &&
-                      (ot.presupuestos?.length ?? 0) >= 1 &&
-                      (ot.presupuestos?.length ?? 0) < 3 && (
-                        <p className="text-xs text-[var(--vl-text-muted)]">
-                          Ya podés avanzar con al menos 1 presupuesto, o seguir
-                          cargando hasta 3.
-                        </p>
-                      )}
                   </div>
                 )}
 
@@ -898,61 +1064,14 @@ export function M7TalleresPage() {
                             />
                           </>
                         )}
-                        {ot.facturaPDF ? (
-                          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-                            <FileText size={16} />
-                            {ot.facturaPDF}
-                          </div>
-                        ) : (
-                          <>
-                            <textarea
-                              rows={2}
-                              value={trabajoDraft}
-                              onChange={(e) => setTrabajoDraft(e.target.value)}
-                              placeholder="Descripción del trabajo (opcional)"
-                              className="min-h-11 w-full rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-3 text-sm"
-                            />
-                            <div>
-                              <div className="mb-1 text-xs font-medium text-[var(--vl-text-muted)]">
-                                Factura PDF
-                              </div>
-                              <label className="flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#1e4080] bg-[#1e4080]/10 px-4 py-3 text-sm font-semibold text-[#1e4080] transition hover:bg-[#1e4080]/15 dark:border-sky-400 dark:text-sky-300">
-                                <Upload size={18} />
-                                {facturaFile
-                                  ? "Cambiar factura PDF"
-                                  : "Elegir factura PDF"}
-                                <input
-                                  type="file"
-                                  accept="application/pdf,.pdf"
-                                  className="sr-only"
-                                  onChange={(e) =>
-                                    setFacturaFile(e.target.files?.[0] ?? null)
-                                  }
-                                />
-                              </label>
-                              {facturaFile && (
-                                <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                                  <Check size={14} /> {facturaFile.name}
-                                </p>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              disabled={!facturaFile || busy}
-                              onClick={() => void uploadFactura()}
-                              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-4 text-sm font-semibold text-white hover:bg-[#18356c] disabled:opacity-40"
-                            >
-                              <Upload size={16} />
-                              {busy ? "Subiendo…" : "Confirmar factura"}
-                            </button>
-                          </>
-                        )}
+                        <p className="text-[11px] text-[var(--vl-text-muted)]">
+                          La factura PDF se carga en la etapa de Pago.
+                        </p>
                       </>
                     )}
                     {rol !== "PATRICIO" && rol !== "JULIETA" && (
                       <div className="text-xs text-[var(--vl-text-muted)]">
-                        Solo Patricio/Julieta aprueban y cargan factura.
-                        {ot.facturaPDF ? ` Factura: ${ot.facturaPDF}` : ""}
+                        Solo Patricio/Julieta aprueban el valor final.
                       </div>
                     )}
                   </div>
@@ -967,12 +1086,81 @@ export function M7TalleresPage() {
                         {new Date(ot.cerradaAt).toLocaleString("es-AR")}. Aviso
                         a Silvina y Carla.
                       </div>
+                    ) : ot.facturaPDF ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+                        <FileText size={16} />
+                        Factura: {ot.facturaPDF}. Silvina o Carla cierran el
+                        pago.
+                      </div>
+                    ) : rol === "PATRICIO" || rol === "JULIETA" || rol === "SILVINA" ? (
+                      <>
+                        <textarea
+                          rows={2}
+                          value={trabajoDraft}
+                          onChange={(e) => setTrabajoDraft(e.target.value)}
+                          placeholder="Descripción del trabajo (opcional)"
+                          className="min-h-11 w-full rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-3 text-sm"
+                        />
+                        <div>
+                          <div className="mb-1 text-xs font-medium text-[var(--vl-text-muted)]">
+                            Factura PDF
+                          </div>
+                          <label className="flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#1e4080] bg-[#1e4080]/10 px-4 py-3 text-sm font-semibold text-[#1e4080] transition hover:bg-[#1e4080]/15 dark:border-sky-400 dark:text-sky-300">
+                            <Upload size={18} />
+                            {facturaFile
+                              ? "Cambiar factura PDF"
+                              : "Elegir factura PDF"}
+                            <input
+                              type="file"
+                              accept="application/pdf,.pdf"
+                              className="sr-only"
+                              onChange={(e) =>
+                                setFacturaFile(e.target.files?.[0] ?? null)
+                              }
+                            />
+                          </label>
+                          {facturaFile && (
+                            <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                              <Check size={14} /> {facturaFile.name}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!facturaFile || busy}
+                          onClick={() => void uploadFactura()}
+                          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-4 text-sm font-semibold text-white hover:bg-[#18356c] disabled:opacity-40"
+                        >
+                          <Upload size={16} />
+                          {busy ? "Subiendo…" : "Confirmar factura"}
+                        </button>
+                      </>
                     ) : (
                       <div className="text-xs text-[var(--vl-text-muted)]">
-                        Factura: {ot.facturaPDF ?? "—"}. Silvina o Carla cierran
-                        el pago y reciben la notificación.
+                        Falta la factura PDF. Silvina o Dirección la cargan
+                        para poder cerrar el pago.
                       </div>
                     )}
+                  </div>
+                )}
+
+                {!!ot.auditorias?.length && (
+                  <div className="mt-4 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+                      Auditoría de excepciones de rol
+                    </div>
+                    <div className="space-y-2">
+                      {ot.auditorias.map((a) => (
+                        <div key={a.id} className="text-xs text-[var(--vl-text-muted)]">
+                          <span className="font-medium text-[var(--vl-heading)]">
+                            {a.user?.nombre || a.user?.email || "Usuario"}
+                          </span>{" "}
+                          — {a.accion} ·{" "}
+                          {new Date(a.createdAt).toLocaleString("es-AR")}
+                          <div>{a.comentario}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1055,6 +1243,53 @@ export function M7TalleresPage() {
           }}
         />
       )}
+
+      {overrideReq && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+          onClick={() => setOverrideReq(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl bg-[var(--vl-card)] p-5 shadow-xl sm:rounded-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center gap-2 text-amber-700 dark:text-amber-300">
+              <AlertTriangle size={18} />
+              <h3 className="text-base font-bold">Acción fuera de tu rol habitual</h3>
+            </div>
+            <p className="mb-3 text-sm text-[var(--vl-text-muted)]">
+              {overrideReq.message}
+            </p>
+            <textarea
+              rows={3}
+              value={overrideComentario}
+              onChange={(e) => setOverrideComentario(e.target.value)}
+              placeholder={`Comentario obligatorio (mín. ${OVERRIDE_MIN_LEN} caracteres)`}
+              className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]"
+            />
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                disabled={
+                  overrideComentario.trim().length < OVERRIDE_MIN_LEN ||
+                  overrideBusy
+                }
+                onClick={() => void confirmOverride()}
+                className="min-h-11 flex-1 rounded-md bg-amber-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 hover:bg-amber-700"
+              >
+                {overrideBusy ? "Confirmando…" : "Confirmar de todos modos"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOverrideReq(null)}
+                className="min-h-11 rounded-md border border-[var(--vl-card-border)] px-3 py-2 text-sm text-[var(--vl-text)]"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1119,12 +1354,6 @@ function NuevaSolicitudForm({
     }
   }
 
-  function emergenciaClick() {
-    alert(
-      "Botón de emergencia: próximamente conectará llamada / WhatsApp a administración Vettore.\n\n(Por ahora no operativo.)"
-    );
-  }
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
@@ -1143,15 +1372,16 @@ function NuevaSolicitudForm({
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={emergenciaClick}
-          className="mb-4 flex w-full items-center justify-center gap-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+        <a
+          href={EMERGENCIA_WA_LINK}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
         >
-          <AlertTriangle size={16} /> Emergencia (próximamente)
-        </button>
+          <AlertTriangle size={16} /> Emergencia por WhatsApp
+        </a>
         <p className="mb-3 text-[11px] text-[var(--vl-text-muted)]">
-          Tel {EMERGENCIA_TEL} · WA {EMERGENCIA_WHATSAPP} — aún no enlazado.
+          WhatsApp {EMERGENCIA_WHATSAPP} · Tel {EMERGENCIA_TEL}
         </p>
 
         {user?.rol !== "CHOFER" && (

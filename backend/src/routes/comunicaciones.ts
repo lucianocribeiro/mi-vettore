@@ -8,6 +8,10 @@ import {
 } from "../lib/comunicaciones.js";
 import { fechasCobertura, formCambiosUrl } from "../lib/comunicaciones-fechas.js";
 import { isSmtpConfigured } from "../lib/mailer.js";
+import {
+  runAlertasVencimientos,
+  runRecordatorioKm,
+} from "../lib/recordatorios.js";
 
 const router = Router();
 
@@ -42,6 +46,20 @@ const FLUJO = [
     accion: "Confirmación final con servicios, horarios y choferes asignados",
     canal: "Email",
     tipo: TipoComunicacion.CONFIRMACION_15,
+  },
+  {
+    hora: "Lunes 08:00",
+    destino: "Choferes activos",
+    accion: "Recordatorio para cargar kilometraje de la semana",
+    canal: "Email",
+    tipo: TipoComunicacion.RECORDATORIO_KM,
+  },
+  {
+    hora: "Diario 08:30",
+    destino: "Choferes + ops (Pablo/Facu)",
+    accion: "Alertas de VTV y licencia próximos a vencer (30 días)",
+    canal: "Email + campanita",
+    tipo: TipoComunicacion.ALERTA_VTV,
   },
   {
     hora: "Viernes",
@@ -124,7 +142,31 @@ router.post("/disparar", authenticate, async (req: AuthedRequest, res) => {
     res.status(201).json(result);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Error al disparar comunicación" });
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Error al disparar comunicación",
+    });
+  }
+});
+
+/** Disparo manual recordatorios km / vencimientos. */
+router.post("/recordatorios", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!OPS_ROLES.has(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const kind = String(req.body?.kind ?? "all").toLowerCase();
+    const out: Record<string, unknown> = {};
+    if (kind === "km" || kind === "all") {
+      out.km = await runRecordatorioKm();
+    }
+    if (kind === "vencimientos" || kind === "all") {
+      out.vencimientos = await runAlertasVencimientos();
+    }
+    res.status(201).json(out);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al disparar recordatorios" });
   }
 });
 

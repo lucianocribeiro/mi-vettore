@@ -134,7 +134,7 @@ export function Sidebar({ open, onClose }: Props) {
             </div>
             {user?.esDuenoFlota && (
               <span className="shrink-0 rounded bg-[#1e4080] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
-                Dueño
+                Empresa transp.
               </span>
             )}
           </div>
@@ -142,7 +142,7 @@ export function Sidebar({ open, onClose }: Props) {
             {user?.empresaNombre
               ? user.empresaNombre
               : user?.esDuenoFlota
-                ? "Titular de flota"
+                ? "Empresa de transporte"
                 : "Vettore Logística"}
           </div>
         </div>
@@ -211,7 +211,7 @@ export function Sidebar({ open, onClose }: Props) {
             </span>
             {user?.esDuenoFlota && (
               <span className="shrink-0 rounded bg-[#1e4080] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                Dueño
+                Empresa transp.
               </span>
             )}
           </div>
@@ -221,7 +221,7 @@ export function Sidebar({ open, onClose }: Props) {
               : user
                 ? ROLE_LABELS[user.rol]
                 : ""}
-            {user?.esDuenoFlota ? " · titular de flota" : ""}
+            {user?.esDuenoFlota ? " · empresa de transporte" : ""}
           </div>
         </div>
 

@@ -69,6 +69,9 @@ export function M6MantenimientoPage() {
     useState<FlotaUnitFilters>(EMPTY_FLOTA_FILTERS);
   const [km, setKm] = useState("");
   const [aceite, setAceite] = useState("");
+  const [correa, setCorrea] = useState("");
+  const [neumaticos, setNeumaticos] = useState("");
+  const [bateria, setBateria] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,23 +114,43 @@ export function M6MantenimientoPage() {
     if (!selected) return;
     setKm(String(selected.km));
     setAceite(toInputDate(selected.fechaUltimoAceite));
+    setCorrea(toInputDate(selected.fechaCambioCorrea));
+    setNeumaticos(toInputDate(selected.fechaCambioNeumaticos));
+    setBateria(toInputDate(selected.fechaCambioBateria));
     setOkMsg(null);
+    setError(null);
   }, [selected?.id]);
 
   async function guardar(e: FormEvent) {
     e.preventDefault();
     if (!token || !selected) return;
-    setSaving(true);
     setError(null);
     setOkMsg(null);
+
+    const kmNum = Number(km);
+    if (!Number.isFinite(kmNum) || kmNum < 0) {
+      setError("Kilometraje inválido");
+      return;
+    }
+    if (kmNum < selected.km) {
+      setError(
+        `El kilometraje no puede ser menor al actual (${selected.km.toLocaleString("es-AR")} km)`
+      );
+      return;
+    }
+
+    setSaving(true);
     try {
       const updated = await apiFetch<Camioneta>(
         `/api/camionetas/${selected.id}/mantenimiento`,
         {
           method: "PATCH",
           body: JSON.stringify({
-            km: Number(km),
+            km: kmNum,
             fechaUltimoAceite: aceite || null,
+            fechaCambioCorrea: correa || null,
+            fechaCambioNeumaticos: neumaticos || null,
+            fechaCambioBateria: bateria || null,
           }),
         },
         token
@@ -252,6 +275,16 @@ export function M6MantenimientoPage() {
                         Aceite: {formatDate(c.fechaUltimoAceite) || "sin dato"}
                       </div>
                       <div>
+                        Correa: {formatDate(c.fechaCambioCorrea) || "sin dato"}
+                      </div>
+                      <div>
+                        Neumáticos:{" "}
+                        {formatDate(c.fechaCambioNeumaticos) || "sin dato"}
+                      </div>
+                      <div>
+                        Batería: {formatDate(c.fechaCambioBateria) || "sin dato"}
+                      </div>
+                      <div>
                         Seguro: {formatDate(c.seguroVencimiento) || "—"}
                         {daysUntil(c.seguroVencimiento) !== null &&
                         daysUntil(c.seguroVencimiento)! < 0
@@ -259,7 +292,7 @@ export function M6MantenimientoPage() {
                           : ""}
                       </div>
                       <div>
-                        VTB: {formatDate(c.vtbVencimiento) || "—"}
+                        VTV: {formatDate(c.vtbVencimiento) || "—"}
                         {daysUntil(c.vtbVencimiento) !== null &&
                         daysUntil(c.vtbVencimiento)! < 0
                           ? " · vencido"
@@ -296,7 +329,7 @@ export function M6MantenimientoPage() {
                     Actualizar {selected.patente}
                   </h2>
                   <p className="mt-0.5 text-sm text-[var(--vl-text-muted)]">
-                    {[selected.marca, selected.modelo, selected.color]
+                    {[selected.marca, selected.modelo, selected.equipoFrio]
                       .filter(Boolean)
                       .join(" · ") ||
                       selected.datosTecnicos ||
@@ -336,13 +369,40 @@ export function M6MantenimientoPage() {
                     className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
                   />
                 </label>
+                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                  Último cambio de correa
+                  <input
+                    type="date"
+                    value={correa}
+                    onChange={(e) => setCorrea(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                  Último cambio de neumáticos
+                  <input
+                    type="date"
+                    value={neumaticos}
+                    onChange={(e) => setNeumaticos(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                  Último cambio de batería
+                  <input
+                    type="date"
+                    value={bateria}
+                    onChange={(e) => setBateria(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                  />
+                </label>
               </div>
 
               <p className="mt-3 text-[11px] text-[var(--vl-text-muted)]">
                 Seguro: {selected.seguroCompania || "—"} · vence:{" "}
                 {formatDate(selected.seguroVencimiento)}
                 {" · "}
-                VTB vence: {formatDate(selected.vtbVencimiento)}
+                VTV vence: {formatDate(selected.vtbVencimiento)}
               </p>
 
               <button

@@ -7,8 +7,11 @@ const router = Router();
 router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
     const rol = req.user!.rol;
+    const userId = req.user!.id;
     const avisos = await prisma.avisoInterno.findMany({
-      where: { rolDestino: rol },
+      where: {
+        OR: [{ rolDestino: rol }, { usuarioId: userId }],
+      },
       orderBy: { createdAt: "desc" },
       take: 50,
       include: {
@@ -28,7 +31,10 @@ router.post("/:id/leer", authenticate, async (req: AuthedRequest, res) => {
     const aviso = await prisma.avisoInterno.findUnique({
       where: { id: req.params.id },
     });
-    if (!aviso || aviso.rolDestino !== req.user!.rol) {
+    if (
+      !aviso ||
+      (aviso.rolDestino !== req.user!.rol && aviso.usuarioId !== req.user!.id)
+    ) {
       res.status(404).json({ error: "Aviso no encontrado" });
       return;
     }
@@ -46,7 +52,10 @@ router.post("/:id/leer", authenticate, async (req: AuthedRequest, res) => {
 router.post("/leer-todos", authenticate, async (req: AuthedRequest, res) => {
   try {
     await prisma.avisoInterno.updateMany({
-      where: { rolDestino: req.user!.rol, leido: false },
+      where: {
+        leido: false,
+        OR: [{ rolDestino: req.user!.rol }, { usuarioId: req.user!.id }],
+      },
       data: { leido: true },
     });
     res.json({ ok: true });

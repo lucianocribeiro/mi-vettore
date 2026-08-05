@@ -23,9 +23,11 @@ function parseDate(value: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-router.get("/", authenticate, async (_req, res) => {
+router.get("/", authenticate, async (req, res) => {
   try {
+    const incluirBajas = String(req.query.incluirBajas ?? "") === "1";
     const items = await prisma.chofer.findMany({
+      where: incluirBajas ? undefined : { estado: "ACTIVO" },
       orderBy: { nombre: "asc" },
       include: includeAsignaciones,
     });
@@ -161,9 +163,25 @@ router.put("/:id", ...write, async (req, res) => {
 
 router.delete("/:id", ...write, async (req, res) => {
   try {
-    await prisma.asignacionFlota.deleteMany({ where: { choferId: req.params.id } });
-    await prisma.chofer.delete({ where: { id: req.params.id } });
-    res.status(204).send();
+    const item = await prisma.chofer.update({
+      where: { id: req.params.id },
+      data: { estado: EstadoChofer.INACTIVO },
+      include: includeAsignaciones,
+    });
+    res.json(item);
+  } catch {
+    res.status(404).json({ error: "Chofer no encontrado" });
+  }
+});
+
+router.post("/:id/baja", ...write, async (req, res) => {
+  try {
+    const item = await prisma.chofer.update({
+      where: { id: req.params.id },
+      data: { estado: EstadoChofer.INACTIVO },
+      include: includeAsignaciones,
+    });
+    res.json(item);
   } catch {
     res.status(404).json({ error: "Chofer no encontrado" });
   }

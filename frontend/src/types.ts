@@ -126,17 +126,30 @@ export type Chofer = {
   asignaciones?: AsignacionFlota[];
 };
 
+export type TipoServicio = {
+  id: string;
+  nombre: string;
+  activo: boolean;
+  orden: number;
+};
+
 export type Camioneta = {
   id: string;
   patente: string;
   marca: string | null;
   modelo: string | null;
   anio: number | null;
-  color: string | null;
+  equipoFrio: string | null;
+  capacidad: string | null;
   tipoTransporte: TipoTransporte | null;
+  tipoServicioId: string | null;
+  tipoServicio?: TipoServicio | null;
   datosTecnicos: string | null;
   km: number;
   fechaUltimoAceite: string | null;
+  fechaCambioCorrea: string | null;
+  fechaCambioNeumaticos: string | null;
+  fechaCambioBateria: string | null;
   seguroCompania: string | null;
   seguroVencimiento: string | null;
   vtbVencimiento: string | null;

@@ -10,6 +10,7 @@ import {
   SolicitanteTaller,
   TipoPedido,
   type PresupuestoOt,
+  type Role,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { choferPuedeEditarCamioneta } from "../lib/flota.js";
@@ -27,6 +28,11 @@ import {
   NOTIF_OPS_ROLES,
   OT_STEPS,
 } from "../lib/talleres.js";
+import {
+  assertRoleOrOverride,
+  canActOnStepAsOps,
+  parseOverrideComentario,
+} from "../lib/ot-override.js";
 
 const router = Router();
 
@@ -82,7 +88,27 @@ const includeOT = {
   },
   presupuestos: { orderBy: { createdAt: "asc" as const } },
   presupuestoElegido: true,
+  auditorias: { orderBy: { createdAt: "desc" as const }, take: 20 },
 } as const;
+
+/**
+ * Igual a assertRoleOrOverride, pero además exige que quien pide el override
+ * sea un rol operativo interno (no chofer/cliente) — reunión 05/8.
+ */
+async function gateOrOverride(opts: {
+  rol: Role;
+  allowed: boolean;
+  userId: string;
+  otId: string;
+  accion: string;
+  overrideComentario: string | null;
+}): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  if (opts.allowed) return { ok: true };
+  if (!canActOnStepAsOps(opts.rol)) {
+    return { ok: false, status: 403, error: "Sin permiso para esta acción" };
+  }
+  return assertRoleOrOverride(opts);
+}
 
 async function choferScope(userId: string): Promise<{
   userId: string;
@@ -194,6 +220,7 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
         asignaciones: {
           where: { periodoHasta: null },
           take: 1,
+          include: { chofer: true, empresa: true },
         },
       },
     });
@@ -241,6 +268,15 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
         },
       });
 
+      // Si la unidad no puede circular, se saca de servicio de inmediato
+      // (además del pasaje a EN_TALLER que ocurre al avanzar 0→1).
+      if (!habilitadaCircular) {
+        await tx.camioneta.update({
+          where: { id: camionetaId },
+          data: { estado: EstadoCamioneta.EN_TALLER },
+        });
+      }
+
       return tx.ordenTrabajo.create({
         data: {
           solicitudTallerId: solicitud.id,
@@ -276,6 +312,50 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
       });
     }
 
+    // Notificar a la empresa de transporte / dueño de flota (reunión 05/8)
+    const asignacionActiva = camioneta.asignaciones[0] ?? null;
+    if (asignacionActiva) {
+      let duenoChoferIds: string[] = [];
+      if (asignacionActiva.chofer.esDuenoFlota) {
+        duenoChoferIds = [asignacionActiva.chofer.id];
+      } else {
+        const duenosEmpresa = await prisma.chofer.findMany({
+          where: {
+            esDuenoFlota: true,
+            asignaciones: {
+              some: { empresaId: asignacionActiva.empresaId, periodoHasta: null },
+            },
+          },
+          select: { id: true },
+        });
+        duenoChoferIds = duenosEmpresa.map((c) => c.id);
+      }
+
+      if (duenoChoferIds.length > 0) {
+        const duenoUsuarios = await prisma.usuario.findMany({
+          where: { choferId: { in: duenoChoferIds }, estado: "ACTIVO" },
+        });
+        const circulacionMsg = !habilitadaCircular
+          ? `Unidad ${patente} fuera de circulación por ingreso a taller.`
+          : `Unidad ${patente} ingresó a taller (sigue habilitada para circular).`;
+        for (const u of duenoUsuarios) {
+          await prisma.avisoInterno.create({
+            data: {
+              usuarioId: u.id,
+              titulo: `OT ${ot.numeroOT}: unidad a taller`,
+              mensaje: `${circulacionMsg} Falla: ${falla}.`,
+              otId: ot.id,
+            },
+          });
+          await sendMail({
+            to: u.email,
+            subject: `[Vettore] ${ot.numeroOT} — unidad a taller`,
+            text: `${circulacionMsg}\nFalla: ${falla}\nOT: ${ot.numeroOT}.`,
+          });
+        }
+      }
+    }
+
     res.status(201).json(ot);
   } catch (err) {
     console.error(err);
@@ -301,12 +381,25 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
 
     const rol = req.user!.rol;
+    const overrideComentario = parseOverrideComentario(req.body);
     const data: Record<string, unknown> = {};
 
     // Facu elige presupuesto (paso 3)
     if (req.body?.presupuestoElegidoId !== undefined) {
-      if (ot.currentStep !== 3 || rol !== "FACU") {
-        res.status(403).json({ error: "Solo Facu puede elegir presupuesto en esta etapa" });
+      if (ot.currentStep !== 3) {
+        res.status(400).json({ error: "El presupuesto se elige en esa etapa" });
+        return;
+      }
+      const gate = await gateOrOverride({
+        rol,
+        allowed: rol === "FACU",
+        userId: req.user!.id,
+        otId: ot.id,
+        accion: "Elegir presupuesto",
+        overrideComentario,
+      });
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
         return;
       }
       const elegId = String(req.body.presupuestoElegidoId);
@@ -326,8 +419,20 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
 
     if (req.body?.montoAutorizado !== undefined) {
-      if (ot.currentStep !== 3 || rol !== "FACU") {
-        res.status(403).json({ error: "Solo Facu puede setear el valor del arreglo" });
+      if (ot.currentStep !== 3) {
+        res.status(400).json({ error: "El valor del arreglo se carga en esa etapa" });
+        return;
+      }
+      const gate = await gateOrOverride({
+        rol,
+        allowed: rol === "FACU",
+        userId: req.user!.id,
+        otId: ot.id,
+        accion: "Asignar valor del arreglo",
+        overrideComentario,
+      });
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
         return;
       }
       const monto = Number(req.body.montoAutorizado);
@@ -340,8 +445,20 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
 
     if (req.body?.plazoEntrega !== undefined) {
-      if (ot.currentStep !== 3 || rol !== "FACU") {
-        res.status(403).json({ error: "Solo Facu puede cargar el plazo" });
+      if (ot.currentStep !== 3) {
+        res.status(400).json({ error: "El plazo se carga en esa etapa" });
+        return;
+      }
+      const gate = await gateOrOverride({
+        rol,
+        allowed: rol === "FACU",
+        userId: req.user!.id,
+        otId: ot.id,
+        accion: "Cargar plazo de entrega",
+        overrideComentario,
+      });
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
         return;
       }
       const d = new Date(String(req.body.plazoEntrega));
@@ -353,16 +470,40 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
 
     if (req.body?.valorFinal !== undefined) {
-      if (ot.currentStep !== 4 || (rol !== "PATRICIO" && rol !== "JULIETA")) {
-        res.status(403).json({ error: "Solo Dirección puede setear valor final" });
+      if (ot.currentStep !== 4) {
+        res.status(400).json({ error: "El valor final se carga en aprobación" });
+        return;
+      }
+      const gate = await gateOrOverride({
+        rol,
+        allowed: rol === "PATRICIO" || rol === "JULIETA",
+        userId: req.user!.id,
+        otId: ot.id,
+        accion: "Setear valor final",
+        overrideComentario,
+      });
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
         return;
       }
       data.valorFinal = Number(req.body.valorFinal);
     }
 
     if (req.body?.incrementoJustificacion !== undefined) {
-      if (ot.currentStep !== 4 || (rol !== "PATRICIO" && rol !== "JULIETA")) {
-        res.status(403).json({ error: "Solo Dirección puede justificar incremento" });
+      if (ot.currentStep !== 4) {
+        res.status(400).json({ error: "La justificación se carga en aprobación" });
+        return;
+      }
+      const gate = await gateOrOverride({
+        rol,
+        allowed: rol === "PATRICIO" || rol === "JULIETA",
+        userId: req.user!.id,
+        otId: ot.id,
+        accion: "Justificar incremento",
+        overrideComentario,
+      });
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
         return;
       }
       data.incrementoJustificacion = String(req.body.incrementoJustificacion).trim();
@@ -388,7 +529,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
-/** Silvina: hasta 3 presupuestos PDF */
+/** Silvina (u ops con override): presupuestos PDF, sin límite de cantidad. */
 router.post(
   "/:id/presupuestos",
   authenticate,
@@ -403,10 +544,6 @@ router.post(
   },
   async (req: AuthedRequest, res) => {
     try {
-      if (req.user!.rol !== "SILVINA") {
-        res.status(403).json({ error: "Solo Silvina puede cargar presupuestos" });
-        return;
-      }
       const ot = await prisma.ordenTrabajo.findUnique({
         where: { id: req.params.id },
         include: { presupuestos: true },
@@ -415,16 +552,25 @@ router.post(
         res.status(400).json({ error: "OT no está en etapa de presupuestos" });
         return;
       }
-      if (ot.presupuestos.length >= 3) {
-        res.status(400).json({ error: "Máximo 3 presupuestos por OT" });
+
+      const rol = req.user!.rol;
+      const overrideComentario = parseOverrideComentario(req.body);
+      const gate = await gateOrOverride({
+        rol,
+        allowed: rol === "SILVINA",
+        userId: req.user!.id,
+        otId: ot.id,
+        accion: "Cargar presupuesto",
+        overrideComentario,
+      });
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
         return;
       }
-      if (!req.file) {
-        res.status(400).json({ error: "Archivo PDF obligatorio" });
-        return;
-      }
+
       const taller = String(req.body?.taller ?? "").trim();
       const monto = Number(req.body?.monto);
+      const descripcion = String(req.body?.descripcion ?? "").trim();
       if (!taller) {
         res.status(400).json({ error: "Taller obligatorio" });
         return;
@@ -433,13 +579,18 @@ router.post(
         res.status(400).json({ error: "Monto inválido" });
         return;
       }
+      if (!descripcion) {
+        res.status(400).json({ error: "Descripción obligatoria" });
+        return;
+      }
 
       await prisma.presupuestoOt.create({
         data: {
           otId: ot.id,
           taller,
           monto,
-          archivo: req.file.filename,
+          descripcion,
+          archivo: req.file ? req.file.filename : null,
         },
       });
 
@@ -460,10 +611,6 @@ router.delete(
   authenticate,
   async (req: AuthedRequest, res) => {
     try {
-      if (req.user!.rol !== "SILVINA") {
-        res.status(403).json({ error: "Solo Silvina puede eliminar presupuestos" });
-        return;
-      }
       const ot = await prisma.ordenTrabajo.findUnique({
         where: { id: req.params.id },
       });
@@ -471,6 +618,22 @@ router.delete(
         res.status(400).json({ error: "Solo en etapa de presupuestos" });
         return;
       }
+
+      const rol = req.user!.rol;
+      const overrideComentario = parseOverrideComentario(req.body);
+      const gate = await gateOrOverride({
+        rol,
+        allowed: rol === "SILVINA",
+        userId: req.user!.id,
+        otId: ot.id,
+        accion: "Eliminar presupuesto",
+        overrideComentario,
+      });
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
+        return;
+      }
+
       if (ot.presupuestoElegidoId === req.params.presupuestoId) {
         await prisma.ordenTrabajo.update({
           where: { id: ot.id },
@@ -492,6 +655,65 @@ router.delete(
   }
 );
 
+/** Marca la OT como "sin presupuesto" (con motivo) para poder avanzar sin PDF. */
+router.post("/:id/sin-presupuesto", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const ot = await prisma.ordenTrabajo.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!ot) {
+      res.status(404).json({ error: "OT no encontrada" });
+      return;
+    }
+    if (ot.currentStep !== 2) {
+      res.status(400).json({ error: "Solo aplica en etapa de presupuestos" });
+      return;
+    }
+    if (ot.cerradaAt) {
+      res.status(400).json({ error: "La OT ya está cerrada" });
+      return;
+    }
+
+    const rol = req.user!.rol;
+    const overrideComentario = parseOverrideComentario(req.body);
+    const gate = await gateOrOverride({
+      rol,
+      allowed: rol === "SILVINA",
+      userId: req.user!.id,
+      otId: ot.id,
+      accion: "Marcar sin presupuesto",
+      overrideComentario,
+    });
+    if (!gate.ok) {
+      res.status(gate.status).json({ error: gate.error });
+      return;
+    }
+
+    const sinPresupuesto = Boolean(req.body?.sinPresupuesto);
+    const motivo = String(req.body?.sinPresupuestoMotivo ?? "").trim();
+    if (sinPresupuesto && motivo.length < 10) {
+      res.status(400).json({
+        error: "El motivo es obligatorio (mínimo 10 caracteres)",
+      });
+      return;
+    }
+
+    const updated = await prisma.ordenTrabajo.update({
+      where: { id: ot.id },
+      data: {
+        sinPresupuesto,
+        sinPresupuestoMotivo: sinPresupuesto ? motivo : null,
+      },
+      include: includeOT,
+    });
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al marcar sin presupuesto" });
+  }
+});
+
+/** Factura PDF: solo en etapa de pago (5); obligatoria para cerrar. */
 router.post(
   "/:id/factura",
   authenticate,
@@ -519,8 +741,8 @@ router.post(
       const ot = await prisma.ordenTrabajo.findUnique({
         where: { id: req.params.id },
       });
-      if (!ot || (ot.currentStep !== 4 && ot.currentStep !== 5)) {
-        res.status(400).json({ error: "Factura en etapa de aprobación o pago" });
+      if (!ot || ot.currentStep !== 5) {
+        res.status(400).json({ error: "Factura solo en etapa de pago" });
         return;
       }
       if (!req.file) {
@@ -574,15 +796,28 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
     }
 
     const rol = req.user!.rol;
-    if (!canAdvanceFromStep(rol, ot.currentStep)) {
-      res.status(403).json({
-        error: `Tu rol no puede avanzar la etapa "${OT_STEPS[ot.currentStep].label}"`,
-      });
+    const overrideComentario = parseOverrideComentario(req.body);
+    const gate = await gateOrOverride({
+      rol,
+      allowed: canAdvanceFromStep(rol, ot.currentStep),
+      userId: req.user!.id,
+      otId: ot.id,
+      accion: `Avanzar etapa "${OT_STEPS[ot.currentStep].label}"`,
+      overrideComentario,
+    });
+    if (!gate.ok) {
+      res.status(gate.status).json({ error: gate.error });
       return;
     }
 
-    if (ot.currentStep === 2 && ot.presupuestos.length < 1) {
-      res.status(400).json({ error: "Debés cargar al menos un presupuesto PDF" });
+    if (
+      ot.currentStep === 2 &&
+      ot.presupuestos.length < 1 &&
+      !ot.sinPresupuesto
+    ) {
+      res.status(400).json({
+        error: "Debés cargar al menos un presupuesto PDF o marcar «sin presupuesto»",
+      });
       return;
     }
     if (ot.currentStep === 3) {
@@ -611,10 +846,7 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
         });
         return;
       }
-      if (!ot.facturaPDF) {
-        res.status(400).json({ error: "Debés cargar la factura PDF antes de avanzar" });
-        return;
-      }
+      // La factura ahora se carga en la etapa de Pago (5), no acá.
 
       await prisma.ordenTrabajo.update({
         where: { id: ot.id },
@@ -737,10 +969,22 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "La OT ya está cerrada" });
       return;
     }
-    if (!canCerrarOt(req.user!.rol)) {
-      res.status(403).json({ error: "Solo Silvina o Carla cierran el pago" });
+
+    const rol = req.user!.rol;
+    const overrideComentario = parseOverrideComentario(req.body);
+    const gate = await gateOrOverride({
+      rol,
+      allowed: canCerrarOt(rol),
+      userId: req.user!.id,
+      otId: ot.id,
+      accion: "Cerrar pago",
+      overrideComentario,
+    });
+    if (!gate.ok) {
+      res.status(gate.status).json({ error: gate.error });
       return;
     }
+
     if (!ot.facturaPDF) {
       res.status(400).json({ error: "Falta la factura PDF" });
       return;
@@ -773,6 +1017,18 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         include: includeOT,
       });
     });
+
+    // Mail a Silvina y Carla al cerrar el pago (reunión 05/8)
+    const cierreUsuarios = await prisma.usuario.findMany({
+      where: { rol: { in: CIERRE_AVISO_ROLES }, estado: "ACTIVO" },
+    });
+    for (const u of cierreUsuarios) {
+      await sendMail({
+        to: u.email,
+        subject: `[Vettore] ${ot.numeroOT} — pago listo para procesar`,
+        text: mensaje,
+      });
+    }
 
     res.json(updated);
   } catch (err) {

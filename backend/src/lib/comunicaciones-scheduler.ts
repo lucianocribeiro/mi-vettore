@@ -1,10 +1,15 @@
 import cron from "node-cron";
 import { TipoComunicacion } from "@prisma/client";
 import { runComunicacion } from "./comunicaciones.js";
+import {
+  runAlertasVencimientos,
+  runRecordatorioKm,
+} from "./recordatorios.js";
 
 /**
  * Cron en zona configurada (default America/Argentina/Buenos_Aires).
  * Solo Lun–Vie (1–5): Vettore no opera sábados; el viernes cubre sáb+lun.
+ * + Lunes 08:00 recordatorio km; diario 08:30 alertas VTV/licencia.
  */
 export function startComunicacionesScheduler(): void {
   if (process.env.COMUNICACIONES_CRON_ENABLED === "false") {
@@ -39,5 +44,31 @@ export function startComunicacionesScheduler(): void {
       { timezone: tz }
     );
     console.log(`[comunicaciones] programado ${job.label} (${job.expr}) TZ=${tz}`);
+  }
+
+  if (cron.validate("0 8 * * 1")) {
+    cron.schedule(
+      "0 8 * * 1",
+      () => {
+        void runRecordatorioKm().catch((err) =>
+          console.error("[comunicaciones] error recordatorio km", err)
+        );
+      },
+      { timezone: tz }
+    );
+    console.log(`[comunicaciones] programado recordatorio km lunes 08:00 TZ=${tz}`);
+  }
+
+  if (cron.validate("30 8 * * *")) {
+    cron.schedule(
+      "30 8 * * *",
+      () => {
+        void runAlertasVencimientos().catch((err) =>
+          console.error("[comunicaciones] error alertas vencimientos", err)
+        );
+      },
+      { timezone: tz }
+    );
+    console.log(`[comunicaciones] programado alertas VTV/licencia 08:30 diario TZ=${tz}`);
   }
 }

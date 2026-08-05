@@ -39,9 +39,9 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
   {
     email: "dueno@vettore.test",
     rol: "CHOFER",
-    label: "Chofer · dueño de flota",
+    label: "Chofer · empresa de transporte",
     home: "/m6",
-    note: "Elegí con qué titular / dueño entrar",
+    note: "Elegí con qué empresa de transporte entrar",
     openPicker: "dueno",
   },
   {
@@ -204,14 +204,14 @@ export function LoginPage() {
   }
 
   const pickerTitle =
-    pickerMode === "dueno" ? "Elegí un dueño de flota" : "Elegí un chofer";
+    pickerMode === "dueno" ? "Elegí una empresa de transporte" : "Elegí un chofer";
   const pickerEmpty =
     pickerMode === "dueno"
-      ? "No hay dueños de flota con ese filtro."
+      ? "No hay empresas de transporte con ese filtro."
       : "No hay choferes con ese filtro.";
   const pickerCountLabel =
     pickerMode === "dueno"
-      ? `${pool.length} titulares`
+      ? `${pool.length} empresas de transporte`
       : `${pool.length} choferes`;
 
   return (
@@ -308,7 +308,7 @@ export function LoginPage() {
                       </div>
                       {ch.esDuenoFlota && (
                         <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          Titular
+                          Empresa transp.
                         </span>
                       )}
                     </div>

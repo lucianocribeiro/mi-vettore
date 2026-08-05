@@ -5,7 +5,13 @@ import { Clock } from "../../components/icons";
 import { apiFetch, ApiError } from "../../lib/api";
 import { MASTER_WRITE_ROLES, type Role } from "../../types";
 
-type TipoComunicacion = "RESUMEN_09" | "OFERTA_12" | "CONFIRMACION_15";
+type TipoComunicacion =
+  | "RESUMEN_09"
+  | "OFERTA_12"
+  | "CONFIRMACION_15"
+  | "RECORDATORIO_KM"
+  | "ALERTA_VTV"
+  | "ALERTA_LICENCIA";
 type EstadoComunicacion = "ENVIADO" | "SIMULADO" | "ERROR";
 type DestinatarioTipo = "CLIENTE" | "CHOFER";
 
@@ -48,6 +54,9 @@ const TIPO_LABEL: Record<TipoComunicacion, string> = {
   RESUMEN_09: "09:00 Resumen",
   OFERTA_12: "12:00 Oferta",
   CONFIRMACION_15: "15:00 Confirmación",
+  RECORDATORIO_KM: "Recordatorio km",
+  ALERTA_VTV: "Alerta VTV",
+  ALERTA_LICENCIA: "Alerta licencia",
 };
 
 const ESTADO_STYLE: Record<EstadoComunicacion, string> = {
@@ -66,7 +75,7 @@ export function M3ComunicacionesPage() {
   const [items, setItems] = useState<Comunicacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<TipoComunicacion | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [selected, setSelected] = useState<Comunicacion | null>(null);
 
   const load = useCallback(async () => {
@@ -124,6 +133,24 @@ export function M3ComunicacionesPage() {
     }
   }
 
+  async function dispararRecordatorios(kind: "km" | "vencimientos" | "all") {
+    if (!token) return;
+    setBusy(`rec-${kind}`);
+    try {
+      const result = await apiFetch<Record<string, unknown>>(
+        "/api/comunicaciones/recordatorios",
+        { method: "POST", body: JSON.stringify({ kind }) },
+        token
+      );
+      alert(`Recordatorios (${kind}) OK:\n${JSON.stringify(result, null, 2)}`);
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo disparar");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div>
       <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
@@ -137,8 +164,9 @@ export function M3ComunicacionesPage() {
             </h1>
           </div>
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            Email automático Lun–Vie a las 09:00, 12:00 y 15:00. WhatsApp queda
-            fuera del MVP. Cada envío queda registrado para trazabilidad.
+            Email automático Lun–Vie 09/12/15, recordatorio de km los lunes y
+            alertas de VTV/licencia a las 08:30. WhatsApp de urgencias queda
+            en el botón de emergencia del chofer.
           </p>
           {meta && (
             <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
@@ -176,6 +204,22 @@ export function M3ComunicacionesPage() {
                 {busy === t ? "Enviando…" : `Disparar ${TIPO_LABEL[t]}`}
               </button>
             ))}
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void dispararRecordatorios("km")}
+              className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-1.5 text-xs font-medium text-[var(--vl-text)] hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
+            >
+              {busy === "rec-km" ? "Enviando…" : "Recordatorio km"}
+            </button>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void dispararRecordatorios("vencimientos")}
+              className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-1.5 text-xs font-medium text-[var(--vl-text)] hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
+            >
+              {busy === "rec-vencimientos" ? "Enviando…" : "Alertas VTV/licencia"}
+            </button>
           </div>
         )}
       </div>

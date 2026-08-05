@@ -1,6 +1,7 @@
 import { prisma } from "./prisma.js";
 
 const includeAsignaciones = {
+  tipoServicio: true,
   asignaciones: {
     orderBy: { periodoDesde: "desc" as const },
     include: {

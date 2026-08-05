@@ -7,12 +7,13 @@ import {
 } from "../../components/Badge";
 import {
   EMPTY_FLOTA_FILTERS,
+  ESTADO_CAMIONETA_LABEL,
   FlotaUnitFilterBar,
   filterCamionetas,
   type FlotaUnitFilters,
 } from "../../components/FlotaUnitFilterBar";
-import { Plus } from "../../components/icons";
-import { apiFetch, ApiError } from "../../lib/api";
+import { Download, Plus } from "../../components/icons";
+import { apiDownload, apiFetch, ApiError } from "../../lib/api";
 import {
   ALL_ROLES,
   ROLE_LABELS,
@@ -25,17 +26,50 @@ import {
   type Role,
   type SegmentoCliente,
   type TipoEmpresa,
+  type TipoServicio,
   type User,
 } from "../../types";
 import { FichaDrawer } from "./FichaDrawer";
 import { Field, FormModal, inputClass } from "./FormModal";
 
-type Tab = "camioneta" | "chofer" | "clientes" | "empresas" | "usuarios";
+type Tab =
+  | "camioneta"
+  | "chofer"
+  | "clientes"
+  | "empresas"
+  | "usuarios"
+  | "tiposServicio";
 
 type DrawerOpen =
   | { tipo: "camioneta"; item: Camioneta }
   | { tipo: "chofer"; item: Chofer }
   | null;
+
+type CreateKind =
+  | "camioneta"
+  | "chofer"
+  | "cliente"
+  | "empresa"
+  | "usuario"
+  | "tipoServicio";
+
+const CREATE_KIND_BY_TAB: Record<Tab, CreateKind | null> = {
+  camioneta: "camioneta",
+  chofer: "chofer",
+  clientes: "cliente",
+  empresas: "empresa",
+  usuarios: "usuario",
+  tiposServicio: "tipoServicio",
+};
+
+const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
+  camioneta: "camioneta",
+  chofer: "chofer",
+  clientes: "cliente",
+  empresas: "empresa",
+  usuarios: "usuario",
+  tiposServicio: "tipo de servicio",
+};
 
 export function M5FichaPage() {
   const { token, user } = useAuth();
@@ -50,11 +84,13 @@ export function M5FichaPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [usuarios, setUsuarios] = useState<User[]>([]);
+  const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([]);
 
   const [drawer, setDrawer] = useState<DrawerOpen>(null);
   const [unitFilters, setUnitFilters] =
     useState<FlotaUnitFilters>(EMPTY_FLOTA_FILTERS);
   const [choferQuery, setChoferQuery] = useState("");
+  const [exportando, setExportando] = useState(false);
   const [form, setForm] = useState<
     | null
     | { kind: "cliente"; item?: Cliente }
@@ -62,6 +98,7 @@ export function M5FichaPage() {
     | { kind: "empresa"; item?: Empresa }
     | { kind: "camioneta"; item?: Camioneta }
     | { kind: "usuario"; item?: User }
+    | { kind: "tipoServicio"; item?: TipoServicio }
   >(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -86,11 +123,16 @@ export function M5FichaPage() {
   const [fMarca, setFMarca] = useState("");
   const [fModelo, setFModelo] = useState("");
   const [fAnio, setFAnio] = useState("");
-  const [fColor, setFColor] = useState("");
+  const [fEquipoFrio, setFEquipoFrio] = useState("");
+  const [fCapacidad, setFCapacidad] = useState("");
   const [fTipoTransporte, setFTipoTransporte] = useState<string>("");
+  const [fTipoServicioId, setFTipoServicioId] = useState("");
   const [fDatosTecnicos, setFDatosTecnicos] = useState("");
   const [fKm, setFKm] = useState("0");
   const [fAceite, setFAceite] = useState("");
+  const [fCorrea, setFCorrea] = useState("");
+  const [fNeumaticos, setFNeumaticos] = useState("");
+  const [fBateria, setFBateria] = useState("");
   const [fSeguroCia, setFSeguroCia] = useState("");
   const [fSeguroVenc, setFSeguroVenc] = useState("");
   const [fVtbVenc, setFVtbVenc] = useState("");
@@ -105,24 +147,28 @@ export function M5FichaPage() {
   const [fEstadoUser, setFEstadoUser] = useState<"ACTIVO" | "INACTIVO">(
     "ACTIVO"
   );
+  const [fTsNombre, setFTsNombre] = useState("");
+  const [fTsOrden, setFTsOrden] = useState("0");
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const [cami, chof, cli, emp, usu] = await Promise.all([
+      const [cami, chof, cli, emp, usu, tServ] = await Promise.all([
         apiFetch<Camioneta[]>("/api/camionetas", {}, token),
         apiFetch<Chofer[]>("/api/choferes", {}, token),
         apiFetch<Cliente[]>("/api/clientes", {}, token),
         apiFetch<Empresa[]>("/api/empresas", {}, token),
         apiFetch<User[]>("/api/usuarios", {}, token),
+        apiFetch<TipoServicio[]>("/api/tipos-servicio", {}, token),
       ]);
       setCamionetas(cami);
       setChoferes(chof);
       setClientes(cli);
       setEmpresas(emp);
       setUsuarios(usu);
+      setTiposServicio(tServ);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar datos");
     } finally {
@@ -154,11 +200,16 @@ export function M5FichaPage() {
     setFMarca("");
     setFModelo("");
     setFAnio("");
-    setFColor("");
+    setFEquipoFrio("");
+    setFCapacidad("");
     setFTipoTransporte("");
+    setFTipoServicioId("");
     setFDatosTecnicos("");
     setFKm("0");
     setFAceite("");
+    setFCorrea("");
+    setFNeumaticos("");
+    setFBateria("");
     setFSeguroCia("");
     setFSeguroVenc("");
     setFVtbVenc("");
@@ -169,6 +220,8 @@ export function M5FichaPage() {
     setFPassword("");
     setFRol("CLIENTE");
     setFEstadoUser("ACTIVO");
+    setFTsNombre("");
+    setFTsOrden("0");
     setForm({ kind });
   }
 
@@ -213,12 +266,23 @@ export function M5FichaPage() {
     setFMarca(item.marca ?? "");
     setFModelo(item.modelo ?? "");
     setFAnio(item.anio != null ? String(item.anio) : "");
-    setFColor(item.color ?? "");
+    setFEquipoFrio(item.equipoFrio ?? "");
+    setFCapacidad(item.capacidad ?? "");
     setFTipoTransporte(item.tipoTransporte ?? "");
+    setFTipoServicioId(item.tipoServicioId ?? "");
     setFDatosTecnicos(item.datosTecnicos ?? "");
     setFKm(String(item.km));
     setFAceite(
       item.fechaUltimoAceite ? item.fechaUltimoAceite.slice(0, 10) : ""
+    );
+    setFCorrea(
+      item.fechaCambioCorrea ? item.fechaCambioCorrea.slice(0, 10) : ""
+    );
+    setFNeumaticos(
+      item.fechaCambioNeumaticos ? item.fechaCambioNeumaticos.slice(0, 10) : ""
+    );
+    setFBateria(
+      item.fechaCambioBateria ? item.fechaCambioBateria.slice(0, 10) : ""
     );
     setFSeguroCia(item.seguroCompania ?? "");
     setFSeguroVenc(
@@ -341,11 +405,16 @@ export function M5FichaPage() {
           marca: fMarca || null,
           modelo: fModelo || null,
           anio: fAnio ? Number(fAnio) : null,
-          color: fColor || null,
+          equipoFrio: fEquipoFrio || null,
+          capacidad: fCapacidad || null,
           tipoTransporte: fTipoTransporte || null,
+          tipoServicioId: fTipoServicioId || null,
           datosTecnicos: fDatosTecnicos || null,
           km: Number(fKm) || 0,
           fechaUltimoAceite: fAceite || null,
+          fechaCambioCorrea: fCorrea || null,
+          fechaCambioNeumaticos: fNeumaticos || null,
+          fechaCambioBateria: fBateria || null,
           seguroCompania: fSeguroCia || null,
           seguroVencimiento: fSeguroVenc || null,
           vtbVencimiento: fVtbVenc || null,
@@ -363,11 +432,16 @@ export function M5FichaPage() {
                 marca: body.marca,
                 modelo: body.modelo,
                 anio: body.anio,
-                color: body.color,
+                equipoFrio: body.equipoFrio,
+                capacidad: body.capacidad,
                 tipoTransporte: body.tipoTransporte,
+                tipoServicioId: body.tipoServicioId,
                 datosTecnicos: body.datosTecnicos,
                 km: body.km,
                 fechaUltimoAceite: body.fechaUltimoAceite,
+                fechaCambioCorrea: body.fechaCambioCorrea,
+                fechaCambioNeumaticos: body.fechaCambioNeumaticos,
+                fechaCambioBateria: body.fechaCambioBateria,
                 seguroCompania: body.seguroCompania,
                 seguroVencimiento: body.seguroVencimiento,
                 vtbVencimiento: body.vtbVencimiento,
@@ -414,6 +488,27 @@ export function M5FichaPage() {
         }
       }
 
+      if (form.kind === "tipoServicio") {
+        const nombre = fTsNombre.trim();
+        if (!nombre) {
+          setFormError("Nombre obligatorio");
+          return;
+        }
+        const created = await apiFetch<TipoServicio>(
+          "/api/tipos-servicio",
+          {
+            method: "POST",
+            body: JSON.stringify({ nombre, orden: Number(fTsOrden) || 0 }),
+          },
+          token
+        );
+        setTiposServicio((prev) =>
+          [...prev, created].sort(
+            (a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
+          )
+        );
+      }
+
       if (form.kind === "usuario") {
         const body: Record<string, unknown> = {
           email: fEmail,
@@ -455,29 +550,91 @@ export function M5FichaPage() {
   }
 
   async function deleteEntity(
-    kind: "cliente" | "chofer" | "empresa" | "camioneta" | "usuario",
+    kind: "cliente" | "empresa" | "usuario",
     id: string
   ) {
     if (!token || !canEdit) return;
     if (!confirm("¿Eliminar este registro?")) return;
     const paths = {
       cliente: `/api/clientes/${id}`,
-      chofer: `/api/choferes/${id}`,
       empresa: `/api/empresas/${id}`,
-      camioneta: `/api/camionetas/${id}`,
       usuario: `/api/usuarios/${id}`,
     };
     try {
       await apiFetch(paths[kind], { method: "DELETE" }, token);
       if (kind === "cliente") setClientes((p) => p.filter((x) => x.id !== id));
-      if (kind === "chofer") setChoferes((p) => p.filter((x) => x.id !== id));
       if (kind === "empresa") setEmpresas((p) => p.filter((x) => x.id !== id));
-      if (kind === "camioneta")
-        setCamionetas((p) => p.filter((x) => x.id !== id));
       if (kind === "usuario") setUsuarios((p) => p.filter((x) => x.id !== id));
-      setDrawer(null);
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo eliminar");
+    }
+  }
+
+  /** Baja lógica: chofer → INACTIVO (DELETE /choferes/:id), camioneta → FUERA_SERVICIO (POST /baja). */
+  async function darDeBaja(tipo: "camioneta" | "chofer", id: string) {
+    if (!token || !canEdit) return;
+    if (
+      !confirm(
+        "¿Dar de baja este registro? Queda inactivo pero conserva su historial."
+      )
+    ) {
+      return;
+    }
+    try {
+      if (tipo === "chofer") {
+        const updated = await apiFetch<Chofer>(
+          `/api/choferes/${id}`,
+          { method: "DELETE" },
+          token
+        );
+        setChoferes((prev) => prev.map((x) => (x.id === id ? updated : x)));
+        if (drawer?.tipo === "chofer" && drawer.item.id === id) {
+          setDrawer({ tipo: "chofer", item: updated });
+        }
+      } else {
+        const updated = await apiFetch<Camioneta>(
+          `/api/camionetas/${id}/baja`,
+          { method: "POST" },
+          token
+        );
+        setCamionetas((prev) => prev.map((x) => (x.id === id ? updated : x)));
+        if (drawer?.tipo === "camioneta" && drawer.item.id === id) {
+          setDrawer({ tipo: "camioneta", item: updated });
+        }
+      }
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo dar de baja");
+    }
+  }
+
+  async function toggleTipoServicio(item: TipoServicio) {
+    if (!token || !canEdit) return;
+    try {
+      const updated = await apiFetch<TipoServicio>(
+        `/api/tipos-servicio/${item.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ activo: !item.activo }),
+        },
+        token
+      );
+      setTiposServicio((prev) =>
+        prev.map((t) => (t.id === updated.id ? updated : t))
+      );
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo actualizar");
+    }
+  }
+
+  async function exportarExcel() {
+    if (!token) return;
+    setExportando(true);
+    try {
+      await apiDownload("/api/camionetas/export", token, "unidades.xlsx");
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo exportar");
+    } finally {
+      setExportando(false);
     }
   }
 
@@ -487,6 +644,7 @@ export function M5FichaPage() {
     { id: "clientes", label: "Clientes" },
     { id: "empresas", label: "Empresas" },
     { id: "usuarios", label: "Usuarios" },
+    { id: "tiposServicio", label: "Tipos de servicio" },
   ];
 
   const camionetasFiltradas = useMemo(
@@ -504,7 +662,7 @@ export function M5FichaPage() {
         c.cuil,
         c.email,
         c.telefono,
-        c.esDuenoFlota ? "dueño titular" : "",
+        c.esDuenoFlota ? "empresa de transporte" : "",
       ]
         .filter(Boolean)
         .join(" ")
@@ -547,39 +705,31 @@ export function M5FichaPage() {
         ))}
       </div>
 
-      {canEdit && (
-        <div className="mb-4">
-          {(tab === "camioneta" || tab === "chofer" || tab === "clientes" || tab === "empresas" || tab === "usuarios") && (
+      {(canEdit || tab === "camioneta") && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {canEdit && CREATE_KIND_BY_TAB[tab] && (
             <button
               type="button"
-              onClick={() =>
-                openCreate(
-                  tab === "camioneta"
-                    ? "camioneta"
-                    : tab === "chofer"
-                      ? "chofer"
-                      : tab === "clientes"
-                        ? "cliente"
-                        : tab === "empresas"
-                          ? "empresa"
-                          : "usuario"
-                )
-              }
+              onClick={() => openCreate(CREATE_KIND_BY_TAB[tab]!)}
               className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
             >
               <Plus size={14} />
-              Nuevo{" "}
-              {tab === "camioneta"
-                ? "camioneta"
-                : tab === "chofer"
-                  ? "chofer"
-                  : tab === "clientes"
-                    ? "cliente"
-                    : tab === "empresas"
-                      ? "empresa"
-                      : "usuario"}
+              Nuevo {CREATE_LABEL_BY_TAB[tab]}
             </button>
           )}
+          {tab === "camioneta" &&
+            user?.rol !== "CHOFER" &&
+            user?.rol !== "CLIENTE" && (
+              <button
+                type="button"
+                onClick={() => void exportarExcel()}
+                disabled={exportando}
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm font-medium text-[var(--vl-text)] hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
+              >
+                <Download size={14} />
+                {exportando ? "Exportando…" : "Exportar Excel"}
+              </button>
+            )}
         </div>
       )}
 
@@ -631,11 +781,17 @@ export function M5FichaPage() {
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
-                        {c.estado.replace("_", " ").toLowerCase()}
+                        {ESTADO_CAMIONETA_LABEL[c.estado]}
                       </Badge>
-                      {c.tipoTransporte && (
+                      {(c.tipoServicio?.nombre || c.tipoTransporte) && (
                         <span className="text-[var(--vl-text-muted)]">
-                          {c.tipoTransporte.replace(/_/g, " ").toLowerCase()}
+                          {c.tipoServicio?.nombre ||
+                            c.tipoTransporte?.replace(/_/g, " ").toLowerCase()}
+                        </span>
+                      )}
+                      {c.capacidad && (
+                        <span className="text-[var(--vl-text-muted)]">
+                          {c.capacidad}
                         </span>
                       )}
                       {canEdit && (
@@ -655,6 +811,25 @@ export function M5FichaPage() {
                           className="text-slate-400 underline-offset-2 hover:text-slate-700 hover:underline"
                         >
                           Editar
+                        </span>
+                      )}
+                      {canEdit && c.estado !== "FUERA_SERVICIO" && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void darDeBaja("camioneta", c.id);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.stopPropagation();
+                              void darDeBaja("camioneta", c.id);
+                            }
+                          }}
+                          className="text-red-400 underline-offset-2 hover:text-red-700 hover:underline"
+                        >
+                          Dar de baja
                         </span>
                       )}
                     </div>
@@ -694,7 +869,7 @@ export function M5FichaPage() {
                 <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
                   DNI {c.dni}
                   {c.cuil ? ` · CUIL ${c.cuil}` : ""}
-                  {c.esDuenoFlota ? " · titular" : ""}
+                  {c.esDuenoFlota ? " · empresa de transporte" : ""}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>
@@ -717,6 +892,25 @@ export function M5FichaPage() {
                       className="text-slate-400 underline-offset-2 hover:text-slate-700 hover:underline"
                     >
                       Editar
+                    </span>
+                  )}
+                  {canEdit && c.estado === "ACTIVO" && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void darDeBaja("chofer", c.id);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.stopPropagation();
+                          void darDeBaja("chofer", c.id);
+                        }
+                      }}
+                      className="text-red-400 underline-offset-2 hover:text-red-700 hover:underline"
+                    >
+                      Dar de baja
                     </span>
                   )}
                 </div>
@@ -785,6 +979,34 @@ export function M5FichaPage() {
         />
       )}
 
+      {!loading && !error && tab === "tiposServicio" && (
+        <EntityTable
+          headers={["Nombre", "Orden", "Estado", ""]}
+          rows={tiposServicio.map((t) => [
+            t.nombre,
+            String(t.orden),
+            t.activo ? "Activo" : "Inactivo",
+            canEdit ? (
+              <div className="flex justify-end text-xs">
+                <button
+                  type="button"
+                  onClick={() => void toggleTipoServicio(t)}
+                  className={
+                    t.activo
+                      ? "text-red-500 hover:text-red-700"
+                      : "text-emerald-600 hover:text-emerald-800"
+                  }
+                >
+                  {t.activo ? "Desactivar" : "Activar"}
+                </button>
+              </div>
+            ) : (
+              ""
+            ),
+          ])}
+        />
+      )}
+
       {drawer && (
         <FichaDrawer
           open={drawer}
@@ -792,6 +1014,7 @@ export function M5FichaPage() {
           choferes={choferes}
           empresas={empresas}
           canEdit={canEdit}
+          onBaja={(tipo, id) => void darDeBaja(tipo, id)}
           onUpdated={(tipo, item) => {
             if (tipo === "camioneta") {
               const c = item as Camioneta;
@@ -812,8 +1035,8 @@ export function M5FichaPage() {
         <FormModal
           title={
             form.item
-              ? `Editar ${form.kind}`
-              : `Nuevo ${form.kind}`
+              ? `Editar ${form.kind === "tipoServicio" ? "tipo de servicio" : form.kind}`
+              : `Nuevo ${form.kind === "tipoServicio" ? "tipo de servicio" : form.kind}`
           }
           onClose={() => setForm(null)}
           onSubmit={submitForm}
@@ -916,7 +1139,7 @@ export function M5FichaPage() {
                     checked={fEsDueno}
                     onChange={(e) => setFEsDueno(e.target.checked)}
                   />
-                  Dueño de empresa (ve todas las unidades)
+                  Empresa de transporte (ve todas las unidades)
                 </label>
               </Field>
               <Field label="Estado">
@@ -1021,14 +1244,40 @@ export function M5FichaPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Color">
+              <Field label="Equipo de frío">
                 <input
                   className={inputClass}
-                  value={fColor}
-                  onChange={(e) => setFColor(e.target.value)}
+                  value={fEquipoFrio}
+                  onChange={(e) => setFEquipoFrio(e.target.value)}
+                  placeholder="Ej: Carrier Xarios 600"
+                />
+              </Field>
+              <Field label="Capacidad">
+                <input
+                  className={inputClass}
+                  value={fCapacidad}
+                  onChange={(e) => setFCapacidad(e.target.value)}
+                  placeholder="Ej: 3500 kg"
                 />
               </Field>
               <Field label="Tipo de servicio">
+                <select
+                  className={inputClass}
+                  value={fTipoServicioId}
+                  onChange={(e) => setFTipoServicioId(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {tiposServicio
+                    .filter((t) => t.activo || t.id === fTipoServicioId)
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nombre}
+                        {!t.activo ? " (inactivo)" : ""}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              <Field label="Clasificación (legado)">
                 <select
                   className={inputClass}
                   value={fTipoTransporte}
@@ -1064,6 +1313,30 @@ export function M5FichaPage() {
                   onChange={(e) => setFAceite(e.target.value)}
                 />
               </Field>
+              <Field label="Último cambio de correa">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={fCorrea}
+                  onChange={(e) => setFCorrea(e.target.value)}
+                />
+              </Field>
+              <Field label="Último cambio de neumáticos">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={fNeumaticos}
+                  onChange={(e) => setFNeumaticos(e.target.value)}
+                />
+              </Field>
+              <Field label="Último cambio de batería">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={fBateria}
+                  onChange={(e) => setFBateria(e.target.value)}
+                />
+              </Field>
               <Field label="Compañía de seguro">
                 <input
                   className={inputClass}
@@ -1079,7 +1352,7 @@ export function M5FichaPage() {
                   onChange={(e) => setFSeguroVenc(e.target.value)}
                 />
               </Field>
-              <Field label="Vencimiento VTB">
+              <Field label="Vencimiento VTV">
                 <input
                   type="date"
                   className={inputClass}
@@ -1131,10 +1404,31 @@ export function M5FichaPage() {
                   {choferes.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.nombre}
-                      {c.esDuenoFlota ? " (dueño)" : ""}
+                      {c.esDuenoFlota ? " (empresa transp.)" : ""}
                     </option>
                   ))}
                 </select>
+              </Field>
+            </>
+          )}
+
+          {form.kind === "tipoServicio" && (
+            <>
+              <Field label="Nombre">
+                <input
+                  className={inputClass}
+                  value={fTsNombre}
+                  onChange={(e) => setFTsNombre(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Orden">
+                <input
+                  type="number"
+                  className={inputClass}
+                  value={fTsOrden}
+                  onChange={(e) => setFTsOrden(e.target.value)}
+                />
               </Field>
             </>
           )}

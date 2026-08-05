@@ -1,4 +1,5 @@
 import { Router } from "express";
+import ExcelJS from "exceljs";
 import { EstadoCamioneta, TipoTransporte } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import {
@@ -12,6 +13,7 @@ const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
 
 const includeAsignaciones = {
+  tipoServicio: true,
   asignaciones: {
     orderBy: { periodoDesde: "desc" as const },
     include: {
@@ -35,16 +37,26 @@ function parseTipoTransporte(raw: unknown): TipoTransporte | null | undefined {
   return s as TipoTransporte;
 }
 
+function strOrNull(v: unknown): string | null {
+  if (v === undefined || v === null || v === "") return null;
+  return String(v).trim() || null;
+}
+
 router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
+    const incluirBajas = String(req.query.incluirBajas ?? "") === "1";
     const me = await prisma.usuario.findUnique({ where: { id: req.user!.id } });
     if (me?.rol === "CHOFER") {
-      const items = await camionetasParaUsuarioChofer(me.id);
+      let items = await camionetasParaUsuarioChofer(me.id);
+      if (!incluirBajas) {
+        items = items.filter((c) => c.estado !== "FUERA_SERVICIO");
+      }
       res.json(items);
       return;
     }
 
     const items = await prisma.camioneta.findMany({
+      where: incluirBajas ? undefined : { estado: { not: "FUERA_SERVICIO" } },
       orderBy: { patente: "asc" },
       include: includeAsignaciones,
     });
@@ -52,6 +64,80 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al listar camionetas" });
+  }
+});
+
+router.get("/export", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (req.user!.rol === "CHOFER" || req.user!.rol === "CLIENTE") {
+      res.status(403).json({ error: "Sin permiso para exportar" });
+      return;
+    }
+    const items = await prisma.camioneta.findMany({
+      orderBy: { patente: "asc" },
+      include: {
+        tipoServicio: true,
+        asignaciones: {
+          where: { periodoHasta: null },
+          include: { chofer: true, empresa: true },
+          take: 1,
+        },
+        solicitudes: {
+          where: { ordenTrabajo: { cerradaAt: null } },
+          include: { ordenTrabajo: { select: { numeroOT: true, currentStep: true } } },
+          take: 1,
+        },
+      },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Unidades");
+    sheet.columns = [
+      { header: "Patente", key: "patente", width: 12 },
+      { header: "Marca", key: "marca", width: 14 },
+      { header: "Modelo", key: "modelo", width: 14 },
+      { header: "Capacidad", key: "capacidad", width: 14 },
+      { header: "Equipo de frío", key: "equipoFrio", width: 18 },
+      { header: "Tipo servicio", key: "tipoServicio", width: 16 },
+      { header: "Estado", key: "estado", width: 16 },
+      { header: "Km", key: "km", width: 10 },
+      { header: "Chofer", key: "chofer", width: 22 },
+      { header: "Empresa", key: "empresa", width: 24 },
+      { header: "OT abierta", key: "ot", width: 14 },
+      { header: "Paso OT", key: "paso", width: 10 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+
+    for (const c of items) {
+      const a = c.asignaciones[0];
+      const sol = c.solicitudes[0];
+      sheet.addRow({
+        patente: c.patente,
+        marca: c.marca ?? "",
+        modelo: c.modelo ?? "",
+        capacidad: c.capacidad ?? "",
+        equipoFrio: c.equipoFrio ?? "",
+        tipoServicio: c.tipoServicio?.nombre ?? c.tipoTransporte ?? "",
+        estado: c.estado,
+        km: c.km,
+        chofer: a?.chofer?.nombre ?? "",
+        empresa: a?.empresa?.nombre ?? "",
+        ot: sol?.ordenTrabajo?.numeroOT ?? "",
+        paso: sol?.ordenTrabajo?.currentStep ?? "",
+      });
+    }
+
+    const filename = `unidades_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al exportar Excel" });
   }
 });
 
@@ -99,25 +185,28 @@ router.post("/", ...write, async (req, res) => {
       return;
     }
     const km = Number(req.body?.km ?? 0);
+    const equipoFrio =
+      strOrNull(req.body?.equipoFrio) ?? strOrNull(req.body?.color);
     const item = await prisma.camioneta.create({
       data: {
         patente,
-        marca: req.body?.marca ? String(req.body.marca).trim() : null,
-        modelo: req.body?.modelo ? String(req.body.modelo).trim() : null,
+        marca: strOrNull(req.body?.marca),
+        modelo: strOrNull(req.body?.modelo),
         anio: (() => {
           const a = Number(req.body?.anio);
           return Number.isFinite(a) ? Math.floor(a) : null;
         })(),
-        color: req.body?.color ? String(req.body.color).trim() : null,
+        equipoFrio,
+        capacidad: strOrNull(req.body?.capacidad),
         tipoTransporte: tipo === undefined ? null : tipo,
-        datosTecnicos: req.body?.datosTecnicos
-          ? String(req.body.datosTecnicos).trim()
-          : null,
+        tipoServicioId: strOrNull(req.body?.tipoServicioId),
+        datosTecnicos: strOrNull(req.body?.datosTecnicos),
         km: Number.isFinite(km) ? Math.max(0, Math.floor(km)) : 0,
         fechaUltimoAceite: parseDate(req.body?.fechaUltimoAceite),
-        seguroCompania: req.body?.seguroCompania
-          ? String(req.body.seguroCompania).trim()
-          : null,
+        fechaCambioCorrea: parseDate(req.body?.fechaCambioCorrea),
+        fechaCambioNeumaticos: parseDate(req.body?.fechaCambioNeumaticos),
+        fechaCambioBateria: parseDate(req.body?.fechaCambioBateria),
+        seguroCompania: strOrNull(req.body?.seguroCompania),
         seguroVencimiento: parseDate(req.body?.seguroVencimiento),
         vtbVencimiento: parseDate(req.body?.vtbVencimiento),
         estado: estadoRaw as EstadoCamioneta,
@@ -174,12 +263,8 @@ router.put("/:id", ...write, async (req, res) => {
     if (req.body?.patente !== undefined) {
       data.patente = String(req.body.patente).trim().toUpperCase();
     }
-    if (req.body?.marca !== undefined) {
-      data.marca = req.body.marca ? String(req.body.marca).trim() : null;
-    }
-    if (req.body?.modelo !== undefined) {
-      data.modelo = req.body.modelo ? String(req.body.modelo).trim() : null;
-    }
+    if (req.body?.marca !== undefined) data.marca = strOrNull(req.body.marca);
+    if (req.body?.modelo !== undefined) data.modelo = strOrNull(req.body.modelo);
     if (req.body?.anio !== undefined) {
       if (req.body.anio === null || req.body.anio === "") {
         data.anio = null;
@@ -188,8 +273,15 @@ router.put("/:id", ...write, async (req, res) => {
         data.anio = Number.isFinite(anio) ? Math.floor(anio) : null;
       }
     }
-    if (req.body?.color !== undefined) {
-      data.color = req.body.color ? String(req.body.color).trim() : null;
+    if (req.body?.equipoFrio !== undefined || req.body?.color !== undefined) {
+      data.equipoFrio =
+        strOrNull(req.body?.equipoFrio) ?? strOrNull(req.body?.color);
+    }
+    if (req.body?.capacidad !== undefined) {
+      data.capacidad = strOrNull(req.body.capacidad);
+    }
+    if (req.body?.tipoServicioId !== undefined) {
+      data.tipoServicioId = strOrNull(req.body.tipoServicioId);
     }
     if (req.body?.tipoTransporte !== undefined) {
       const tipo = parseTipoTransporte(req.body.tipoTransporte);
@@ -200,21 +292,37 @@ router.put("/:id", ...write, async (req, res) => {
       data.tipoTransporte = tipo ?? null;
     }
     if (req.body?.datosTecnicos !== undefined) {
-      data.datosTecnicos = req.body.datosTecnicos
-        ? String(req.body.datosTecnicos).trim()
-        : null;
+      data.datosTecnicos = strOrNull(req.body.datosTecnicos);
     }
     if (req.body?.km !== undefined) {
       const km = Number(req.body.km);
-      data.km = Number.isFinite(km) ? Math.max(0, Math.floor(km)) : existing.km;
+      if (!Number.isFinite(km) || km < 0) {
+        res.status(400).json({ error: "Kilometraje inválido" });
+        return;
+      }
+      const next = Math.floor(km);
+      if (next < existing.km) {
+        res.status(400).json({
+          error: `El kilometraje no puede ser menor al actual (${existing.km} km)`,
+        });
+        return;
+      }
+      data.km = next;
     }
     if (req.body?.fechaUltimoAceite !== undefined) {
       data.fechaUltimoAceite = parseDate(req.body.fechaUltimoAceite);
     }
+    if (req.body?.fechaCambioCorrea !== undefined) {
+      data.fechaCambioCorrea = parseDate(req.body.fechaCambioCorrea);
+    }
+    if (req.body?.fechaCambioNeumaticos !== undefined) {
+      data.fechaCambioNeumaticos = parseDate(req.body.fechaCambioNeumaticos);
+    }
+    if (req.body?.fechaCambioBateria !== undefined) {
+      data.fechaCambioBateria = parseDate(req.body.fechaCambioBateria);
+    }
     if (req.body?.seguroCompania !== undefined) {
-      data.seguroCompania = req.body.seguroCompania
-        ? String(req.body.seguroCompania).trim()
-        : null;
+      data.seguroCompania = strOrNull(req.body.seguroCompania);
     }
     if (req.body?.seguroVencimiento !== undefined) {
       data.seguroVencimiento = parseDate(req.body.seguroVencimiento);
@@ -251,10 +359,6 @@ router.put("/:id", ...write, async (req, res) => {
   }
 });
 
-/**
- * Chofer (o dueño flota) actualiza km y último cambio de aceite.
- * Impacta directamente el ABM de la unidad.
- */
 router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res) => {
   try {
     const camionetaId = req.params.id;
@@ -267,7 +371,9 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
     }
 
     const rol = req.user!.rol;
-    const isMaster = MASTER_WRITE_ROLES.includes(rol as (typeof MASTER_WRITE_ROLES)[number]);
+    const isMaster = MASTER_WRITE_ROLES.includes(
+      rol as (typeof MASTER_WRITE_ROLES)[number]
+    );
     if (rol === "CHOFER") {
       const ok = await choferPuedeEditarCamioneta(req.user!.id, camionetaId);
       if (!ok) {
@@ -279,20 +385,38 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
       return;
     }
 
-    const data: { km?: number; fechaUltimoAceite?: Date | null } = {};
+    const data: Record<string, unknown> = {};
     if (req.body?.km !== undefined) {
       const km = Number(req.body.km);
       if (!Number.isFinite(km) || km < 0) {
         res.status(400).json({ error: "Kilometraje inválido" });
         return;
       }
-      data.km = Math.floor(km);
+      const next = Math.floor(km);
+      if (next < existing.km) {
+        res.status(400).json({
+          error: `El kilometraje no puede ser menor al actual (${existing.km} km)`,
+        });
+        return;
+      }
+      data.km = next;
     }
     if (req.body?.fechaUltimoAceite !== undefined) {
       data.fechaUltimoAceite = parseDate(req.body.fechaUltimoAceite);
     }
-    if (data.km === undefined && data.fechaUltimoAceite === undefined) {
-      res.status(400).json({ error: "Indicá km y/o fecha de aceite" });
+    if (req.body?.fechaCambioCorrea !== undefined) {
+      data.fechaCambioCorrea = parseDate(req.body.fechaCambioCorrea);
+    }
+    if (req.body?.fechaCambioNeumaticos !== undefined) {
+      data.fechaCambioNeumaticos = parseDate(req.body.fechaCambioNeumaticos);
+    }
+    if (req.body?.fechaCambioBateria !== undefined) {
+      data.fechaCambioBateria = parseDate(req.body.fechaCambioBateria);
+    }
+    if (Object.keys(data).length === 0) {
+      res.status(400).json({
+        error: "Indicá km y/o fechas de mantenimiento (aceite, correa, neumáticos, batería)",
+      });
       return;
     }
 
@@ -367,13 +491,28 @@ router.post("/:id/asignacion", ...write, async (req, res) => {
   }
 });
 
+/** Soft delete: marca FUERA_SERVICIO */
+router.post("/:id/baja", ...write, async (req, res) => {
+  try {
+    const item = await prisma.camioneta.update({
+      where: { id: req.params.id },
+      data: { estado: EstadoCamioneta.FUERA_SERVICIO },
+      include: includeAsignaciones,
+    });
+    res.json(item);
+  } catch {
+    res.status(404).json({ error: "Camioneta no encontrada" });
+  }
+});
+
 router.delete("/:id", ...write, async (req, res) => {
   try {
-    await prisma.asignacionFlota.deleteMany({
-      where: { camionetaId: req.params.id },
+    const item = await prisma.camioneta.update({
+      where: { id: req.params.id },
+      data: { estado: EstadoCamioneta.FUERA_SERVICIO },
+      include: includeAsignaciones,
     });
-    await prisma.camioneta.delete({ where: { id: req.params.id } });
-    res.status(204).send();
+    res.json(item);
   } catch {
     res.status(404).json({ error: "Camioneta no encontrada" });
   }

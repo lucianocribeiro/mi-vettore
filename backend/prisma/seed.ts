@@ -19,6 +19,13 @@ import {
 const prisma = new PrismaClient();
 const DEMO_PASSWORD = "vettore123";
 
+const TIPOS_SERVICIO_SEED = [
+  { nombre: "Congelado", orden: 1 },
+  { nombre: "Supercongelado", orden: 2 },
+  { nombre: "Refrigerado", orden: 3 },
+  { nombre: "Seco", orden: 4 },
+];
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FLOTA_JSON = path.join(__dirname, "data", "flota-kairos.json");
 
@@ -103,6 +110,24 @@ async function main() {
   const flota = JSON.parse(
     fs.readFileSync(FLOTA_JSON, "utf-8")
   ) as FlotaJson;
+
+  // --- Tipos de servicio (ABM configurable) ---
+  const tipoServicioByEnum = new Map<TipoTransporte, string>();
+  const nombreToEnum: Record<string, TipoTransporte> = {
+    Congelado: TipoTransporte.CONGELADO,
+    Supercongelado: TipoTransporte.SUPERCONGELADO,
+    Refrigerado: TipoTransporte.REFRIGERADO,
+    Seco: TipoTransporte.SECO,
+  };
+  for (const t of TIPOS_SERVICIO_SEED) {
+    const row = await prisma.tipoServicio.upsert({
+      where: { nombre: t.nombre },
+      create: { nombre: t.nombre, orden: t.orden, activo: true },
+      update: { orden: t.orden, activo: true },
+    });
+    const enumKey = nombreToEnum[t.nombre];
+    if (enumKey) tipoServicioByEnum.set(enumKey, row.id);
+  }
 
   // --- Clientes demo (M2 / pedidos) ---
   const clientesSeed = [
@@ -247,6 +272,7 @@ async function main() {
       data: {
         patente: u.patente,
         tipoTransporte: tipo,
+        tipoServicioId: tipo ? tipoServicioByEnum.get(tipo) ?? null : null,
         datosTecnicos,
         estado: u.activo
           ? EstadoCamioneta.OPERATIVA

@@ -26,6 +26,7 @@ type Props = {
   choferes: Chofer[];
   empresas: Empresa[];
   canEdit: boolean;
+  onBaja?: (tipo: "camioneta" | "chofer", id: string) => void;
 };
 
 export function FichaDrawer({
@@ -35,6 +36,7 @@ export function FichaDrawer({
   choferes,
   empresas,
   canEdit,
+  onBaja,
 }: Props) {
   const { token } = useAuth();
   const [tab, setTab] = useState<"datos" | "historial">("datos");
@@ -161,10 +163,11 @@ export function FichaDrawer({
                     .join(" ") || "—"
                 }
               />
-              <Row label="Color" value={cam.color || "—"} />
+              <Row label="Equipo de frío" value={cam.equipoFrio || "—"} />
+              <Row label="Capacidad" value={cam.capacidad || "—"} />
               <Row
-                label="Tipo transporte"
-                value={cam.tipoTransporte?.toLowerCase() || "—"}
+                label="Tipo de servicio"
+                value={cam.tipoServicio?.nombre || cam.tipoTransporte?.toLowerCase() || "—"}
               />
               <Row
                 label="Kilometraje"
@@ -175,6 +178,18 @@ export function FichaDrawer({
                 value={formatDate(cam.fechaUltimoAceite)}
               />
               <Row
+                label="Últ. cambio de correa"
+                value={formatDate(cam.fechaCambioCorrea)}
+              />
+              <Row
+                label="Últ. cambio de neumáticos"
+                value={formatDate(cam.fechaCambioNeumaticos)}
+              />
+              <Row
+                label="Últ. cambio de batería"
+                value={formatDate(cam.fechaCambioBateria)}
+              />
+              <Row
                 label="Seguro"
                 value={
                   cam.seguroCompania
@@ -182,7 +197,7 @@ export function FichaDrawer({
                     : "—"
                 }
               />
-              <Row label="VTB vence" value={formatDate(cam.vtbVencimiento)} />
+              <Row label="VTV vence" value={formatDate(cam.vtbVencimiento)} />
               <Row
                 label="Datos técnicos"
                 value={cam.datosTecnicos || "—"}
@@ -265,6 +280,16 @@ export function FichaDrawer({
                   </div>
                 )}
               </div>
+
+              {canEdit && cam.estado !== "FUERA_SERVICIO" && onBaja && (
+                <button
+                  type="button"
+                  onClick={() => onBaja("camioneta", cam.id)}
+                  className="w-full rounded-md border border-red-300 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+                >
+                  Dar de baja unidad
+                </button>
+              )}
             </div>
           )}
 
@@ -281,7 +306,7 @@ export function FichaDrawer({
               <Row label="Email" value={ch.email || "—"} />
               <Row
                 label="Perfil"
-                value={ch.esDuenoFlota ? "Dueño de flota" : "Chofer"}
+                value={ch.esDuenoFlota ? "Empresa de transporte" : "Chofer"}
               />
               <div className="flex items-center justify-between gap-3">
                 <span className="text-[var(--vl-text-muted)]">Estado</span>
@@ -289,6 +314,16 @@ export function FichaDrawer({
                   {ch.estado.toLowerCase()}
                 </Badge>
               </div>
+
+              {canEdit && ch.estado === "ACTIVO" && onBaja && (
+                <button
+                  type="button"
+                  onClick={() => onBaja("chofer", ch.id)}
+                  className="w-full rounded-md border border-red-300 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+                >
+                  Dar de baja chofer
+                </button>
+              )}
             </div>
           )}
 

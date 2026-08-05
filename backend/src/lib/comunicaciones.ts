@@ -35,7 +35,7 @@ export type RunResult = {
   total: number;
 };
 
-function tipoLabel(tipo: TipoComunicacion): string {
+export function tipoLabel(tipo: TipoComunicacion): string {
   switch (tipo) {
     case TipoComunicacion.RESUMEN_09:
       return "Resumen 09:00";
@@ -43,6 +43,14 @@ function tipoLabel(tipo: TipoComunicacion): string {
       return "Oferta / disponibilidad 12:00";
     case TipoComunicacion.CONFIRMACION_15:
       return "Confirmación final 15:00";
+    case TipoComunicacion.RECORDATORIO_KM:
+      return "Recordatorio km (lunes)";
+    case TipoComunicacion.ALERTA_VTV:
+      return "Alerta VTV";
+    case TipoComunicacion.ALERTA_LICENCIA:
+      return "Alerta licencia";
+    default:
+      return String(tipo);
   }
 }
 
@@ -483,7 +491,11 @@ export async function runComunicacion(
       return runOferta12(from);
     case TipoComunicacion.CONFIRMACION_15:
       return runConfirmacion15(from);
+    case TipoComunicacion.RECORDATORIO_KM:
+    case TipoComunicacion.ALERTA_VTV:
+    case TipoComunicacion.ALERTA_LICENCIA:
+      throw new Error(
+        `Usá POST /api/comunicaciones/recordatorios para ${tipo}`
+      );
   }
 }
-
-export { tipoLabel };
