@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { isInternalOpsRole } from "../lib/roles.js";
+import { canViewSugerencias } from "../lib/roles.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
@@ -27,7 +27,7 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
 
 router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
-    if (!isInternalOpsRole(req.user!.rol)) {
+    if (!canViewSugerencias(req.user!.rol)) {
       res.status(403).json({ error: "Sin permiso para ver sugerencias" });
       return;
     }

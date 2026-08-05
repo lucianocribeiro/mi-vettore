@@ -88,8 +88,8 @@ const USERS: Array<{ email: string; rol: Role; nombre: string }> = [
   },
   {
     email: "francisco@vettore.test",
-    rol: Role.PATRICIO,
-    nombre: "Francisco (Sugerencias / Dirección)",
+    rol: Role.SUGERENCIAS,
+    nombre: "Francisco",
   },
 ];
 

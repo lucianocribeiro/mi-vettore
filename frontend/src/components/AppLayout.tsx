@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch, ApiError } from "../lib/api";
-import { isInternalOps } from "../types";
+import { canViewSugerencias, isSugerenciasOnly } from "../types";
 import { AppLogo } from "./AppLogo";
 import { MessageSquare, Menu, X } from "./icons";
 import { Sidebar } from "./Sidebar";
@@ -13,7 +13,8 @@ export function AppLayout() {
   const [sugerenciaOpen, setSugerenciaOpen] = useState(false);
   const { user, token } = useAuth();
   const navigate = useNavigate();
-  const ops = isInternalOps(user?.rol);
+  const canInbox = canViewSugerencias(user?.rol);
+  const onlySugerencias = isSugerenciasOnly(user?.rol);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -88,17 +89,17 @@ export function AppLayout() {
 
       </div>
 
-      {user && (
+      {user && !onlySugerencias && (
         <button
           type="button"
           onClick={() => {
-            if (ops) navigate("/sugerencias");
+            if (canInbox) navigate("/sugerencias");
             else setSugerenciaOpen(true);
           }}
           className="fixed bottom-5 right-5 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-[#1e4080] px-4 text-sm font-semibold text-white shadow-lg hover:bg-[#18356c] safe-bottom"
         >
           <MessageSquare size={16} />
-          {ops ? "Ver sugerencias" : "Sugerencia"}
+          {canInbox ? "Ver sugerencias" : "Sugerencia"}
         </button>
       )}
 

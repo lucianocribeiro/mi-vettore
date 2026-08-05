@@ -12,14 +12,14 @@ async function main() {
     create: {
       email,
       passwordHash,
-      rol: Role.PATRICIO,
-      nombre: "Francisco (Sugerencias / Dirección)",
+      rol: Role.SUGERENCIAS,
+      nombre: "Francisco",
       estado: "ACTIVO",
     },
     update: {
       passwordHash,
-      rol: Role.PATRICIO,
-      nombre: "Francisco (Sugerencias / Dirección)",
+      rol: Role.SUGERENCIAS,
+      nombre: "Francisco",
       estado: "ACTIVO",
     },
   });

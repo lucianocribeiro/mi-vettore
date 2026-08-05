@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch, ApiError } from "../lib/api";
-import { formatDate, isInternalOps } from "../types";
+import { formatDate, canViewSugerencias } from "../types";
 
 type Sugerencia = {
   id: string;
@@ -41,10 +41,10 @@ export function SugerenciasPage() {
     void load();
   }, [load]);
 
-  if (!isInternalOps(user?.rol)) {
+  if (!canViewSugerencias(user?.rol)) {
     return (
       <p className="text-sm text-[var(--vl-text-muted)]">
-        Solo roles internos pueden ver las sugerencias recibidas.
+        Solo roles autorizados pueden ver las sugerencias recibidas.
       </p>
     );
   }

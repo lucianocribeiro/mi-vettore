@@ -95,10 +95,10 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   {
     email: "francisco@vettore.test",
-    rol: "PATRICIO",
+    rol: "SUGERENCIAS",
     label: "Francisco · Sugerencias",
     home: "/sugerencias",
-    note: "Ver feedback de usuarios + dirección",
+    note: "Solo ve el inbox de feedback",
   },
 ];
 

@@ -49,6 +49,7 @@ const NAV: NavItem[] = [
       "PATRICIO",
       "JULIETA",
       "CARLA",
+      "SUGERENCIAS",
     ],
   },
   {
@@ -171,10 +172,12 @@ export function Sidebar({ open, onClose }: Props) {
       </div>
 
       <div className="px-3 pb-2">
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--vl-sidebar-border)] bg-[var(--vl-sidebar-search)] px-2.5 py-2.5 text-xs text-[var(--vl-nav-muted)]">
-          <Search size={14} />
-          <span>Buscar patente, DNI...</span>
-        </div>
+        {rol !== "SUGERENCIAS" && (
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--vl-sidebar-border)] bg-[var(--vl-sidebar-search)] px-2.5 py-2.5 text-xs text-[var(--vl-nav-muted)]">
+            <Search size={14} />
+            <span>Buscar patente, DNI...</span>
+          </div>
+        )}
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">

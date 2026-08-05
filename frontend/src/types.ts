@@ -6,7 +6,8 @@ export type Role =
   | "FACU"
   | "PATRICIO"
   | "JULIETA"
-  | "CARLA";
+  | "CARLA"
+  | "SUGERENCIAS";
 
 export type User = {
   id: string;
@@ -33,6 +34,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   PATRICIO: "Patricio (Dirección)",
   JULIETA: "Julieta (Dirección)",
   CARLA: "Carla (Administración)",
+  SUGERENCIAS: "Sugerencias",
 };
 
 export const ALL_ROLES = Object.keys(ROLE_LABELS) as Role[];
@@ -55,12 +57,26 @@ export const INTERNAL_OPS_ROLES: Role[] = [
   "CARLA",
 ];
 
+/** Pueden ver el inbox de sugerencias. */
+export const SUGERENCIAS_VIEW_ROLES: Role[] = [
+  ...INTERNAL_OPS_ROLES,
+  "SUGERENCIAS",
+];
+
 export function canWriteMaster(rol?: Role | null): boolean {
   return !!rol && MASTER_WRITE_ROLES.includes(rol);
 }
 
 export function isInternalOps(rol?: Role | null): boolean {
   return !!rol && INTERNAL_OPS_ROLES.includes(rol);
+}
+
+export function canViewSugerencias(rol?: Role | null): boolean {
+  return !!rol && SUGERENCIAS_VIEW_ROLES.includes(rol);
+}
+
+export function isSugerenciasOnly(rol?: Role | null): boolean {
+  return rol === "SUGERENCIAS";
 }
 
 export type SegmentoCliente = "ESTATICO" | "CONSULTA" | "CONFIRMACION";

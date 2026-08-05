@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import type { ReactNode } from "react";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { AppLayout } from "./components/AppLayout";
@@ -13,9 +14,19 @@ import { SugerenciasPage } from "./pages/SugerenciasPage";
 
 function HomeRedirect() {
   const { user } = useAuth();
+  if (user?.rol === "SUGERENCIAS") return <Navigate to="/sugerencias" replace />;
   if (user?.rol === "CLIENTE") return <Navigate to="/m2" replace />;
   if (user?.rol === "CHOFER") return <Navigate to="/m7" replace />;
   return <Navigate to="/m7" replace />;
+}
+
+/** Rol SUGERENCIAS solo puede estar en /sugerencias. */
+function SugerenciasOnlyGate({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (user?.rol === "SUGERENCIAS") {
+    return <Navigate to="/sugerencias" replace />;
+  }
+  return <>{children}</>;
 }
 
 export default function App() {
@@ -27,12 +38,54 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route index element={<HomeRedirect />} />
             <Route path="/m1" element={<Navigate to="/" replace />} />
-            <Route path="/m2" element={<M2CambiosPage />} />
-            <Route path="/m3" element={<M3ComunicacionesPage />} />
-            <Route path="/m4" element={<M4AlertasPage />} />
-            <Route path="/m5" element={<M5FichaPage />} />
-            <Route path="/m6" element={<M6MantenimientoPage />} />
-            <Route path="/m7" element={<M7TalleresPage />} />
+            <Route
+              path="/m2"
+              element={
+                <SugerenciasOnlyGate>
+                  <M2CambiosPage />
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
+              path="/m3"
+              element={
+                <SugerenciasOnlyGate>
+                  <M3ComunicacionesPage />
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
+              path="/m4"
+              element={
+                <SugerenciasOnlyGate>
+                  <M4AlertasPage />
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
+              path="/m5"
+              element={
+                <SugerenciasOnlyGate>
+                  <M5FichaPage />
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
+              path="/m6"
+              element={
+                <SugerenciasOnlyGate>
+                  <M6MantenimientoPage />
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
+              path="/m7"
+              element={
+                <SugerenciasOnlyGate>
+                  <M7TalleresPage />
+                </SugerenciasOnlyGate>
+              }
+            />
             <Route path="/sugerencias" element={<SugerenciasPage />} />
           </Route>
         </Route>
