@@ -100,7 +100,8 @@ export function canRetreat(rol: Role): boolean {
     rol === Role.SILVINA ||
     rol === Role.PATRICIO ||
     rol === Role.JULIETA ||
-    rol === Role.CARLA
+    rol === Role.CARLA ||
+    rol === Role.CHOFER
   );
 }
 

@@ -191,8 +191,13 @@ function canRetreat(rol?: Role | null) {
     rol === "SILVINA" ||
     rol === "PATRICIO" ||
     rol === "JULIETA" ||
-    rol === "CARLA"
+    rol === "CARLA" ||
+    rol === "CHOFER"
   );
+}
+
+function canOperateTalleres(rol?: Role | null) {
+  return canRetreat(rol);
 }
 
 function money(n: number | null | undefined) {
@@ -468,9 +473,19 @@ export function M7TalleresPage() {
 
   async function avanzar(overrideComentarioArg?: string) {
     if (!token || !ot) return;
+    const indicated = canAdvanceFromStep(rol, ot.currentStep);
+    if (!indicated && !overrideComentarioArg) {
+      setOverrideComentario("");
+      setOverrideReq({
+        message:
+          "No sos el rol indicado para esta etapa. Podés continuar igual, pero tenés que indicar el motivo.",
+        run: (c) => avanzar(c),
+      });
+      return;
+    }
     setBusy(true);
     try {
-      if (ot.currentStep === 3 && rol === "FACU" && elegidoId) {
+      if (ot.currentStep === 3 && elegidoId) {
         await apiFetch<OrdenTrabajo>(
           `/api/talleres/${ot.id}`,
           {
@@ -479,6 +494,7 @@ export function M7TalleresPage() {
               presupuestoElegidoId: elegidoId,
               montoAutorizado: Number(montoAuthDraft),
               plazoEntrega: plazoDraft || undefined,
+              overrideComentario: overrideComentarioArg,
             }),
           },
           token
@@ -505,6 +521,15 @@ export function M7TalleresPage() {
 
   async function cerrarOt(overrideComentarioArg?: string) {
     if (!token || !ot) return;
+    if (!canCerrarOt(rol) && !overrideComentarioArg) {
+      setOverrideComentario("");
+      setOverrideReq({
+        message:
+          "El cierre de pago es habitualmente de Silvina/Carla. Podés cerrarlo igual indicando el motivo.",
+        run: (c) => cerrarOt(c),
+      });
+      return;
+    }
     setBusy(true);
     try {
       const updated = await apiFetch<OrdenTrabajo>(
@@ -516,9 +541,8 @@ export function M7TalleresPage() {
         token
       );
       replaceOt(updated);
-      alert("Pago cerrado. Aviso enviado a Silvina y Carla.");
     } catch (err) {
-      handleActionError(err, (c) => cerrarOt(c), "No se pudo cerrar");
+      handleActionError(err, (c) => cerrarOt(c), "No se pudo cerrar el pago");
     } finally {
       setBusy(false);
     }
@@ -526,6 +550,18 @@ export function M7TalleresPage() {
 
   async function retroceder(overrideComentarioArg?: string) {
     if (!token || !ot) return;
+    const indicated =
+      canAdvanceFromStep(rol, ot.currentStep) ||
+      (ot.currentStep === 5 && canCerrarOt(rol));
+    if (!indicated && !overrideComentarioArg) {
+      setOverrideComentario("");
+      setOverrideReq({
+        message:
+          "No sos el rol indicado de esta etapa. Podés volver atrás igual, pero tenés que indicar el motivo.",
+        run: (c) => retroceder(c),
+      });
+      return;
+    }
     setBusy(true);
     try {
       const updated = await apiFetch<OrdenTrabajo>(
@@ -552,12 +588,15 @@ export function M7TalleresPage() {
     Number.isFinite(valorFinalNum) &&
     valorFinalNum > aprobado;
 
+  // Cualquier rol con Talleres puede avanzar; el motivo se pide si no es el indicado.
   const canAdvanceUi =
     !!ot &&
     !ot.cerradaAt &&
     ot.currentStep < OT_STEPS.length - 1 &&
-    roleCanAdvance &&
-    (ot.currentStep !== 2 || (ot.presupuestos?.length ?? 0) >= 1) &&
+    canOperateTalleres(rol) &&
+    (ot.currentStep !== 2 ||
+      (ot.presupuestos?.length ?? 0) >= 1 ||
+      !!ot.sinPresupuesto) &&
     (ot.currentStep !== 3 ||
       (!!elegidoId && Number(montoAuthDraft) > 0)) &&
     (ot.currentStep !== 4 ||
@@ -569,8 +608,14 @@ export function M7TalleresPage() {
     !!ot &&
     !ot.cerradaAt &&
     ot.currentStep === 5 &&
-    canCerrarOt(rol) &&
+    canOperateTalleres(rol) &&
     !!ot.facturaPDF;
+
+  const canRetreatUi =
+    !!ot &&
+    !ot.cerradaAt &&
+    ot.currentStep > 0 &&
+    canOperateTalleres(rol);
 
   return (
     <div>
@@ -1212,20 +1257,17 @@ export function M7TalleresPage() {
               </div>
 
               <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => void retroceder()}
-                  disabled={
-                    ot.currentStep === 0 ||
-                    !!ot.cerradaAt ||
-                    !canRetreat(rol) ||
-                    busy
-                  }
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-card)] px-4 text-sm font-semibold text-[var(--vl-heading)] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-900/40"
-                >
-                  <ChevronLeft size={18} /> Volver etapa anterior
-                </button>
-                {ot.currentStep < 5 && (
+                {canRetreatUi && (
+                  <button
+                    type="button"
+                    onClick={() => void retroceder()}
+                    disabled={busy}
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-card)] px-4 text-sm font-semibold text-[var(--vl-heading)] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-900/40"
+                  >
+                    <ChevronLeft size={18} /> Volver etapa anterior
+                  </button>
+                )}
+                {ot.currentStep < 5 && !ot.cerradaAt && (
                   <button
                     type="button"
                     onClick={() => void avanzar()}
@@ -1250,9 +1292,11 @@ export function M7TalleresPage() {
               {!canAdvanceUi &&
                 ot.currentStep < 5 &&
                 !ot.cerradaAt &&
-                roleCanAdvance && (
+                canOperateTalleres(rol) && (
                   <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
                     Completá lo pendiente de esta etapa para poder continuar.
+                    {!roleCanAdvance &&
+                      " Si no sos el rol indicado, al continuar te pediremos el motivo."}
                   </p>
                 )}
             </div>

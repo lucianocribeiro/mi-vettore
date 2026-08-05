@@ -102,8 +102,9 @@ const includeOT = {
 } as const;
 
 /**
- * Igual a assertRoleOrOverride, pero además exige que quien pide el override
- * sea un rol operativo interno (no chofer/cliente) — reunión 05/8.
+ * Si el rol es el “dueño” de la etapa, pasa.
+ * Si no, cualquier rol con acceso a Talleres (ops o chofer) puede continuar
+ * con comentario obligatorio de override.
  */
 async function gateOrOverride(opts: {
   rol: Role;
@@ -114,7 +115,7 @@ async function gateOrOverride(opts: {
   overrideComentario: string | null;
 }): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   if (opts.allowed) return { ok: true };
-  if (!canActOnStepAsOps(opts.rol)) {
+  if (!canActOnStepAsOps(opts.rol) && opts.rol !== "CHOFER") {
     return { ok: false, status: 403, error: "Sin permiso para esta acción" };
   }
   return assertRoleOrOverride(opts);
@@ -1116,9 +1117,15 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
   try {
     const ot = await prisma.ordenTrabajo.findUnique({
       where: { id: req.params.id },
+      include: includeOT,
     });
     if (!ot) {
       res.status(404).json({ error: "OT no encontrada" });
+      return;
+    }
+    const scope = await choferScope(req.user!.id);
+    if (scope && !choferOwnsOt(ot, scope)) {
+      res.status(403).json({ error: "Solo podés operar tus propias solicitudes" });
       return;
     }
     if (ot.currentStep === 0) {
@@ -1129,10 +1136,29 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
       res.status(400).json({ error: "OT cerrada: no se puede retroceder" });
       return;
     }
-    if (!canRetreat(req.user!.rol)) {
+
+    const rol = req.user!.rol;
+    const overrideComentario = parseOverrideComentario(req.body);
+    const indicated =
+      canAdvanceFromStep(rol, ot.currentStep) ||
+      (ot.currentStep === 5 && canCerrarOt(rol));
+    if (!canRetreat(rol) && rol !== "CHOFER") {
       res.status(403).json({ error: "Sin permiso para retroceder" });
       return;
     }
+    const gate = await gateOrOverride({
+      rol,
+      allowed: indicated,
+      userId: req.user!.id,
+      otId: ot.id,
+      accion: `Retroceder desde "${OT_STEPS[ot.currentStep]?.label ?? ot.currentStep}"`,
+      overrideComentario,
+    });
+    if (!gate.ok) {
+      res.status(gate.status).json({ error: gate.error });
+      return;
+    }
+
     const updated = await prisma.ordenTrabajo.update({
       where: { id: ot.id },
       data: { currentStep: ot.currentStep - 1 },
