@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Eye,
   FileText,
   Lock,
   Plus,
@@ -238,6 +239,7 @@ export function M7TalleresPage() {
   const [overrideComentario, setOverrideComentario] = useState("");
   const [overrideBusy, setOverrideBusy] = useState(false);
   const [exportando, setExportando] = useState(false);
+  const [auditoriaOpen, setAuditoriaOpen] = useState(false);
 
   async function exportarExcel() {
     if (!token) return;
@@ -1244,23 +1246,20 @@ export function M7TalleresPage() {
                 )}
 
                 {!!ot.auditorias?.length && (
-                  <div className="mt-4 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
-                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
-                      Auditoría de excepciones de rol
-                    </div>
-                    <div className="space-y-2">
-                      {ot.auditorias.map((a) => (
-                        <div key={a.id} className="text-xs text-[var(--vl-text-muted)]">
-                          <span className="font-medium text-[var(--vl-heading)]">
-                            {a.user?.nombre || a.user?.email || "Usuario"}
-                          </span>{" "}
-                          — {a.accion} ·{" "}
-                          {new Date(a.createdAt).toLocaleString("es-AR")}
-                          <div>{a.comentario}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAuditoriaOpen(true)}
+                    className="mt-4 inline-flex w-full min-h-11 items-center justify-between gap-2 rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2.5 text-left text-sm text-[var(--vl-heading)] hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                  >
+                    <span className="inline-flex items-center gap-2 font-medium">
+                      <Eye size={16} className="text-[var(--vl-text-muted)]" />
+                      Ver excepciones de rol
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                        {ot.auditorias.length}
+                      </span>
+                    </span>
+                    <ChevronRight size={16} className="text-[var(--vl-text-muted)]" />
+                  </button>
                 )}
               </div>
 
@@ -1406,6 +1405,63 @@ export function M7TalleresPage() {
               >
                 Cancelar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {auditoriaOpen && ot?.auditorias && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+          onClick={() => setAuditoriaOpen(false)}
+        >
+          <div
+            className="flex max-h-[min(85dvh,36rem)] w-full max-w-lg flex-col rounded-t-2xl bg-[var(--vl-card)] shadow-xl sm:rounded-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--vl-card-border)] px-4 py-3">
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-[var(--vl-heading)]">
+                  Excepciones de rol
+                </h3>
+                <p className="text-xs text-[var(--vl-text-muted)]">
+                  {ot.numeroOT} · {ot.auditorias.length} registro
+                  {ot.auditorias.length === 1 ? "" : "s"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuditoriaOpen(false)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[var(--vl-text-muted)] hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label="Cerrar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-4 py-3">
+              <ul className="space-y-3">
+                {ot.auditorias.map((a) => (
+                  <li
+                    key={a.id}
+                    className="rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-3"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-1 text-xs text-[var(--vl-text-muted)]">
+                      <span className="font-medium text-[var(--vl-heading)]">
+                        {a.user?.nombre || a.user?.email || "Usuario"}
+                      </span>
+                      <time dateTime={a.createdAt}>
+                        {new Date(a.createdAt).toLocaleString("es-AR")}
+                      </time>
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-[var(--vl-heading)]">
+                      {a.accion}
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--vl-text-muted)]">
+                      {a.comentario}
+                    </p>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>
