@@ -120,10 +120,16 @@ type Solicitud = {
 
 type OtAuditoria = {
   id: string;
+  userId?: string;
   accion: string;
   comentario: string;
   createdAt: string;
-  user?: { nombre: string | null; email: string } | null;
+  user?: {
+    id?: string;
+    nombre: string | null;
+    email: string;
+    rol?: string;
+  } | null;
 };
 
 type OrdenTrabajo = {
@@ -1282,7 +1288,7 @@ export function M7TalleresPage() {
                   >
                     <span className="inline-flex items-center gap-2 font-medium">
                       <Eye size={16} className="text-[var(--vl-text-muted)]" />
-                      Ver excepciones de rol
+                      Ver mis excepciones
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
                         {ot.auditorias.length}
                       </span>
@@ -1451,10 +1457,11 @@ export function M7TalleresPage() {
             <div className="flex items-center justify-between gap-3 border-b border-[var(--vl-card-border)] px-4 py-3">
               <div className="min-w-0">
                 <h3 className="text-base font-bold text-[var(--vl-heading)]">
-                  Excepciones de rol
+                  Mis excepciones de rol
                 </h3>
                 <p className="text-xs text-[var(--vl-text-muted)]">
-                  {ot.numeroOT} · {ot.auditorias.length} registro
+                  {ot.numeroOT} · solo las que registraste vos ·{" "}
+                  {ot.auditorias.length} registro
                   {ot.auditorias.length === 1 ? "" : "s"}
                 </p>
               </div>

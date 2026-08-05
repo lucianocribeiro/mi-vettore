@@ -81,25 +81,35 @@ const uploadFactura = multer({
   limits: { fileSize: 15 * 1024 * 1024 },
 });
 
-const includeOT = {
-  solicitud: {
-    include: {
-      camioneta: {
-        include: {
-          asignaciones: {
-            where: { periodoHasta: null },
-            include: { chofer: true, empresa: true },
-            take: 1,
+function includeOTFor(viewerUserId: string) {
+  return {
+    solicitud: {
+      include: {
+        camioneta: {
+          include: {
+            asignaciones: {
+              where: { periodoHasta: null },
+              include: { chofer: true, empresa: true },
+              take: 1,
+            },
           },
         },
+        chofer: true,
       },
-      chofer: true,
     },
-  },
-  presupuestos: { orderBy: { createdAt: "asc" as const } },
-  presupuestoElegido: true,
-  auditorias: { orderBy: { createdAt: "desc" as const }, take: 20 },
-} as const;
+    presupuestos: { orderBy: { createdAt: "asc" as const } },
+    presupuestoElegido: true,
+    /** Cada usuario solo ve sus propias excepciones de rol. */
+    auditorias: {
+      where: { userId: viewerUserId },
+      orderBy: { createdAt: "desc" as const },
+      take: 20,
+      include: {
+        user: { select: { id: true, nombre: true, email: true, rol: true } },
+      },
+    },
+  } as const;
+}
 
 /**
  * Si el rol es el “dueño” de la etapa, pasa.
@@ -159,7 +169,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
     const scope = await choferScope(req.user!.id);
     const items = await prisma.ordenTrabajo.findMany({
       where: scope ? whereOwnSolicitudes(scope) : undefined,
-      include: includeOT,
+      include: includeOTFor(req.user!.id),
       orderBy: { createdAt: "desc" },
     });
     res.json({ ots: items, steps: OT_STEPS, fallas: FALLAS_COMUNES });
@@ -176,7 +186,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
     const items = await prisma.ordenTrabajo.findMany({
-      include: includeOT,
+      include: includeOTFor(req.user!.id),
       orderBy: { createdAt: "desc" },
     });
 
@@ -238,7 +248,7 @@ router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.ordenTrabajo.findUnique({
       where: { id: req.params.id },
-      include: includeOT,
+      include: includeOTFor(req.user!.id),
     });
     if (!item) {
       res.status(404).json({ error: "OT no encontrada" });
@@ -359,7 +369,7 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
           numeroOT,
           currentStep: 0,
         },
-        include: includeOT,
+        include: includeOTFor(req.user!.id),
       });
     });
 
@@ -443,7 +453,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
   try {
     const ot = await prisma.ordenTrabajo.findUnique({
       where: { id: req.params.id },
-      include: includeOT,
+      include: includeOTFor(req.user!.id),
     });
     if (!ot) {
       res.status(404).json({ error: "OT no encontrada" });
@@ -596,7 +606,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     const updated = await prisma.ordenTrabajo.update({
       where: { id: ot.id },
       data,
-      include: includeOT,
+      include: includeOTFor(req.user!.id),
     });
     res.json(updated);
   } catch (err) {
@@ -668,7 +678,7 @@ router.post(
 
       const updated = await prisma.ordenTrabajo.findUnique({
         where: { id: ot.id },
-        include: includeOT,
+        include: includeOTFor(req.user!.id),
       });
       res.json(updated);
     } catch (err) {
@@ -717,7 +727,7 @@ router.delete(
       });
       const updated = await prisma.ordenTrabajo.findUnique({
         where: { id: ot.id },
-        include: includeOT,
+        include: includeOTFor(req.user!.id),
       });
       res.json(updated);
     } catch (err) {
@@ -776,7 +786,7 @@ router.post("/:id/sin-presupuesto", authenticate, async (req: AuthedRequest, res
         sinPresupuesto,
         sinPresupuestoMotivo: sinPresupuesto ? motivo : null,
       },
-      include: includeOT,
+      include: includeOTFor(req.user!.id),
     });
     res.json(updated);
   } catch (err) {
@@ -843,7 +853,7 @@ router.post(
           facturaPDF: req.file.filename,
           trabajoDescripcion: trabajoDescripcion || ot.trabajoDescripcion,
         },
-        include: includeOT,
+        include: includeOTFor(req.user!.id),
       });
       res.json(updated);
     } catch (err) {
@@ -857,7 +867,7 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
   try {
     const ot = await prisma.ordenTrabajo.findUnique({
       where: { id: req.params.id },
-      include: includeOT,
+      include: includeOTFor(req.user!.id),
     });
     if (!ot) {
       res.status(404).json({ error: "OT no encontrada" });
@@ -1027,14 +1037,14 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
             currentStep: nextStep,
             pedidoNotificacionId: pedido.id,
           },
-          include: includeOT,
+          include: includeOTFor(req.user!.id),
         });
       }
 
       return tx.ordenTrabajo.update({
         where: { id: ot.id },
         data: { currentStep: nextStep },
-        include: includeOT,
+        include: includeOTFor(req.user!.id),
       });
     });
 
@@ -1064,7 +1074,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
   try {
     const ot = await prisma.ordenTrabajo.findUnique({
       where: { id: req.params.id },
-      include: includeOT,
+      include: includeOTFor(req.user!.id),
     });
     if (!ot) {
       res.status(404).json({ error: "OT no encontrada" });
@@ -1123,7 +1133,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       return tx.ordenTrabajo.update({
         where: { id: ot.id },
         data: { cerradaAt: new Date() },
-        include: includeOT,
+        include: includeOTFor(req.user!.id),
       });
     });
 
@@ -1150,7 +1160,7 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
   try {
     const ot = await prisma.ordenTrabajo.findUnique({
       where: { id: req.params.id },
-      include: includeOT,
+      include: includeOTFor(req.user!.id),
     });
     if (!ot) {
       res.status(404).json({ error: "OT no encontrada" });
@@ -1195,7 +1205,7 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
     const updated = await prisma.ordenTrabajo.update({
       where: { id: ot.id },
       data: { currentStep: ot.currentStep - 1 },
-      include: includeOT,
+      include: includeOTFor(req.user!.id),
     });
     res.json(updated);
   } catch (err) {
