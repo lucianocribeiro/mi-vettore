@@ -86,6 +86,11 @@ const USERS: Array<{ email: string; rol: Role; nombre: string }> = [
     rol: Role.CARLA,
     nombre: "Carla (Administración)",
   },
+  {
+    email: "francisco@vettore.test",
+    rol: Role.PATRICIO,
+    nombre: "Francisco (Sugerencias / Dirección)",
+  },
 ];
 
 function mapTipoTransporte(raw: string | null): {

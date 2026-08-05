@@ -9,6 +9,7 @@ import { M2CambiosPage } from "./pages/m2/M2CambiosPage";
 import { M3ComunicacionesPage } from "./pages/m3/M3ComunicacionesPage";
 import { M6MantenimientoPage } from "./pages/m6/M6MantenimientoPage";
 import { M7TalleresPage } from "./pages/m7/M7TalleresPage";
+import { SugerenciasPage } from "./pages/SugerenciasPage";
 
 function HomeRedirect() {
   const { user } = useAuth();
@@ -32,6 +33,7 @@ export default function App() {
             <Route path="/m5" element={<M5FichaPage />} />
             <Route path="/m6" element={<M6MantenimientoPage />} />
             <Route path="/m7" element={<M7TalleresPage />} />
+            <Route path="/sugerencias" element={<SugerenciasPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

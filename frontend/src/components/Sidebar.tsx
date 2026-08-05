@@ -73,6 +73,20 @@ const NAV: NavItem[] = [
     ],
   },
   {
+    to: "/sugerencias",
+    label: "Sugerencias",
+    sub: "Feedback usuarios",
+    icon: MessageSquare,
+    roles: [
+      "PABLO",
+      "SILVINA",
+      "FACU",
+      "PATRICIO",
+      "JULIETA",
+      "CARLA",
+    ],
+  },
+  {
     to: "/m4",
     label: "Alertas de vencimiento",
     sub: "M4",

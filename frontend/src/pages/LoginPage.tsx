@@ -93,6 +93,13 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
     home: "/m7",
     note: "Cierra pago / avisos finales",
   },
+  {
+    email: "francisco@vettore.test",
+    rol: "PATRICIO",
+    label: "Francisco · Sugerencias",
+    home: "/sugerencias",
+    note: "Ver feedback de usuarios + dirección",
+  },
 ];
 
 export function LoginPage() {
