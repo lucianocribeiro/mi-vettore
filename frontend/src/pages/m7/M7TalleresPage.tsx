@@ -474,18 +474,34 @@ export function M7TalleresPage() {
   async function avanzar(overrideComentarioArg?: string) {
     if (!token || !ot) return;
     const indicated = canAdvanceFromStep(rol, ot.currentStep);
-    if (!indicated && !overrideComentarioArg) {
+    const stepReady =
+      (ot.currentStep !== 2 ||
+        (ot.presupuestos?.length ?? 0) >= 1 ||
+        !!ot.sinPresupuesto) &&
+      (ot.currentStep !== 3 ||
+        (!!elegidoId && Number(montoAuthDraft) > 0)) &&
+      (ot.currentStep !== 4 ||
+        (Number.isFinite(Number(valorFinalDraft)) &&
+          Number(valorFinalDraft) > 0 &&
+          (!(
+            Number(valorFinalDraft) >
+            (ot.valorAprobado ?? ot.montoAutorizado ?? 0)
+          ) ||
+            !!justifDraft.trim())));
+
+    if ((!indicated || !stepReady) && !overrideComentarioArg) {
       setOverrideComentario("");
       setOverrideReq({
-        message:
-          "No sos el rol indicado para esta etapa. Podés continuar igual, pero tenés que indicar el motivo.",
+        message: !indicated
+          ? "No sos el rol indicado para esta etapa. Podés continuar igual, pero tenés que indicar el motivo."
+          : "Hay pendientes en esta etapa. Podés avanzar igual, pero tenés que indicar el motivo.",
         run: (c) => avanzar(c),
       });
       return;
     }
     setBusy(true);
     try {
-      if (ot.currentStep === 3 && elegidoId) {
+      if (ot.currentStep === 3 && elegidoId && Number(montoAuthDraft) > 0) {
         await apiFetch<OrdenTrabajo>(
           `/api/talleres/${ot.id}`,
           {
@@ -588,12 +604,16 @@ export function M7TalleresPage() {
     Number.isFinite(valorFinalNum) &&
     valorFinalNum > aprobado;
 
-  // Cualquier rol con Talleres puede avanzar; el motivo se pide si no es el indicado.
+  // Cualquiera con Talleres puede avanzar siempre; si no es el rol indicado
+  // o falta completar la etapa, se pide motivo (override).
   const canAdvanceUi =
     !!ot &&
     !ot.cerradaAt &&
     ot.currentStep < OT_STEPS.length - 1 &&
-    canOperateTalleres(rol) &&
+    canOperateTalleres(rol);
+
+  const stepReadyToAdvance =
+    !!ot &&
     (ot.currentStep !== 2 ||
       (ot.presupuestos?.length ?? 0) >= 1 ||
       !!ot.sinPresupuesto) &&
@@ -1289,14 +1309,25 @@ export function M7TalleresPage() {
                   </button>
                 )}
               </div>
-              {!canAdvanceUi &&
+              {!stepReadyToAdvance &&
                 ot.currentStep < 5 &&
                 !ot.cerradaAt &&
                 canOperateTalleres(rol) && (
                   <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                    Completá lo pendiente de esta etapa para poder continuar.
+                    Hay pendientes en esta etapa. Podés continuar igual: te
+                    pediremos el motivo.
                     {!roleCanAdvance &&
-                      " Si no sos el rol indicado, al continuar te pediremos el motivo."}
+                      " Si no sos el rol indicado, también se registra como override."}
+                  </p>
+                )}
+              {stepReadyToAdvance &&
+                !roleCanAdvance &&
+                ot.currentStep < 5 &&
+                !ot.cerradaAt &&
+                canOperateTalleres(rol) && (
+                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                    No sos el rol indicado de esta etapa. Al continuar te
+                    pediremos el motivo.
                   </p>
                 )}
             </div>

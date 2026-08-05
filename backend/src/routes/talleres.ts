@@ -891,19 +891,44 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       ot.presupuestos.length < 1 &&
       !ot.sinPresupuesto
     ) {
-      res.status(400).json({
-        error: "Debés cargar al menos un presupuesto PDF o marcar «sin presupuesto»",
+      const skip = await assertRoleOrOverride({
+        rol,
+        allowed: false,
+        userId: req.user!.id,
+        otId: ot.id,
+        accion: "Avanzar presupuestos sin cargar PDF / sin presupuesto",
+        overrideComentario,
       });
-      return;
-    }
-    if (ot.currentStep === 3) {
-      if (!ot.presupuestoElegidoId || !ot.tallerAsignado) {
-        res.status(400).json({ error: "Debés elegir un presupuesto / taller" });
+      if (!skip.ok) {
+        res.status(skip.status).json({
+          error:
+            "Debés cargar al menos un presupuesto PDF o marcar «sin presupuesto», o indicar un motivo (overrideComentario).",
+        });
         return;
       }
-      if (ot.montoAutorizado == null || ot.montoAutorizado <= 0) {
-        res.status(400).json({ error: "Debés asignar el valor del arreglo" });
-        return;
+    }
+    if (ot.currentStep === 3) {
+      const eleccionOk =
+        !!ot.presupuestoElegidoId &&
+        !!ot.tallerAsignado &&
+        ot.montoAutorizado != null &&
+        ot.montoAutorizado > 0;
+      if (!eleccionOk) {
+        const skip = await assertRoleOrOverride({
+          rol,
+          allowed: false,
+          userId: req.user!.id,
+          otId: ot.id,
+          accion: "Avanzar elección sin presupuesto/taller/monto",
+          overrideComentario,
+        });
+        if (!skip.ok) {
+          res.status(skip.status).json({
+            error:
+              "Debés elegir presupuesto/taller y monto, o indicar un motivo (overrideComentario).",
+          });
+          return;
+        }
       }
     }
     if (ot.currentStep === 4) {
@@ -916,7 +941,7 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
         req.body?.incrementoJustificacion ?? ot.incrementoJustificacion ?? ""
       ).trim();
 
-      if (valorFinal > aprobado && !justificacion) {
+      if (valorFinal > aprobado && !justificacion && !overrideComentario) {
         res.status(400).json({
           error: "Incremento sobre lo autorizado: justificación obligatoria",
         });
@@ -927,7 +952,7 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       await prisma.ordenTrabajo.update({
         where: { id: ot.id },
         data: {
-          valorFinal,
+          valorFinal: Number.isFinite(valorFinal) ? valorFinal : null,
           valorAprobado: aprobado,
           incrementoJustificacion: justificacion || null,
         },
