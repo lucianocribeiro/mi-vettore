@@ -7,12 +7,14 @@ import {
   filterCamionetas,
   type FlotaUnitFilters,
 } from "../../components/FlotaUnitFilterBar";
-import { apiFetch, ApiError } from "../../lib/api";
+import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import {
   currentAsignacion,
   formatDate,
+  isInternalOps,
   type Camioneta,
 } from "../../types";
+import { Download } from "../../components/icons";
 
 function toInputDate(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -76,6 +78,19 @@ export function M6MantenimientoPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [exportando, setExportando] = useState(false);
+
+  async function exportarExcel() {
+    if (!token) return;
+    setExportando(true);
+    try {
+      await apiDownload("/api/camionetas/export", token, "unidades.xlsx");
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo exportar");
+    } finally {
+      setExportando(false);
+    }
+  }
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -168,7 +183,8 @@ export function M6MantenimientoPage() {
 
   return (
     <div>
-      <div className="mb-5">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
         <span className="rounded bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
           Mantenimiento
         </span>
@@ -203,6 +219,18 @@ export function M6MantenimientoPage() {
             taller
           </span>
         </div>
+        </div>
+        {isInternalOps(user?.rol) && (
+          <button
+            type="button"
+            onClick={() => void exportarExcel()}
+            disabled={exportando}
+            className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-1.5 text-xs font-medium text-[var(--vl-text)] hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
+          >
+            <Download size={13} />
+            {exportando ? "Exportando…" : "Exportar Excel"}
+          </button>
+        )}
       </div>
 
       {loading && (

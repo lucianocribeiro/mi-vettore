@@ -45,8 +45,22 @@ export const MASTER_WRITE_ROLES: Role[] = [
   "JULIETA",
 ];
 
+/** Ops internos (incluye Carla): export Excel y paneles de operación. */
+export const INTERNAL_OPS_ROLES: Role[] = [
+  "PABLO",
+  "SILVINA",
+  "FACU",
+  "PATRICIO",
+  "JULIETA",
+  "CARLA",
+];
+
 export function canWriteMaster(rol?: Role | null): boolean {
   return !!rol && MASTER_WRITE_ROLES.includes(rol);
+}
+
+export function isInternalOps(rol?: Role | null): boolean {
+  return !!rol && INTERNAL_OPS_ROLES.includes(rol);
 }
 
 export type SegmentoCliente = "ESTATICO" | "CONSULTA" | "CONFIRMACION";

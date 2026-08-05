@@ -7,19 +7,20 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Download,
   FileText,
   Lock,
   Plus,
   Upload,
   X,
 } from "../../components/icons";
-import { apiFetch, ApiError } from "../../lib/api";
+import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import {
   currentAsignacion,
+  isInternalOps,
   type Camioneta,
   type Role,
 } from "../../types";
-
 const TALLERES = [
   "Frío Norte SRL",
   "Gomería Central",
@@ -84,10 +85,10 @@ function roleActionHint(rol?: Role | null): string {
     case "FACU":
       return "Tu rol: notificación ops + elegir presupuesto/taller.";
     case "SILVINA":
-      return "Tu rol: cargar hasta 3 presupuestos PDF y cerrar pago.";
+      return "Tu rol: cargar presupuestos (PDF opcional) y cerrar pago.";
     case "PATRICIO":
     case "JULIETA":
-      return "Tu rol: aprobar el gasto y cargar factura.";
+      return "Tu rol: aprobar el gasto (la factura se carga en el paso de pago).";
     case "PABLO":
       return "Tu rol: notificación ops (sacar unidad de circulación).";
     case "CARLA":
@@ -231,6 +232,19 @@ export function M7TalleresPage() {
   } | null>(null);
   const [overrideComentario, setOverrideComentario] = useState("");
   const [overrideBusy, setOverrideBusy] = useState(false);
+  const [exportando, setExportando] = useState(false);
+
+  async function exportarExcel() {
+    if (!token) return;
+    setExportando(true);
+    try {
+      await apiDownload("/api/talleres/export", token, "talleres_ot.xlsx");
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo exportar");
+    } finally {
+      setExportando(false);
+    }
+  }
 
   function handleActionError(
     err: unknown,
@@ -580,15 +594,28 @@ export function M7TalleresPage() {
             {roleActionHint(rol)}
           </p>
         </div>
-        {canCreateSolicitud(rol) && (
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900"
-          >
-            <Plus size={13} /> Nueva solicitud
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {isInternalOps(rol) && (
+            <button
+              type="button"
+              onClick={() => void exportarExcel()}
+              disabled={exportando}
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-1.5 text-xs font-medium text-[var(--vl-text)] hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
+            >
+              <Download size={13} />
+              {exportando ? "Exportando…" : "Exportar Excel"}
+            </button>
+          )}
+          {canCreateSolicitud(rol) && (
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900"
+            >
+              <Plus size={13} /> Nueva solicitud
+            </button>
+          )}
+        </div>
       </div>
 
       {loading && (

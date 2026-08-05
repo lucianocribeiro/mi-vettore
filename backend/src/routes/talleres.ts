@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request } from "express";
 import path from "path";
 import multer from "multer";
+import ExcelJS from "exceljs";
 import {
   EstadoCamioneta,
   EstadoPedido,
@@ -17,6 +18,7 @@ import { choferPuedeEditarCamioneta } from "../lib/flota.js";
 import { sendMail } from "../lib/mailer.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
 import { ensureUploadDirs } from "../lib/uploads.js";
+import { isInternalOpsRole } from "../lib/roles.js";
 import {
   canAdvanceFromStep,
   canCerrarOt,
@@ -82,7 +84,15 @@ const uploadFactura = multer({
 const includeOT = {
   solicitud: {
     include: {
-      camioneta: true,
+      camioneta: {
+        include: {
+          asignaciones: {
+            where: { periodoHasta: null },
+            include: { chofer: true, empresa: true },
+            take: 1,
+          },
+        },
+      },
       chofer: true,
     },
   },
@@ -155,6 +165,71 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al listar órdenes de trabajo" });
+  }
+});
+
+router.get("/export", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso para exportar" });
+      return;
+    }
+    const items = await prisma.ordenTrabajo.findMany({
+      include: includeOT,
+      orderBy: { createdAt: "desc" },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Ordenes de trabajo");
+    sheet.columns = [
+      { header: "OT", key: "ot", width: 12 },
+      { header: "Patente", key: "patente", width: 12 },
+      { header: "Estado unidad", key: "estadoUnidad", width: 16 },
+      { header: "Falla", key: "falla", width: 28 },
+      { header: "Etapa", key: "etapa", width: 18 },
+      { header: "Paso", key: "paso", width: 8 },
+      { header: "Estado OT", key: "estadoOt", width: 12 },
+      { header: "Taller", key: "taller", width: 22 },
+      { header: "Chofer", key: "chofer", width: 22 },
+      { header: "Empresa", key: "empresa", width: 24 },
+      { header: "Valor aprobado", key: "valor", width: 14 },
+      { header: "Creada", key: "creada", width: 12 },
+      { header: "Cerrada", key: "cerrada", width: 12 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+
+    for (const ot of items) {
+      const cam = ot.solicitud.camioneta;
+      const asig = cam.asignaciones?.[0];
+      const stepLabel = OT_STEPS[ot.currentStep]?.label ?? String(ot.currentStep);
+      sheet.addRow({
+        ot: ot.numeroOT,
+        patente: cam.patente,
+        estadoUnidad: cam.estado,
+        falla: ot.solicitud.falla,
+        etapa: stepLabel,
+        paso: `${ot.currentStep + 1}/${OT_STEPS.length}`,
+        estadoOt: ot.cerradaAt ? "Cerrada" : "Abierta",
+        taller: ot.tallerAsignado ?? "",
+        chofer: ot.solicitud.chofer?.nombre ?? asig?.chofer?.nombre ?? "",
+        empresa: asig?.empresa?.nombre ?? "",
+        valor: ot.valorFinal ?? ot.valorAprobado ?? ot.montoAutorizado ?? "",
+        creada: ot.createdAt.toISOString().slice(0, 10),
+        cerrada: ot.cerradaAt ? ot.cerradaAt.toISOString().slice(0, 10) : "",
+      });
+    }
+
+    const filename = `talleres_ot_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al exportar Excel" });
   }
 });
 

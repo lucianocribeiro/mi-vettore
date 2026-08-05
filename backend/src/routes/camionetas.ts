@@ -6,7 +6,7 @@ import {
   camionetasParaUsuarioChofer,
   choferPuedeEditarCamioneta,
 } from "../lib/flota.js";
-import { MASTER_WRITE_ROLES } from "../lib/roles.js";
+import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
@@ -69,7 +69,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
 
 router.get("/export", authenticate, async (req: AuthedRequest, res) => {
   try {
-    if (req.user!.rol === "CHOFER" || req.user!.rol === "CLIENTE") {
+    if (!isInternalOpsRole(req.user!.rol)) {
       res.status(403).json({ error: "Sin permiso para exportar" });
       return;
     }

@@ -19,6 +19,7 @@ import {
   ROLE_LABELS,
   canWriteMaster,
   currentAsignacion,
+  isInternalOps,
   type Camioneta,
   type Cliente,
   type Chofer,
@@ -717,9 +718,7 @@ export function M5FichaPage() {
               Nuevo {CREATE_LABEL_BY_TAB[tab]}
             </button>
           )}
-          {tab === "camioneta" &&
-            user?.rol !== "CHOFER" &&
-            user?.rol !== "CLIENTE" && (
+          {tab === "camioneta" && isInternalOps(user?.rol) && (
               <button
                 type="button"
                 onClick={() => void exportarExcel()}
