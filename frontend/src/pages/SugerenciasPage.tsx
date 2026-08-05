@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch, ApiError } from "../lib/api";
+import { X } from "../components/icons";
 import { formatDate, canViewSugerencias } from "../types";
 
 type Sugerencia = {
@@ -20,6 +21,7 @@ export function SugerenciasPage() {
   const [items, setItems] = useState<Sugerencia[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -40,6 +42,23 @@ export function SugerenciasPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function eliminar(id: string) {
+    if (!token) return;
+    if (!window.confirm("¿Eliminar esta sugerencia?")) return;
+    setDeletingId(id);
+    setError(null);
+    try {
+      await apiFetch(`/api/sugerencias/${id}`, { method: "DELETE" }, token);
+      setItems((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Error al eliminar sugerencia"
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   if (!canViewSugerencias(user?.rol)) {
     return (
@@ -91,16 +110,30 @@ export function SugerenciasPage() {
             key={s.id}
             className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4"
           >
-            <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-[var(--vl-text-muted)]">
-              <span>
-                {s.user?.nombre || s.user?.email || "Usuario"}
-                {s.user?.rol ? ` · ${s.user.rol}` : ""}
-              </span>
-              <time dateTime={s.createdAt}>{formatDate(s.createdAt)}</time>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-[var(--vl-text-muted)]">
+                  <span>
+                    {s.user?.nombre || s.user?.email || "Usuario"}
+                    {s.user?.rol ? ` · ${s.user.rol}` : ""}
+                  </span>
+                  <time dateTime={s.createdAt}>{formatDate(s.createdAt)}</time>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--vl-heading)]">
+                  {s.texto}
+                </p>
+              </div>
+              <button
+                type="button"
+                title="Eliminar"
+                aria-label="Eliminar sugerencia"
+                disabled={deletingId === s.id}
+                onClick={() => void eliminar(s.id)}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--vl-text-muted)] hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+              >
+                <X size={16} />
+              </button>
             </div>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--vl-heading)]">
-              {s.texto}
-            </p>
           </article>
         ))}
       </div>

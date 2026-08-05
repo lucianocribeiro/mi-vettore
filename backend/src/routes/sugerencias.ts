@@ -45,4 +45,24 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
+router.delete("/:id", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!canViewSugerencias(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso para eliminar sugerencias" });
+      return;
+    }
+    const id = String(req.params.id ?? "");
+    const existing = await prisma.sugerenciaUsuario.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: "Sugerencia no encontrada" });
+      return;
+    }
+    await prisma.sugerenciaUsuario.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al eliminar sugerencia" });
+  }
+});
+
 export { router as sugerenciasRouter };
