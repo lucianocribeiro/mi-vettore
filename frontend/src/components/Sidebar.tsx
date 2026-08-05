@@ -38,6 +38,20 @@ const NAV: NavItem[] = [
     ],
   },
   {
+    to: "/sugerencias",
+    label: "Sugerencias",
+    sub: "Ver feedback",
+    icon: MessageSquare,
+    roles: [
+      "PABLO",
+      "SILVINA",
+      "FACU",
+      "PATRICIO",
+      "JULIETA",
+      "CARLA",
+    ],
+  },
+  {
     to: "/m2",
     label: "Formulario de cambios",
     sub: "M2",
@@ -62,20 +76,6 @@ const NAV: NavItem[] = [
     to: "/m3",
     label: "Agenda ops",
     sub: "Ayuda memoria",
-    icon: MessageSquare,
-    roles: [
-      "PABLO",
-      "SILVINA",
-      "FACU",
-      "PATRICIO",
-      "JULIETA",
-      "CARLA",
-    ],
-  },
-  {
-    to: "/sugerencias",
-    label: "Sugerencias",
-    sub: "Feedback usuarios",
     icon: MessageSquare,
     roles: [
       "PABLO",

@@ -61,8 +61,16 @@ export function SugerenciasPage() {
           </h1>
         </div>
         <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-          Comentarios enviados desde el botón flotante «Sugerencia».
+          Comentarios enviados desde el botón flotante «Sugerencia» (cualquier
+          usuario). Acá los ves vos como ops.
         </p>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="mt-3 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-1.5 text-xs font-medium text-[var(--vl-text)] hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          Actualizar lista
+        </button>
       </div>
 
       {loading && (
