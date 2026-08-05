@@ -2,8 +2,9 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { Role, UserStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { MASTER_WRITE_ROLES } from "../lib/roles.js";
-import { authenticate, authorize } from "../middleware/auth.js";
+import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
+import { sendExcel } from "../lib/excel-export.js";
+import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -37,6 +38,35 @@ router.get("/", authenticate, async (_req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al listar usuarios" });
+  }
+});
+
+router.get("/export", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso para exportar" });
+      return;
+    }
+    const items = await prisma.usuario.findMany({ orderBy: { email: "asc" } });
+    await sendExcel(res, {
+      sheetName: "Usuarios",
+      filename: `usuarios_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      columns: [
+        { header: "Email", key: "email", width: 28 },
+        { header: "Nombre", key: "nombre", width: 22 },
+        { header: "Rol", key: "rol", width: 14 },
+        { header: "Estado", key: "estado", width: 12 },
+      ],
+      rows: items.map((u) => ({
+        email: u.email,
+        nombre: u.nombre ?? "",
+        rol: u.rol,
+        estado: u.estado,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al exportar Excel" });
   }
 });
 

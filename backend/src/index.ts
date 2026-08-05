@@ -17,6 +17,7 @@ import { comunicacionesRouter } from "./routes/comunicaciones.js";
 import { avisosRouter } from "./routes/avisos.js";
 import { tiposServicioRouter } from "./routes/tipos-servicio.js";
 import { sugerenciasRouter } from "./routes/sugerencias.js";
+import { alertasRouter } from "./routes/alertas.js";
 import { startComunicacionesScheduler } from "./lib/comunicaciones-scheduler.js";
 import { isSmtpConfigured } from "./lib/mailer.js";
 import { getUploadsRoot } from "./lib/uploads.js";
@@ -67,6 +68,7 @@ app.use("/api/comunicaciones", comunicacionesRouter);
 app.use("/api/avisos", avisosRouter);
 app.use("/api/tipos-servicio", tiposServicioRouter);
 app.use("/api/sugerencias", sugerenciasRouter);
+app.use("/api/alertas", alertasRouter);
 
 /** Producción single-host: servir el build de Vite desde ../frontend/dist */
 const serveFrontend = process.env.SERVE_FRONTEND === "true";

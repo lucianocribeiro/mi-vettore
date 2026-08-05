@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { AppLayout } from "./components/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { M4AlertasPage } from "./pages/m4/M4AlertasPage";
 import { M5FichaPage } from "./pages/m5/M5FichaPage";
 import { M2CambiosPage } from "./pages/m2/M2CambiosPage";
 import { M3ComunicacionesPage } from "./pages/m3/M3ComunicacionesPage";
@@ -28,16 +28,7 @@ export default function App() {
             <Route path="/m1" element={<Navigate to="/" replace />} />
             <Route path="/m2" element={<M2CambiosPage />} />
             <Route path="/m3" element={<M3ComunicacionesPage />} />
-            <Route
-              path="/m4"
-              element={
-                <PlaceholderPage
-                  code="M4"
-                  title="Alertas de vencimiento"
-                  description="Fuera del MVP de Etapa 1. Se implementa en una etapa posterior."
-                />
-              }
-            />
+            <Route path="/m4" element={<M4AlertasPage />} />
             <Route path="/m5" element={<M5FichaPage />} />
             <Route path="/m6" element={<M6MantenimientoPage />} />
             <Route path="/m7" element={<M7TalleresPage />} />

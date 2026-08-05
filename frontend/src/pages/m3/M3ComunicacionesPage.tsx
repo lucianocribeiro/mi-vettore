@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge } from "../../components/Badge";
-import { Clock } from "../../components/icons";
-import { apiFetch, ApiError } from "../../lib/api";
-import { MASTER_WRITE_ROLES, type Role } from "../../types";
+import { Clock, Download } from "../../components/icons";
+import { apiDownload, apiFetch, ApiError } from "../../lib/api";
+import { MASTER_WRITE_ROLES, isInternalOps, type Role } from "../../types";
 
 type TipoComunicacion =
   | "RESUMEN_09"
@@ -77,6 +77,7 @@ export function M3ComunicacionesPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [selected, setSelected] = useState<Comunicacion | null>(null);
+  const [exportando, setExportando] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -151,6 +152,22 @@ export function M3ComunicacionesPage() {
     }
   }
 
+  async function exportarExcel() {
+    if (!token) return;
+    setExportando(true);
+    try {
+      await apiDownload(
+        "/api/comunicaciones/export",
+        token,
+        "comunicaciones.xlsx"
+      );
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo exportar");
+    } finally {
+      setExportando(false);
+    }
+  }
+
   return (
     <div>
       <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
@@ -185,15 +202,25 @@ export function M3ComunicacionesPage() {
             </p>
           )}
         </div>
-        {canTrigger && (
+        {isInternalOps(user?.rol) && (
           <div className="flex flex-wrap gap-2">
-            {(
-              [
-                "RESUMEN_09",
-                "OFERTA_12",
-                "CONFIRMACION_15",
-              ] as TipoComunicacion[]
-            ).map((t) => (
+            <button
+              type="button"
+              disabled={exportando}
+              onClick={() => void exportarExcel()}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-1.5 text-xs font-medium text-[var(--vl-text)] hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
+            >
+              <Download size={13} />
+              {exportando ? "Exportando…" : "Exportar Excel"}
+            </button>
+            {canTrigger &&
+              (
+                [
+                  "RESUMEN_09",
+                  "OFERTA_12",
+                  "CONFIRMACION_15",
+                ] as TipoComunicacion[]
+              ).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -204,6 +231,8 @@ export function M3ComunicacionesPage() {
                 {busy === t ? "Enviando…" : `Disparar ${TIPO_LABEL[t]}`}
               </button>
             ))}
+            {canTrigger && (
+              <>
             <button
               type="button"
               disabled={busy !== null}
@@ -220,6 +249,8 @@ export function M3ComunicacionesPage() {
             >
               {busy === "rec-vencimientos" ? "Enviando…" : "Alertas VTV/licencia"}
             </button>
+              </>
+            )}
           </div>
         )}
       </div>
