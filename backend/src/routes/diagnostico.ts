@@ -71,20 +71,23 @@ router.put(
         return;
       }
 
+      // createMany no aplica @default(cuid()) — hay que crear fila a fila.
       await prisma.$transaction(async (tx) => {
         await tx.ordenTrabajoDiagnostico.deleteMany({ where: { otId: ot.id } });
-        await tx.ordenTrabajoDiagnostico.createMany({
-          data: ids.map((categoriaId) => ({ otId: ot.id, categoriaId })),
-        });
+        for (const categoriaId of ids) {
+          await tx.ordenTrabajoDiagnostico.create({
+            data: { otId: ot.id, categoriaId },
+          });
+        }
       });
 
-      const updated = await prisma.ordenTrabajo.findUnique({
-        where: { id: ot.id },
-        include: {
-          diagnosticos: { include: { categoria: true } },
-        },
+      const diagnosticos = await prisma.ordenTrabajoDiagnostico.findMany({
+        where: { otId: ot.id },
+        include: { categoria: true },
+        orderBy: { createdAt: "asc" },
       });
-      res.json(updated);
+      // Solo devolvemos diagnosticos: el front mergea sin pisar solicitud/presupuestos.
+      res.json({ id: ot.id, diagnosticos });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al guardar diagnóstico" });

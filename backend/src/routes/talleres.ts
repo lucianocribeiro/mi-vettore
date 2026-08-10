@@ -99,6 +99,10 @@ function includeOTFor(viewerUserId: string) {
     },
     presupuestos: { orderBy: { createdAt: "asc" as const } },
     presupuestoElegido: true,
+    diagnosticos: {
+      include: { categoria: true },
+      orderBy: { createdAt: "asc" as const },
+    },
     /** Cada usuario solo ve sus propias excepciones de rol. */
     auditorias: {
       where: { userId: viewerUserId },

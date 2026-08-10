@@ -132,6 +132,12 @@ type OtAuditoria = {
   } | null;
 };
 
+type OtDiagnostico = {
+  id: string;
+  categoriaId: string;
+  categoria?: { id: string; nombre: string; nivel: number };
+};
+
 type OrdenTrabajo = {
   id: string;
   numeroOT: string;
@@ -154,6 +160,7 @@ type OrdenTrabajo = {
   cerradaAt: string | null;
   solicitud: Solicitud;
   auditorias?: OtAuditoria[];
+  diagnosticos?: OtDiagnostico[];
 };
 
 /** Comentario mínimo para acciones fuera del rol / etapa incompleta. */
@@ -898,17 +905,27 @@ export function M7TalleresPage() {
                   </div>
                 )}
 
-                {ot.currentStep === 2 && (
-                  <div className="mt-4 space-y-4">
+                {ot.currentStep >= 2 && (
+                  <div className="mt-4">
                     <DiagnosticoOtPanel
                       otId={ot.id}
                       token={token!}
-                      onSaved={(updated) =>
+                      initialCategoriaIds={
+                        ot.diagnosticos?.map((d) => d.categoriaId) ?? []
+                      }
+                      onSaved={(diagnosticos) =>
                         setOts((prev) =>
-                          prev.map((o) => (o.id === updated.id ? updated : o))
+                          prev.map((o) =>
+                            o.id === ot.id ? { ...o, diagnosticos } : o
+                          )
                         )
                       }
                     />
+                  </div>
+                )}
+
+                {ot.currentStep === 2 && (
+                  <div className="mt-4 space-y-4">
                     <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
                       <strong>Paso de Silvina:</strong> elegí taller, monto y
                       subí el presupuesto (PDF opcional). Sin límite de
@@ -1783,16 +1800,24 @@ type CategoriaDiagnostico = {
 function DiagnosticoOtPanel({
   otId,
   token,
+  initialCategoriaIds,
   onSaved,
 }: {
   otId: string;
   token: string;
-  onSaved: (ot: OrdenTrabajo) => void;
+  initialCategoriaIds: string[];
+  onSaved: (diagnosticos: OtDiagnostico[]) => void;
 }) {
   const [cats, setCats] = useState<CategoriaDiagnostico[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(initialCategoriaIds);
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelected(initialCategoriaIds);
+  }, [otId, initialCategoriaIds.join("|")]);
 
   useEffect(() => {
     void apiFetch<CategoriaDiagnostico[]>(
@@ -1811,8 +1836,12 @@ function DiagnosticoOtPanel({
     }
     setBusy(true);
     setErr(null);
+    setOk(null);
     try {
-      const updated = await apiFetch<OrdenTrabajo>(
+      const updated = await apiFetch<{
+        id: string;
+        diagnosticos: OtDiagnostico[];
+      }>(
         `/api/diagnostico/ot/${otId}`,
         {
           method: "PUT",
@@ -1820,7 +1849,10 @@ function DiagnosticoOtPanel({
         },
         token
       );
-      onSaved(updated);
+      const nextIds = updated.diagnosticos.map((d) => d.categoriaId);
+      setSelected(nextIds);
+      onSaved(updated.diagnosticos);
+      setOk(`Guardado: ${nextIds.length} ítem(s)`);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Error al guardar");
     } finally {
@@ -1852,96 +1884,141 @@ function DiagnosticoOtPanel({
 
   return (
     <div className="rounded-xl border border-[var(--vl-card-border)] p-3">
-      <div className="text-sm font-semibold text-[var(--vl-heading)]">
-        Diagnóstico detallado
-      </div>
-      <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-        Elegí con el desplegable de cada categoría. Podés sumar varios ítems.
-      </p>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-[var(--vl-heading)]">
+            Diagnóstico detallado
+          </div>
+          {!open && (
+            <p className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+              {selectedLabels.length > 0
+                ? `${selectedLabels.length} ítem(s) seleccionado(s)`
+                : "Tocá para cargar el árbol"}
+            </p>
+          )}
+        </div>
+        <ChevronRight
+          size={18}
+          className={`shrink-0 text-[var(--vl-text-muted)] transition-transform ${
+            open ? "rotate-90" : ""
+          }`}
+        />
+      </button>
 
-      {selectedLabels.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
+      {!open && selectedLabels.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
           {selectedLabels.map((c) => (
-            <button
+            <span
               key={c.id}
-              type="button"
-              onClick={() => removeId(c.id)}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-900 bg-slate-900 px-2 py-0.5 text-[11px] text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
-              title="Quitar"
+              className="inline-flex items-center rounded-full border border-[var(--vl-card-border)] px-2 py-0.5 text-[11px] text-[var(--vl-text-muted)]"
             >
               {c.nombre}
-              <span aria-hidden>×</span>
-            </button>
+            </span>
           ))}
         </div>
       )}
 
-      <div className="mt-3 max-h-80 space-y-4 overflow-y-auto">
-        {roots.map((r) => {
-          const n2 = cats.filter((c) => c.padreId === r.id);
-          return (
-            <div key={r.id} className="space-y-2">
-              <div className="text-xs font-bold uppercase tracking-wide text-[var(--vl-heading)]">
-                {r.nombre}
-              </div>
-              {n2.length === 0 ? (
-                <select
-                  className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-2 text-sm"
-                  defaultValue=""
-                  onChange={(e) => {
-                    addFromSelect(e.target.value);
-                    e.target.value = "";
-                  }}
+      {open && (
+        <>
+          <p className="mt-2 text-[11px] text-[var(--vl-text-muted)]">
+            Elegí con el desplegable de cada categoría. Podés sumar varios ítems.
+          </p>
+
+          {selectedLabels.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {selectedLabels.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => removeId(c.id)}
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-900 bg-slate-900 px-2 py-0.5 text-[11px] text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                  title="Quitar"
                 >
-                  <option value="">Elegir…</option>
-                  <option value={r.id}>{r.nombre}</option>
-                </select>
-              ) : (
-                n2.map((cat2) => {
-                  const n3 = cats.filter((c) => c.padreId === cat2.id);
-                  const options = n3.length > 0 ? n3 : [cat2];
-                  return (
-                    <label key={cat2.id} className="block">
-                      <span className="mb-1 block text-[11px] font-medium text-[var(--vl-text-muted)]">
-                        {cat2.nombre}
-                      </span>
-                      <select
-                        className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-2.5 text-sm"
-                        defaultValue=""
-                        onChange={(e) => {
-                          addFromSelect(e.target.value);
-                          e.target.value = "";
-                        }}
-                      >
-                        <option value="">Elegir…</option>
-                        {options.map((opt) => (
-                          <option
-                            key={opt.id}
-                            value={opt.id}
-                            disabled={selected.includes(opt.id)}
-                          >
-                            {opt.nombre}
-                            {selected.includes(opt.id) ? " ✓" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  );
-                })
-              )}
+                  {c.nombre}
+                  <span aria-hidden>×</span>
+                </button>
+              ))}
             </div>
-          );
-        })}
-      </div>
-      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void save()}
-        className="mt-3 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
-      >
-        {busy ? "Guardando…" : "Guardar diagnóstico"}
-      </button>
+          )}
+
+          <div className="mt-3 max-h-80 space-y-4 overflow-y-auto">
+            {roots.map((r) => {
+              const n2 = cats.filter((c) => c.padreId === r.id);
+              return (
+                <div key={r.id} className="space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-wide text-[var(--vl-heading)]">
+                    {r.nombre}
+                  </div>
+                  {n2.length === 0 ? (
+                    <select
+                      className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-2 text-sm"
+                      defaultValue=""
+                      onChange={(e) => {
+                        addFromSelect(e.target.value);
+                        e.target.value = "";
+                      }}
+                    >
+                      <option value="">Elegir…</option>
+                      <option value={r.id}>{r.nombre}</option>
+                    </select>
+                  ) : (
+                    n2.map((cat2) => {
+                      const n3 = cats.filter((c) => c.padreId === cat2.id);
+                      const options = n3.length > 0 ? n3 : [cat2];
+                      return (
+                        <label key={cat2.id} className="block">
+                          <span className="mb-1 block text-[11px] font-medium text-[var(--vl-text-muted)]">
+                            {cat2.nombre}
+                          </span>
+                          <select
+                            className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-2.5 text-sm"
+                            defaultValue=""
+                            onChange={(e) => {
+                              addFromSelect(e.target.value);
+                              e.target.value = "";
+                            }}
+                          >
+                            <option value="">Elegir…</option>
+                            {options.map((opt) => (
+                              <option
+                                key={opt.id}
+                                value={opt.id}
+                                disabled={selected.includes(opt.id)}
+                              >
+                                {opt.nombre}
+                                {selected.includes(opt.id) ? " ✓" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+          {ok && (
+            <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">
+              {ok}
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void save()}
+            className="mt-3 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
+          >
+            {busy ? "Guardando…" : "Guardar diagnóstico"}
+          </button>
+        </>
+      )}
     </div>
   );
 }
