@@ -1838,48 +1838,57 @@ function DiagnosticoOtPanel({
 
   const roots = cats.filter((c) => c.nivel === 1);
 
+  function toggle(id: string) {
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
   return (
     <div className="rounded-xl border border-[var(--vl-card-border)] p-3">
       <div className="text-sm font-semibold text-[var(--vl-heading)]">
         Diagnóstico detallado (multi)
       </div>
       <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-        Se completa al final del proceso (presupuesto/cierre), no en la
-        solicitud del chofer.
+        Planilla MI VETTORE — elegí uno o más ítems (nivel más específico).
       </p>
-      <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+      <div className="mt-3 max-h-72 space-y-3 overflow-y-auto">
         {roots.map((r) => {
-          const children = cats.filter((c) => c.padreId === r.id);
+          const n2 = cats.filter((c) => c.padreId === r.id);
           return (
-            <div key={r.id}>
-              <div className="text-xs font-semibold text-[var(--vl-heading)]">
+            <div key={r.id} className="space-y-2">
+              <div className="text-xs font-bold uppercase tracking-wide text-[var(--vl-heading)]">
                 {r.nombre}
               </div>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {(children.length ? children : [r]).map((c) => {
-                  const on = selected.includes(c.id);
+              {n2.length === 0 ? (
+                <Chip
+                  label={r.nombre}
+                  on={selected.includes(r.id)}
+                  onClick={() => toggle(r.id)}
+                />
+              ) : (
+                n2.map((cat2) => {
+                  const n3 = cats.filter((c) => c.padreId === cat2.id);
+                  const leaves = n3.length > 0 ? n3 : [cat2];
                   return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() =>
-                        setSelected((prev) =>
-                          on
-                            ? prev.filter((id) => id !== c.id)
-                            : [...prev, c.id]
-                        )
-                      }
-                      className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                        on
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-                      }`}
-                    >
-                      {c.nombre}
-                    </button>
+                    <div key={cat2.id} className="pl-1">
+                      <div className="text-[11px] font-semibold text-[var(--vl-text-muted)]">
+                        {cat2.nombre}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {leaves.map((leaf) => (
+                          <Chip
+                            key={leaf.id}
+                            label={leaf.nombre}
+                            on={selected.includes(leaf.id)}
+                            onClick={() => toggle(leaf.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   );
-                })}
-              </div>
+                })
+              )}
             </div>
           );
         })}
@@ -1894,5 +1903,29 @@ function DiagnosticoOtPanel({
         {busy ? "Guardando…" : "Guardar diagnóstico"}
       </button>
     </div>
+  );
+}
+
+function Chip({
+  label,
+  on,
+  onClick,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-2 py-0.5 text-[11px] ${
+        on
+          ? "border-slate-900 bg-slate-900 text-white"
+          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
