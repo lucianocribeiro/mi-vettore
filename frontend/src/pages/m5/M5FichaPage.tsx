@@ -1387,15 +1387,21 @@ export function M5FichaPage() {
                   className={inputClass}
                   value={fModelo}
                   onChange={(e) => setFModelo(e.target.value)}
-                  disabled={!fMarca}
                 >
-                  <option value="">—</option>
+                  <option value="">
+                    {fMarca ? "—" : "Primero elegí una marca"}
+                  </option>
                   {modelosParaMarca.map((m) => (
                     <option key={m} value={m}>
                       {m}
                     </option>
                   ))}
                 </select>
+                {!fMarca && (
+                  <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                    El modelo se completa según la marca elegida.
+                  </p>
+                )}
               </Field>
               <Field label="Año">
                 {/* Piso desde 2000 inclusive hasta el año actual */}
