@@ -5,6 +5,7 @@ import {
   ESTADO_CAMIONETA_STYLE,
   ESTADO_CHOFER_STYLE,
 } from "../../components/Badge";
+import { DocumentUpload } from "../../components/DocumentUpload";
 import { Pencil, X } from "../../components/icons";
 import { apiFetch, ApiError } from "../../lib/api";
 import {
@@ -107,6 +108,12 @@ export function FichaDrawer({
         hasta: a.periodoHasta ? formatDate(a.periodoHasta) : "actual",
       }));
 
+  const capacidadLabel = cam
+    ? cam.capacidadValor != null
+      ? `${cam.capacidadValor}${cam.capacidadUnidad ? ` ${cam.capacidadUnidad}` : ""}`
+      : cam.capacidad || "—"
+    : "—";
+
   return (
     <div
       className="fixed inset-0 z-50 flex justify-end bg-black/50"
@@ -154,60 +161,78 @@ export function FichaDrawer({
 
         <div className="flex-1 overflow-y-auto p-5">
           {tab === "datos" && isCamioneta && cam && (
-            <div className="space-y-3 text-sm">
-              <Row
-                label="Marca / modelo"
-                value={
-                  [cam.marca, cam.modelo, cam.anio != null ? String(cam.anio) : null]
-                    .filter(Boolean)
-                    .join(" ") || "—"
-                }
-              />
-              <Row label="Equipo de frío" value={cam.equipoFrio || "—"} />
-              <Row label="Capacidad" value={cam.capacidad || "—"} />
-              <Row
-                label="Tipo de servicio"
-                value={cam.tipoServicio?.nombre || cam.tipoTransporte?.toLowerCase() || "—"}
-              />
-              <Row
-                label="Kilometraje"
-                value={`${cam.km.toLocaleString("es-AR")} km`}
-              />
-              <Row
-                label="Últ. cambio de aceite"
-                value={formatDate(cam.fechaUltimoAceite)}
-              />
-              <Row
-                label="Últ. cambio de correa"
-                value={formatDate(cam.fechaCambioCorrea)}
-              />
-              <Row
-                label="Últ. cambio de neumáticos"
-                value={formatDate(cam.fechaCambioNeumaticos)}
-              />
-              <Row
-                label="Últ. cambio de batería"
-                value={formatDate(cam.fechaCambioBateria)}
-              />
-              <Row
-                label="Seguro"
-                value={
-                  cam.seguroCompania
-                    ? `${cam.seguroCompania} · vence ${formatDate(cam.seguroVencimiento)}`
-                    : "—"
-                }
-              />
-              <Row label="VTV vence" value={formatDate(cam.vtbVencimiento)} />
-              <Row
-                label="Datos técnicos"
-                value={cam.datosTecnicos || "—"}
-              />
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[var(--vl-text-muted)]">Estado</span>
-                <Badge className={ESTADO_CAMIONETA_STYLE[cam.estado]}>
-                  {cam.estado.replace("_", " ").toLowerCase()}
-                </Badge>
-              </div>
+            <div className="space-y-5 text-sm">
+              <section className="space-y-3">
+                <SectionTitle>Datos de la unidad</SectionTitle>
+                <Row
+                  label="Marca / modelo"
+                  value={
+                    [cam.marca, cam.modelo, cam.anio != null ? String(cam.anio) : null]
+                      .filter(Boolean)
+                      .join(" ") || "—"
+                  }
+                />
+                <Row label="Equipo de frío" value={cam.equipoFrio || "—"} />
+                <Row label="Capacidad" value={capacidadLabel} />
+                <Row
+                  label="Tipo de servicio"
+                  value={
+                    cam.tipoServicio?.nombre ||
+                    cam.tipoTransporte?.toLowerCase() ||
+                    "—"
+                  }
+                />
+                <Row
+                  label="Kilometraje"
+                  value={`${cam.km.toLocaleString("es-AR")} km`}
+                />
+                <Row
+                  label="Datos técnicos"
+                  value={cam.datosTecnicos || "—"}
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[var(--vl-text-muted)]">Estado</span>
+                  <Badge className={ESTADO_CAMIONETA_STYLE[cam.estado]}>
+                    {cam.estado.replace("_", " ").toLowerCase()}
+                  </Badge>
+                </div>
+              </section>
+
+              <section className="space-y-3 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
+                <SectionTitle>Vencimientos documentación</SectionTitle>
+                <Row
+                  label="Seguro"
+                  value={
+                    cam.seguroCompania
+                      ? `${cam.seguroCompania} · vence ${formatDate(cam.seguroVencimiento)}`
+                      : formatDate(cam.seguroVencimiento)
+                  }
+                />
+                <Row label="VTV vence" value={formatDate(cam.vtbVencimiento)} />
+                <div className="pt-1">
+                  <DocumentUpload camionetaId={cam.id} />
+                </div>
+              </section>
+
+              <section className="space-y-3 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
+                <SectionTitle>Historial mantenimiento</SectionTitle>
+                <Row
+                  label="Últ. cambio de aceite"
+                  value={formatDate(cam.fechaUltimoAceite)}
+                />
+                <Row
+                  label="Últ. cambio de correa"
+                  value={formatDate(cam.fechaCambioCorrea)}
+                />
+                <Row
+                  label="Últ. cambio de neumáticos"
+                  value={formatDate(cam.fechaCambioNeumaticos)}
+                />
+                <Row
+                  label="Últ. cambio de batería"
+                  value={formatDate(cam.fechaCambioBateria)}
+                />
+              </section>
 
               <div className="rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
                 <div className="mb-2 flex items-center justify-between">
@@ -294,26 +319,40 @@ export function FichaDrawer({
           )}
 
           {tab === "datos" && ch && (
-            <div className="space-y-3 text-sm">
-              <Row label="DNI" value={ch.dni} />
-              <Row label="CUIL" value={ch.cuil || "—"} />
-              <Row label="Licencia" value={ch.licencia || "—"} />
-              <Row
-                label="Venc. licencia"
-                value={formatDate(ch.licenciaVencimiento)}
-              />
-              <Row label="Teléfono" value={ch.telefono || "—"} />
-              <Row label="Email" value={ch.email || "—"} />
-              <Row
-                label="Perfil"
-                value={ch.esDuenoFlota ? "Empresa de transporte" : "Chofer"}
-              />
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[var(--vl-text-muted)]">Estado</span>
-                <Badge className={ESTADO_CHOFER_STYLE[ch.estado]}>
-                  {ch.estado.toLowerCase()}
-                </Badge>
-              </div>
+            <div className="space-y-5 text-sm">
+              <section className="space-y-3">
+                <SectionTitle>Datos del chofer</SectionTitle>
+                <Row label="DNI" value={ch.dni} />
+                <Row label="CUIL" value={ch.cuil || "—"} />
+                <Row label="Licencia" value={ch.licencia || "—"} />
+                <Row
+                  label="Venc. licencia"
+                  value={formatDate(ch.licenciaVencimiento)}
+                />
+                <Row label="Teléfono" value={ch.telefono || "—"} />
+                <Row label="Email" value={ch.email || "—"} />
+                <Row
+                  label="Perfil"
+                  value={ch.esDuenoFlota ? "Empresa de transporte" : "Chofer"}
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[var(--vl-text-muted)]">Estado</span>
+                  <Badge className={ESTADO_CHOFER_STYLE[ch.estado]}>
+                    {ch.estado.toLowerCase()}
+                  </Badge>
+                </div>
+              </section>
+
+              <section className="space-y-3 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
+                <SectionTitle>Vencimientos documentación</SectionTitle>
+                <Row
+                  label="Licencia vence"
+                  value={formatDate(ch.licenciaVencimiento)}
+                />
+                <div className="pt-1">
+                  <DocumentUpload choferId={ch.id} />
+                </div>
+              </section>
 
               {canEdit && ch.estado === "ACTIVO" && onBaja && (
                 <button
@@ -359,6 +398,14 @@ export function FichaDrawer({
         </div>
       </div>
     </div>
+  );
+}
+
+function SectionTitle({ children }: { children: string }) {
+  return (
+    <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+      {children}
+    </h4>
   );
 }
 

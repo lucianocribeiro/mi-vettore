@@ -76,6 +76,17 @@ export function isSugerenciasOnly(rol?: Role | null): boolean {
   return rol === "SUGERENCIAS";
 }
 
+/** Silvina, Patricio y Julieta pueden corregir/borrar con motivo. */
+export const ADMIN_CORRECCION_ROLES: Role[] = [
+  "SILVINA",
+  "PATRICIO",
+  "JULIETA",
+];
+
+export function canAdminCorregir(rol?: Role | null): boolean {
+  return !!rol && ADMIN_CORRECCION_ROLES.includes(rol);
+}
+
 export type SegmentoCliente = "ESTATICO" | "CONSULTA" | "CONFIRMACION";
 export type EstadoChofer = "ACTIVO" | "INACTIVO";
 export type EstadoCamioneta =
@@ -90,17 +101,72 @@ export type TipoTransporte =
   | "REFRIGERADO"
   | "SECO";
 
+export type TipoTaller =
+  | "MECANICA"
+  | "REPUESTEROS"
+  | "GOMERIAS"
+  | "BATERIAS"
+  | "GNC"
+  | "FRIO";
+
+export type TipoDocumento =
+  | "DNI_FRENTE"
+  | "DNI_DORSO"
+  | "LICENCIA"
+  | "HABILITACION_MANIPULACION"
+  | "VTV"
+  | "SENASA"
+  | "SEGURO";
+
+export type EstadoValidacionDoc = "PENDIENTE" | "VALIDADO" | "RECHAZADO";
+
+export const TIPOS_DOCUMENTO_CON_VENCIMIENTO: TipoDocumento[] = [
+  "LICENCIA",
+  "HABILITACION_MANIPULACION",
+  "VTV",
+  "SENASA",
+  "SEGURO",
+];
+
+export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
+  DNI_FRENTE: "DNI frente",
+  DNI_DORSO: "DNI dorso",
+  LICENCIA: "Licencia",
+  HABILITACION_MANIPULACION: "Habilitación manipulación",
+  VTV: "VTV",
+  SENASA: "SENASA",
+  SEGURO: "Seguro",
+};
+
+export const TIPO_TALLER_LABEL: Record<TipoTaller, string> = {
+  MECANICA: "Mecánica",
+  REPUESTEROS: "Repuesteros",
+  GOMERIAS: "Gomerías",
+  BATERIAS: "Baterías",
+  GNC: "GNC",
+  FRIO: "Frío",
+};
+
 export const MARCAS_CAMIONETA = [
-  "Renault",
-  "Peugeot",
   "Fiat",
-  "Volkswagen",
-  "Ford",
-  "Chevrolet",
-  "Mercedes-Benz",
-  "Iveco",
-  "Otra",
+  "Peugeot",
+  "Citroën",
+  "Renault",
+  "Furgón",
+  "Otros",
 ] as const;
+
+export type MarcaCamioneta = (typeof MARCAS_CAMIONETA)[number];
+
+export const MARCA_MODELO_CAMIONETA: Record<MarcaCamioneta, readonly string[]> =
+  {
+    Fiat: ["Fiorino Fire", "Fiorino Evo", "Otros"],
+    Peugeot: ["Partner HDI", "Partner Nafta", "Partner Nafta-GNC", "Otros"],
+    Citroën: ["Berlingo HDI", "Berlingo Nafta-GNC", "Otros"],
+    Renault: ["Kangoo", "Otros"],
+    Furgón: ["Furgón", "Otros"],
+    Otros: ["Otros"],
+  };
 
 export type TipoPedido =
   | "ALTA"
@@ -168,11 +234,14 @@ export type Camioneta = {
   anio: number | null;
   equipoFrio: string | null;
   capacidad: string | null;
+  capacidadValor?: number | null;
+  capacidadUnidad?: string | null;
   tipoTransporte: TipoTransporte | null;
   tipoServicioId: string | null;
   tipoServicio?: TipoServicio | null;
   datosTecnicos: string | null;
   km: number;
+  kmActualizadoAt?: string | null;
   fechaUltimoAceite: string | null;
   fechaCambioCorrea: string | null;
   fechaCambioNeumaticos: string | null;
@@ -182,6 +251,54 @@ export type Camioneta = {
   vtbVencimiento: string | null;
   estado: EstadoCamioneta;
   asignaciones?: AsignacionFlota[];
+  /** Presente en respuestas de mantenimiento/update si el salto de km es alto. */
+  alertaKmAnomalia?: boolean;
+  mensaje?: string;
+};
+
+export type TallerProveedorTipo = {
+  id: string;
+  tallerId: string;
+  tipo: TipoTaller;
+};
+
+export type TallerProveedor = {
+  id: string;
+  cuit: string;
+  razonSocial: string;
+  direccion: string | null;
+  mail: string | null;
+  celular: string | null;
+  aliasCbu: string | null;
+  activo: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  tipos: TallerProveedorTipo[];
+};
+
+export type DocumentoEntidad = {
+  id: string;
+  tipo: TipoDocumento;
+  choferId: string | null;
+  camionetaId: string | null;
+  storagePath: string;
+  mimeType: string;
+  nombreOriginal: string | null;
+  vencimiento: string | null;
+  estadoValidacion: EstadoValidacionDoc;
+  validadoPorId: string | null;
+  motivoRechazo: string | null;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type CategoriaDiagnostico = {
+  id: string;
+  nombre: string;
+  padreId: string | null;
+  nivel: number;
+  activo: boolean;
+  orden: number;
 };
 
 export function currentAsignacion(camioneta: Camioneta): AsignacionFlota | null {

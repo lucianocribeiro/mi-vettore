@@ -1,17 +1,19 @@
 import { currentAsignacion, type Camioneta, type EstadoCamioneta, type TipoTransporte } from "../types";
 
+export type TipoFiltroTransporte = TipoTransporte | "SIN_TIPO";
+
 export type FlotaUnitFilters = {
   query: string;
-  estado: "" | EstadoCamioneta;
-  tipo: "" | TipoTransporte | "SIN_TIPO";
+  estado: EstadoCamioneta[];
+  tipo: TipoFiltroTransporte[];
   modelo: string;
   capacidad: string;
 };
 
 export const EMPTY_FLOTA_FILTERS: FlotaUnitFilters = {
   query: "",
-  estado: "",
-  tipo: "",
+  estado: [],
+  tipo: [],
   modelo: "",
   capacidad: "",
 };
@@ -45,19 +47,28 @@ export function filterCamionetas(
   const modeloQ = f.modelo.trim().toLowerCase();
   const capacidadQ = f.capacidad.trim().toLowerCase();
   return items.filter((c) => {
-    if (f.estado && c.estado !== f.estado) return false;
-    if (f.tipo === "SIN_TIPO" && c.tipoTransporte) return false;
-    if (f.tipo && f.tipo !== "SIN_TIPO" && c.tipoTransporte !== f.tipo) {
-      return false;
+    if (f.estado.length > 0 && !f.estado.includes(c.estado)) return false;
+    if (f.tipo.length > 0) {
+      const matchTipo = f.tipo.some((t) => {
+        if (t === "SIN_TIPO") return !c.tipoTransporte;
+        return c.tipoTransporte === t;
+      });
+      if (!matchTipo) return false;
     }
     if (modeloQ && !(c.modelo ?? "").toLowerCase().includes(modeloQ)) {
       return false;
     }
-    if (
-      capacidadQ &&
-      !(c.capacidad ?? "").toLowerCase().includes(capacidadQ)
-    ) {
-      return false;
+    if (capacidadQ) {
+      const capLabel = [
+        c.capacidad,
+        c.capacidadValor != null
+          ? `${c.capacidadValor}${c.capacidadUnidad ? ` ${c.capacidadUnidad}` : ""}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!capLabel.includes(capacidadQ)) return false;
     }
     if (!q) return true;
     const a = currentAsignacion(c);
@@ -66,6 +77,8 @@ export function filterCamionetas(
       c.marca,
       c.modelo,
       c.capacidad,
+      c.capacidadValor != null ? String(c.capacidadValor) : null,
+      c.capacidadUnidad,
       c.equipoFrio,
       c.datosTecnicos,
       c.tipoTransporte,
@@ -80,6 +93,10 @@ export function filterCamionetas(
       .toLowerCase();
     return hay.includes(q);
   });
+}
+
+function toggleInArray<T>(arr: T[], value: T): T[] {
+  return arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value];
 }
 
 type Props = {
@@ -99,8 +116,8 @@ export function FlotaUnitFilterBar({
 }: Props) {
   const active =
     !!value.query.trim() ||
-    !!value.estado ||
-    !!value.tipo ||
+    value.estado.length > 0 ||
+    value.tipo.length > 0 ||
     !!value.modelo.trim() ||
     !!value.capacidad.trim();
 
@@ -114,43 +131,75 @@ export function FlotaUnitFilterBar({
         className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
       />
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <select
-          value={value.estado}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              estado: e.target.value as FlotaUnitFilters["estado"],
-            })
-          }
-          className="min-h-11 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2 text-sm text-[var(--vl-text)]"
+        <div
+          className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2"
           aria-label="Filtrar por estado"
         >
-          <option value="">Todos los estados</option>
-          {ESTADOS_CAMIONETA.map((e) => (
-            <option key={e.value} value={e.value}>
-              {e.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={value.tipo}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              tipo: e.target.value as FlotaUnitFilters["tipo"],
-            })
-          }
-          className="min-h-11 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2 text-sm text-[var(--vl-text)]"
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+            Estado
+          </div>
+          <div className="flex flex-col gap-1">
+            {ESTADOS_CAMIONETA.map((e) => (
+              <label
+                key={e.value}
+                className="flex items-center gap-2 text-xs text-[var(--vl-text)]"
+              >
+                <input
+                  type="checkbox"
+                  checked={value.estado.includes(e.value)}
+                  onChange={() =>
+                    onChange({
+                      ...value,
+                      estado: toggleInArray(value.estado, e.value),
+                    })
+                  }
+                />
+                {e.label}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div
+          className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2"
           aria-label="Filtrar por clasificación"
         >
-          <option value="">Todas las clasificaciones</option>
-          {TIPOS_TRANSPORTE.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-          <option value="SIN_TIPO">Sin clasificación</option>
-        </select>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+            Clasificación
+          </div>
+          <div className="flex flex-col gap-1">
+            {TIPOS_TRANSPORTE.map((t) => (
+              <label
+                key={t.value}
+                className="flex items-center gap-2 text-xs text-[var(--vl-text)]"
+              >
+                <input
+                  type="checkbox"
+                  checked={value.tipo.includes(t.value)}
+                  onChange={() =>
+                    onChange({
+                      ...value,
+                      tipo: toggleInArray(value.tipo, t.value),
+                    })
+                  }
+                />
+                {t.label}
+              </label>
+            ))}
+            <label className="flex items-center gap-2 text-xs text-[var(--vl-text)]">
+              <input
+                type="checkbox"
+                checked={value.tipo.includes("SIN_TIPO")}
+                onChange={() =>
+                  onChange({
+                    ...value,
+                    tipo: toggleInArray(value.tipo, "SIN_TIPO" as const),
+                  })
+                }
+              />
+              Sin clasificación
+            </label>
+          </div>
+        </div>
         <input
           type="text"
           value={value.modelo}

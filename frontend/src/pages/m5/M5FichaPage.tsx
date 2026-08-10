@@ -16,7 +16,10 @@ import { Download, Plus } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
 import {
   ALL_ROLES,
+  MARCAS_CAMIONETA,
+  MARCA_MODELO_CAMIONETA,
   ROLE_LABELS,
+  TIPO_TALLER_LABEL,
   canWriteMaster,
   currentAsignacion,
   isInternalOps,
@@ -24,10 +27,13 @@ import {
   type Cliente,
   type Chofer,
   type Empresa,
+  type MarcaCamioneta,
   type Role,
   type SegmentoCliente,
+  type TallerProveedor,
   type TipoEmpresa,
   type TipoServicio,
+  type TipoTaller,
   type User,
 } from "../../types";
 import { FichaDrawer } from "./FichaDrawer";
@@ -39,7 +45,8 @@ type Tab =
   | "clientes"
   | "empresas"
   | "usuarios"
-  | "tiposServicio";
+  | "tiposServicio"
+  | "talleres";
 
 type DrawerOpen =
   | { tipo: "camioneta"; item: Camioneta }
@@ -52,7 +59,8 @@ type CreateKind =
   | "cliente"
   | "empresa"
   | "usuario"
-  | "tipoServicio";
+  | "tipoServicio"
+  | "taller";
 
 const CREATE_KIND_BY_TAB: Record<Tab, CreateKind | null> = {
   camioneta: "camioneta",
@@ -61,6 +69,7 @@ const CREATE_KIND_BY_TAB: Record<Tab, CreateKind | null> = {
   empresas: "empresa",
   usuarios: "usuario",
   tiposServicio: "tipoServicio",
+  talleres: "taller",
 };
 
 const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
@@ -70,7 +79,18 @@ const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
   empresas: "empresa",
   usuarios: "usuario",
   tiposServicio: "tipo de servicio",
+  talleres: "taller",
 };
+
+const EQUIPO_FRIO_FALLBACK = [
+  "Congelado",
+  "Supercongelado",
+  "Refrigerado",
+  "Seco",
+] as const;
+
+const ANIO_MIN = 2001; // reunión 2000 floor / planilla 2005
+const ANIO_MAX = new Date().getFullYear();
 
 export function M5FichaPage() {
   const { token, user } = useAuth();
@@ -86,6 +106,8 @@ export function M5FichaPage() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [usuarios, setUsuarios] = useState<User[]>([]);
   const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([]);
+  const [talleres, setTalleres] = useState<TallerProveedor[]>([]);
+  const [tiposTallerMeta, setTiposTallerMeta] = useState<TipoTaller[]>([]);
 
   const [drawer, setDrawer] = useState<DrawerOpen>(null);
   const [unitFilters, setUnitFilters] =
@@ -100,6 +122,7 @@ export function M5FichaPage() {
     | { kind: "camioneta"; item?: Camioneta }
     | { kind: "usuario"; item?: User }
     | { kind: "tipoServicio"; item?: TipoServicio }
+    | { kind: "taller"; item?: TallerProveedor }
   >(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -125,7 +148,8 @@ export function M5FichaPage() {
   const [fModelo, setFModelo] = useState("");
   const [fAnio, setFAnio] = useState("");
   const [fEquipoFrio, setFEquipoFrio] = useState("");
-  const [fCapacidad, setFCapacidad] = useState("");
+  const [fCapacidadValor, setFCapacidadValor] = useState("");
+  const [fCapacidadUnidad, setFCapacidadUnidad] = useState("");
   const [fTipoTransporte, setFTipoTransporte] = useState<string>("");
   const [fTipoServicioId, setFTipoServicioId] = useState("");
   const [fDatosTecnicos, setFDatosTecnicos] = useState("");
@@ -150,26 +174,65 @@ export function M5FichaPage() {
   );
   const [fTsNombre, setFTsNombre] = useState("");
   const [fTsOrden, setFTsOrden] = useState("0");
+  const [fTallerCuit, setFTallerCuit] = useState("");
+  const [fTallerRazon, setFTallerRazon] = useState("");
+  const [fTallerDireccion, setFTallerDireccion] = useState("");
+  const [fTallerMail, setFTallerMail] = useState("");
+  const [fTallerCelular, setFTallerCelular] = useState("");
+  const [fTallerAlias, setFTallerAlias] = useState("");
+  const [fTallerTipos, setFTallerTipos] = useState<TipoTaller[]>([]);
+
+  const equipoFrioOptions = useMemo(() => {
+    const names = tiposServicio
+      .filter((t) => t.activo)
+      .map((t) => t.nombre)
+      .filter(Boolean);
+    const merged = [...names];
+    for (const f of EQUIPO_FRIO_FALLBACK) {
+      if (!merged.some((n) => n.toLowerCase() === f.toLowerCase())) {
+        merged.push(f);
+      }
+    }
+    return merged;
+  }, [tiposServicio]);
+
+  const modelosParaMarca = useMemo(() => {
+    if (!fMarca || !(fMarca in MARCA_MODELO_CAMIONETA)) return [] as string[];
+    return [...MARCA_MODELO_CAMIONETA[fMarca as MarcaCamioneta]];
+  }, [fMarca]);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const [cami, chof, cli, emp, usu, tServ] = await Promise.all([
-        apiFetch<Camioneta[]>("/api/camionetas", {}, token),
-        apiFetch<Chofer[]>("/api/choferes", {}, token),
-        apiFetch<Cliente[]>("/api/clientes", {}, token),
-        apiFetch<Empresa[]>("/api/empresas", {}, token),
-        apiFetch<User[]>("/api/usuarios", {}, token),
-        apiFetch<TipoServicio[]>("/api/tipos-servicio", {}, token),
-      ]);
+      const [cami, chof, cli, emp, usu, tServ, tall, tallMeta] =
+        await Promise.all([
+          apiFetch<Camioneta[]>("/api/camionetas", {}, token),
+          apiFetch<Chofer[]>("/api/choferes", {}, token),
+          apiFetch<Cliente[]>("/api/clientes", {}, token),
+          apiFetch<Empresa[]>("/api/empresas", {}, token),
+          apiFetch<User[]>("/api/usuarios", {}, token),
+          apiFetch<TipoServicio[]>("/api/tipos-servicio", {}, token),
+          apiFetch<TallerProveedor[]>("/api/talleres-proveedores", {}, token),
+          apiFetch<{ tipos: TipoTaller[] }>(
+            "/api/talleres-proveedores/meta",
+            {},
+            token
+          ).catch(() => ({ tipos: Object.keys(TIPO_TALLER_LABEL) as TipoTaller[] })),
+        ]);
       setCamionetas(cami);
       setChoferes(chof);
       setClientes(cli);
       setEmpresas(emp);
       setUsuarios(usu);
       setTiposServicio(tServ);
+      setTalleres(tall);
+      setTiposTallerMeta(
+        tallMeta.tipos?.length
+          ? tallMeta.tipos
+          : (Object.keys(TIPO_TALLER_LABEL) as TipoTaller[])
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar datos");
     } finally {
@@ -202,7 +265,8 @@ export function M5FichaPage() {
     setFModelo("");
     setFAnio("");
     setFEquipoFrio("");
-    setFCapacidad("");
+    setFCapacidadValor("");
+    setFCapacidadUnidad("");
     setFTipoTransporte("");
     setFTipoServicioId("");
     setFDatosTecnicos("");
@@ -223,6 +287,13 @@ export function M5FichaPage() {
     setFEstadoUser("ACTIVO");
     setFTsNombre("");
     setFTsOrden("0");
+    setFTallerCuit("");
+    setFTallerRazon("");
+    setFTallerDireccion("");
+    setFTallerMail("");
+    setFTallerCelular("");
+    setFTallerAlias("");
+    setFTallerTipos([]);
     setForm({ kind });
   }
 
@@ -268,7 +339,10 @@ export function M5FichaPage() {
     setFModelo(item.modelo ?? "");
     setFAnio(item.anio != null ? String(item.anio) : "");
     setFEquipoFrio(item.equipoFrio ?? "");
-    setFCapacidad(item.capacidad ?? "");
+    setFCapacidadValor(
+      item.capacidadValor != null ? String(item.capacidadValor) : ""
+    );
+    setFCapacidadUnidad(item.capacidadUnidad ?? "");
     setFTipoTransporte(item.tipoTransporte ?? "");
     setFTipoServicioId(item.tipoServicioId ?? "");
     setFDatosTecnicos(item.datosTecnicos ?? "");
@@ -407,7 +481,8 @@ export function M5FichaPage() {
           modelo: fModelo || null,
           anio: fAnio ? Number(fAnio) : null,
           equipoFrio: fEquipoFrio || null,
-          capacidad: fCapacidad || null,
+          capacidadValor: fCapacidadValor ? Number(fCapacidadValor) : null,
+          capacidadUnidad: fCapacidadUnidad || null,
           tipoTransporte: fTipoTransporte || null,
           tipoServicioId: fTipoServicioId || null,
           datosTecnicos: fDatosTecnicos || null,
@@ -434,7 +509,8 @@ export function M5FichaPage() {
                 modelo: body.modelo,
                 anio: body.anio,
                 equipoFrio: body.equipoFrio,
-                capacidad: body.capacidad,
+                capacidadValor: body.capacidadValor,
+                capacidadUnidad: body.capacidadUnidad,
                 tipoTransporte: body.tipoTransporte,
                 tipoServicioId: body.tipoServicioId,
                 datosTecnicos: body.datosTecnicos,
@@ -508,6 +584,43 @@ export function M5FichaPage() {
             (a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
           )
         );
+      }
+
+      if (form.kind === "taller") {
+        if (!fTallerCuit.trim() || !fTallerRazon.trim()) {
+          setFormError("CUIT y razón social son obligatorios");
+          return;
+        }
+        const body = {
+          cuit: fTallerCuit,
+          razonSocial: fTallerRazon,
+          direccion: fTallerDireccion || null,
+          mail: fTallerMail || null,
+          celular: fTallerCelular || null,
+          aliasCbu: fTallerAlias || null,
+          tipos: fTallerTipos,
+        };
+        if (form.item) {
+          const updated = await apiFetch<TallerProveedor>(
+            `/api/talleres-proveedores/${form.item.id}`,
+            { method: "PUT", body: JSON.stringify(body) },
+            token
+          );
+          setTalleres((prev) =>
+            prev.map((t) => (t.id === updated.id ? updated : t))
+          );
+        } else {
+          const created = await apiFetch<TallerProveedor>(
+            "/api/talleres-proveedores",
+            { method: "POST", body: JSON.stringify(body) },
+            token
+          );
+          setTalleres((prev) =>
+            [...prev, created].sort((a, b) =>
+              a.razonSocial.localeCompare(b.razonSocial)
+            )
+          );
+        }
       }
 
       if (form.kind === "usuario") {
@@ -641,7 +754,15 @@ export function M5FichaPage() {
           url: "/api/tipos-servicio/export",
           file: "tipos_servicio.xlsx",
         },
+        talleres: {
+          url: "/api/talleres-proveedores",
+          file: "talleres.json",
+        },
       };
+      if (tab === "talleres") {
+        alert("Export Excel de talleres proveedores: próximamente");
+        return;
+      }
       const target = map[tab];
       await apiDownload(target.url, token, target.file);
     } catch (err) {
@@ -658,6 +779,7 @@ export function M5FichaPage() {
     { id: "empresas", label: "Empresas" },
     { id: "usuarios", label: "Usuarios" },
     { id: "tiposServicio", label: "Tipos de servicio" },
+    { id: "talleres", label: "Talleres proveedores" },
   ];
 
   const camionetasFiltradas = useMemo(
@@ -1020,6 +1142,42 @@ export function M5FichaPage() {
         />
       )}
 
+      {!loading && !error && tab === "talleres" && (
+        <EntityTable
+          headers={["CUIT", "Razón social", "Tipos", "Mail", "Celular", ""]}
+          rows={talleres.map((t) => [
+            t.cuit,
+            t.razonSocial,
+            (t.tipos ?? []).map((x) => x.tipo).join(", ") || "—",
+            t.mail ?? "—",
+            t.celular ?? "—",
+            canEdit ? (
+              <div className="flex justify-end gap-2 text-xs">
+                <button
+                  type="button"
+                  className="text-slate-600 hover:underline"
+                  onClick={() => {
+                    setFormError(null);
+                    setFTallerCuit(t.cuit);
+                    setFTallerRazon(t.razonSocial);
+                    setFTallerDireccion(t.direccion ?? "");
+                    setFTallerMail(t.mail ?? "");
+                    setFTallerCelular(t.celular ?? "");
+                    setFTallerAlias(t.aliasCbu ?? "");
+                    setFTallerTipos((t.tipos ?? []).map((x) => x.tipo));
+                    setForm({ kind: "taller", item: t });
+                  }}
+                >
+                  Editar
+                </button>
+              </div>
+            ) : (
+              ""
+            ),
+          ])}
+        />
+      )}
+
       {drawer && (
         <FichaDrawer
           open={drawer}
@@ -1216,20 +1374,13 @@ export function M5FichaPage() {
                 <select
                   className={inputClass}
                   value={fMarca}
-                  onChange={(e) => setFMarca(e.target.value)}
+                  onChange={(e) => {
+                    setFMarca(e.target.value);
+                    setFModelo("");
+                  }}
                 >
                   <option value="">—</option>
-                  {[
-                    "Renault",
-                    "Peugeot",
-                    "Fiat",
-                    "Volkswagen",
-                    "Ford",
-                    "Chevrolet",
-                    "Mercedes-Benz",
-                    "Iveco",
-                    "Otra",
-                  ].map((m) => (
+                  {MARCAS_CAMIONETA.map((m) => (
                     <option key={m} value={m}>
                       {m}
                     </option>
@@ -1237,40 +1388,62 @@ export function M5FichaPage() {
                 </select>
               </Field>
               <Field label="Modelo">
-                <input
+                <select
                   className={inputClass}
                   value={fModelo}
                   onChange={(e) => setFModelo(e.target.value)}
-                />
-              </Field>
-              <Field label="Año">
-                <select
-                  className={inputClass}
-                  value={fAnio}
-                  onChange={(e) => setFAnio(e.target.value)}
+                  disabled={!fMarca}
                 >
                   <option value="">—</option>
-                  {Array.from({ length: 20 }, (_, i) => 2026 - i).map((y) => (
-                    <option key={y} value={y}>
-                      {y}
+                  {modelosParaMarca.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Equipo de frío">
+              <Field label="Año">
+                {/* Reunión 07/08: >2000; planilla cliente decía >2005 */}
                 <input
+                  type="number"
+                  min={ANIO_MIN}
+                  max={ANIO_MAX}
+                  className={inputClass}
+                  value={fAnio}
+                  onChange={(e) => setFAnio(e.target.value)}
+                  placeholder={`${ANIO_MIN}–${ANIO_MAX}`}
+                />
+              </Field>
+              <Field label="Equipo de frío">
+                <select
                   className={inputClass}
                   value={fEquipoFrio}
                   onChange={(e) => setFEquipoFrio(e.target.value)}
-                  placeholder="Ej: Carrier Xarios 600"
+                >
+                  <option value="">—</option>
+                  {equipoFrioOptions.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Capacidad (número)">
+                <input
+                  type="number"
+                  min={0}
+                  className={inputClass}
+                  value={fCapacidadValor}
+                  onChange={(e) => setFCapacidadValor(e.target.value)}
+                  placeholder="Ej: 3500"
                 />
               </Field>
-              <Field label="Capacidad">
+              <Field label="Unidad de capacidad">
                 <input
                   className={inputClass}
-                  value={fCapacidad}
-                  onChange={(e) => setFCapacidad(e.target.value)}
-                  placeholder="Ej: 3500 kg"
+                  value={fCapacidadUnidad}
+                  onChange={(e) => setFCapacidadUnidad(e.target.value)}
+                  placeholder="kilos, litros, canastos…"
                 />
               </Field>
               <Field label="Tipo de servicio">
@@ -1443,6 +1616,100 @@ export function M5FichaPage() {
                   onChange={(e) => setFTsOrden(e.target.value)}
                 />
               </Field>
+            </>
+          )}
+
+          {form.kind === "taller" && (
+            <>
+              <Field label="CUIT">
+                <input
+                  className={inputClass}
+                  value={fTallerCuit}
+                  onChange={(e) => setFTallerCuit(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Razón social">
+                <input
+                  className={inputClass}
+                  value={fTallerRazon}
+                  onChange={(e) => setFTallerRazon(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Dirección">
+                <input
+                  className={inputClass}
+                  value={fTallerDireccion}
+                  onChange={(e) => setFTallerDireccion(e.target.value)}
+                />
+              </Field>
+              <Field label="Mail">
+                <input
+                  type="email"
+                  className={inputClass}
+                  value={fTallerMail}
+                  onChange={(e) => setFTallerMail(e.target.value)}
+                />
+              </Field>
+              <Field label="Celular">
+                <input
+                  className={inputClass}
+                  value={fTallerCelular}
+                  onChange={(e) => setFTallerCelular(e.target.value)}
+                />
+              </Field>
+              <Field label="Alias / CBU">
+                <input
+                  className={inputClass}
+                  value={fTallerAlias}
+                  onChange={(e) => setFTallerAlias(e.target.value)}
+                />
+              </Field>
+              <fieldset>
+                <legend className="mb-1 text-xs font-medium text-[var(--vl-text-muted)]">
+                  Tipos de taller (múltiples)
+                </legend>
+                <div className="flex flex-wrap gap-2">
+                  {(tiposTallerMeta.length
+                    ? tiposTallerMeta
+                    : ([
+                        "MECANICA",
+                        "REPUESTEROS",
+                        "GOMERIAS",
+                        "BATERIAS",
+                        "GNC",
+                        "FRIO",
+                      ] as TipoTaller[])
+                  ).map((tipo) => {
+                    const on = fTallerTipos.includes(tipo);
+                    return (
+                      <label
+                        key={tipo}
+                        className={`cursor-pointer rounded-full border px-2.5 py-1 text-xs ${
+                          on
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-[var(--vl-card-border)]"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={on}
+                          onChange={() =>
+                            setFTallerTipos((prev) =>
+                              on
+                                ? prev.filter((t) => t !== tipo)
+                                : [...prev, tipo]
+                            )
+                          }
+                        />
+                        {tipo}
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
             </>
           )}
 

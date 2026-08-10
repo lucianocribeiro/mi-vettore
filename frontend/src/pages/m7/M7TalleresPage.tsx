@@ -900,6 +900,15 @@ export function M7TalleresPage() {
 
                 {ot.currentStep === 2 && (
                   <div className="mt-4 space-y-4">
+                    <DiagnosticoOtPanel
+                      otId={ot.id}
+                      token={token!}
+                      onSaved={(updated) =>
+                        setOts((prev) =>
+                          prev.map((o) => (o.id === updated.id ? updated : o))
+                        )
+                      }
+                    />
                     <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
                       <strong>Paso de Silvina:</strong> elegí taller, monto y
                       subí el presupuesto (PDF opcional). Sin límite de
@@ -1519,11 +1528,14 @@ function NuevaSolicitudForm({
     user?.rol === "CHOFER" ? "CHOFER" : "ADMINISTRATIVO"
   );
   const [camionetaId, setCamionetaId] = useState("");
-  const [falla, setFalla] = useState<string>(FALLAS_COMUNES[0]);
+  const [falla, setFalla] = useState<string>(
+    user?.rol === "CHOFER" ? "" : FALLAS_COMUNES[0]
+  );
   const [detalle, setDetalle] = useState("");
   const [habilitadaCircular, setHabilitadaCircular] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const esChofer = user?.rol === "CHOFER";
 
   useEffect(() => {
     if (!token) return;
@@ -1536,8 +1548,21 @@ function NuevaSolicitudForm({
   }, [token]);
 
   async function submit() {
-    if (!token || !falla || !camionetaId) return;
-    if (falla === "Otros" && !detalle.trim()) {
+    if (!token || !camionetaId) return;
+    const problema = esChofer
+      ? detalle.trim()
+      : falla === "Otros"
+        ? detalle.trim()
+        : falla;
+    if (!problema) {
+      setErr(
+        esChofer
+          ? "Describí el problema en texto libre"
+          : "Indicá la falla"
+      );
+      return;
+    }
+    if (!esChofer && falla === "Otros" && !detalle.trim()) {
       setErr("Con «Otros» el detalle es obligatorio");
       return;
     }
@@ -1551,8 +1576,8 @@ function NuevaSolicitudForm({
           body: JSON.stringify({
             camionetaId,
             solicitante,
-            falla,
-            detalle: detalle.trim() || falla,
+            falla: esChofer ? problema : falla,
+            detalle: esChofer ? problema : detalle.trim() || falla,
             habilitadaCircular,
           }),
         },
@@ -1647,35 +1672,52 @@ function NuevaSolicitudForm({
           })}
         </select>
 
-        <label className="text-xs font-medium text-[var(--vl-text-muted)]">
-          Falla
-        </label>
-        <select
-          value={falla}
-          onChange={(e) => setFalla(e.target.value)}
-          className="mb-3 mt-1 w-full rounded-md border border-[var(--vl-card-border)] p-2 text-sm"
-        >
-          {FALLAS_COMUNES.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
+        {esChofer ? (
+          <>
+            <label className="text-xs font-medium text-[var(--vl-text-muted)]">
+              ¿Qué pasó? (texto libre)
+            </label>
+            <textarea
+              rows={4}
+              value={detalle}
+              onChange={(e) => setDetalle(e.target.value)}
+              placeholder='Ej. "se rompió la caja"'
+              className="mb-3 mt-1 w-full rounded-md border border-[var(--vl-card-border)] p-2 text-sm"
+            />
+          </>
+        ) : (
+          <>
+            <label className="text-xs font-medium text-[var(--vl-text-muted)]">
+              Falla
+            </label>
+            <select
+              value={falla}
+              onChange={(e) => setFalla(e.target.value)}
+              className="mb-3 mt-1 w-full rounded-md border border-[var(--vl-card-border)] p-2 text-sm"
+            >
+              {FALLAS_COMUNES.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
 
-        <label className="text-xs font-medium text-[var(--vl-text-muted)]">
-          Detalle {falla === "Otros" ? "(obligatorio)" : "(opcional)"}
-        </label>
-        <textarea
-          rows={3}
-          value={detalle}
-          onChange={(e) => setDetalle(e.target.value)}
-          placeholder={
-            falla === "Otros"
-              ? "Describí el problema…"
-              : "Más detalle si hace falta"
-          }
-          className="mb-3 mt-1 w-full rounded-md border border-[var(--vl-card-border)] p-2 text-sm"
-        />
+            <label className="text-xs font-medium text-[var(--vl-text-muted)]">
+              Detalle {falla === "Otros" ? "(obligatorio)" : "(opcional)"}
+            </label>
+            <textarea
+              rows={3}
+              value={detalle}
+              onChange={(e) => setDetalle(e.target.value)}
+              placeholder={
+                falla === "Otros"
+                  ? "Describí el problema…"
+                  : "Más detalle si hace falta"
+              }
+              className="mb-3 mt-1 w-full rounded-md border border-[var(--vl-card-border)] p-2 text-sm"
+            />
+          </>
+        )}
 
         <fieldset className="mb-4">
           <legend className="text-xs font-medium text-[var(--vl-text-muted)]">
@@ -1716,13 +1758,141 @@ function NuevaSolicitudForm({
 
         <button
           type="button"
-          disabled={saving || !camionetaId || !falla}
+          disabled={
+            saving ||
+            !camionetaId ||
+            (esChofer ? !detalle.trim() : !falla)
+          }
           onClick={() => void submit()}
           className="w-full rounded-md bg-slate-900 py-2.5 text-sm font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
         >
           {saving ? "Enviando…" : "Crear solicitud"}
         </button>
       </div>
+    </div>
+  );
+}
+
+type CategoriaDiagnostico = {
+  id: string;
+  nombre: string;
+  padreId: string | null;
+  nivel: number;
+};
+
+function DiagnosticoOtPanel({
+  otId,
+  token,
+  onSaved,
+}: {
+  otId: string;
+  token: string;
+  onSaved: (ot: OrdenTrabajo) => void;
+}) {
+  const [cats, setCats] = useState<CategoriaDiagnostico[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    void apiFetch<CategoriaDiagnostico[]>(
+      "/api/diagnostico/categorias",
+      {},
+      token
+    )
+      .then(setCats)
+      .catch(() => setCats([]));
+  }, [token]);
+
+  async function save() {
+    if (selected.length === 0) {
+      setErr("Elegí al menos un ítem del árbol");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const updated = await apiFetch<OrdenTrabajo>(
+        `/api/diagnostico/ot/${otId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ categoriaIds: selected }),
+        },
+        token
+      );
+      onSaved(updated);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Error al guardar");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (cats.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-[var(--vl-card-border)] p-3 text-xs text-[var(--vl-text-muted)]">
+        Árbol de diagnóstico vacío — corré el seed o cargá categorías.
+      </div>
+    );
+  }
+
+  const roots = cats.filter((c) => c.nivel === 1);
+
+  return (
+    <div className="rounded-xl border border-[var(--vl-card-border)] p-3">
+      <div className="text-sm font-semibold text-[var(--vl-heading)]">
+        Diagnóstico detallado (multi)
+      </div>
+      <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+        Se completa al final del proceso (presupuesto/cierre), no en la
+        solicitud del chofer.
+      </p>
+      <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+        {roots.map((r) => {
+          const children = cats.filter((c) => c.padreId === r.id);
+          return (
+            <div key={r.id}>
+              <div className="text-xs font-semibold text-[var(--vl-heading)]">
+                {r.nombre}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {(children.length ? children : [r]).map((c) => {
+                  const on = selected.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() =>
+                        setSelected((prev) =>
+                          on
+                            ? prev.filter((id) => id !== c.id)
+                            : [...prev, c.id]
+                        )
+                      }
+                      className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                        on
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                      }`}
+                    >
+                      {c.nombre}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void save()}
+        className="mt-3 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
+      >
+        {busy ? "Guardando…" : "Guardar diagnóstico"}
+      </button>
     </div>
   );
 }

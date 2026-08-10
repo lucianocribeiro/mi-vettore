@@ -90,6 +90,7 @@ export function AppLayout() {
       {user && !onlySugerencias && (
         <button
           type="button"
+          data-testid="sugerencias-fab"
           onClick={() => setSugerenciaOpen(true)}
           className="fixed bottom-5 right-5 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-[#1e4080] px-4 text-sm font-semibold text-white shadow-lg hover:bg-[#18356c] safe-bottom"
         >
