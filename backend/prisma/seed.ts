@@ -680,6 +680,39 @@ async function main() {
   console.log(
     `Empresas: ${flota.empresas.length} · Choferes: ${choferByDni.size} · Unidades: ${camionetas.length}`
   );
+
+  // Árbol de diagnóstico (planilla)
+  const { DIAGNOSTICO_SEED } = await import("../src/lib/diagnostico-seed-data.js");
+  await prisma.ordenTrabajoDiagnostico.deleteMany({});
+  await prisma.categoriaDiagnostico.deleteMany({});
+  let orden = 0;
+  for (const n1 of DIAGNOSTICO_SEED) {
+    const p1 = await prisma.categoriaDiagnostico.create({
+      data: { nombre: n1.nombre, nivel: 1, orden: orden++ },
+    });
+    for (const n2 of n1.hijos ?? []) {
+      const p2 = await prisma.categoriaDiagnostico.create({
+        data: {
+          nombre: n2.nombre,
+          nivel: 2,
+          padreId: p1.id,
+          orden: orden++,
+        },
+      });
+      for (const n3 of n2.hijos ?? []) {
+        await prisma.categoriaDiagnostico.create({
+          data: {
+            nombre: n3,
+            nivel: 3,
+            padreId: p2.id,
+            orden: orden++,
+          },
+        });
+      }
+    }
+  }
+  console.log(`Categorías diagnóstico: ${orden}`);
+
   const n = (t: string) => accesos.filter((a) => a.tipo === t).length;
   console.log(
     `Logins: ${accesos.length} (admin ${n("administrativo")} · chofer ${n("chofer")} · titular ${n("empresa_titular")} · empresa ${n("empresa")} · cliente ${n("cliente")} · alias ${n("alias_demo")})`

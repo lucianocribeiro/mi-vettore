@@ -1,13 +1,21 @@
 // Mi Vettore — Prisma schema
-// Producción: PostgreSQL (Neon). DATABASE_URL en env.
+// Producción: PostgreSQL (Supabase). DATABASE_URL + DIRECT_URL en env.
+//
+// TODO (miércoles — pendiente de definición, no implementar aún):
+// - Historial de patentes al cambiar de empresa (¿transferir o baja+alta?)
+// - Proceso de reactivación post-reparación (quién notifica)
+// - Alertas SENASA (standby — no activar)
+// - Umbrales de mantenimiento preventivo (servicio/frenos/neumáticos)
+// - Mail institucional de notificaciones → usar NOTIF_FROM_EMAIL / SMTP_FROM
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -78,6 +86,31 @@ enum OrigenPedido {
   SISTEMA
 }
 
+enum TipoTaller {
+  MECANICA
+  REPUESTEROS
+  GOMERIAS
+  BATERIAS
+  GNC
+  FRIO
+}
+
+enum TipoDocumento {
+  DNI_FRENTE
+  DNI_DORSO
+  LICENCIA
+  HABILITACION_MANIPULACION
+  VTV
+  SENASA
+  SEGURO
+}
+
+enum EstadoValidacionDoc {
+  PENDIENTE
+  VALIDADO
+  RECHAZADO
+}
+
 model Usuario {
   id           String     @id @default(cuid())
   email        String     @unique
@@ -90,11 +123,13 @@ model Usuario {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  cliente     Cliente?          @relation(fields: [clienteId], references: [id])
-  chofer      Chofer?           @relation(fields: [choferId], references: [id])
-  auditorias  OtAuditoria[]
-  sugerencias SugerenciaUsuario[]
-  avisos      AvisoInterno[]    @relation("AvisoUsuario")
+  cliente              Cliente?           @relation(fields: [clienteId], references: [id])
+  chofer               Chofer?            @relation(fields: [choferId], references: [id])
+  auditorias           OtAuditoria[]
+  sugerencias          SugerenciaUsuario[]
+  avisos               AvisoInterno[]     @relation("AvisoUsuario")
+  docsValidados        DocumentoEntidad[] @relation("DocValidador")
+  correccionesAdmin    CorreccionAdmin[]
 }
 
 model Cliente {
@@ -117,7 +152,7 @@ model Chofer {
   licenciaVencimiento DateTime?
   telefono            String?
   email               String?
-  /// Empresa de transporte (titular): ve todas las unidades de su/s empresa/s.
+  /// Empresa unipersonal / titular: misma UI de chofer; ve y rota patentes de su empresa.
   esDuenoFlota        Boolean          @default(false)
   estado              EstadoChofer     @default(ACTIVO)
   createdAt           DateTime         @default(now())
@@ -126,6 +161,7 @@ model Chofer {
   pedidos             Pedido[]
   usuarios            Usuario[]
   solicitudes         SolicitudTaller[]
+  documentos          DocumentoEntidad[]
 }
 
 /// Catálogo configurable de tipos de servicio (congelado, seco, etc.).
@@ -144,14 +180,22 @@ model Camioneta {
   patente                String           @unique
   marca                  String?
   modelo                 String?
+  /// Reunión 07/08: >2000 y <= año actual. Planilla cliente decía >2005 — usar 2000 hasta confirmación miércoles.
   anio                   Int?
-  /// Descripción del equipo de frío (reemplaza color).
+  /// Categoría de frío alineada a TipoServicio (Congelado, Supercongelado, Refrigerado, Seco).
   equipoFrio             String?
+  /// Número de capacidad (separado de unidad).
+  capacidadValor         Int?
+  /// Unidad libre: kilos, litros, canastos, baldes, etc.
+  capacidadUnidad        String?
+  /// Legacy — preferir capacidadValor + capacidadUnidad.
   capacidad              String?
   tipoTransporte         TipoTransporte?
   tipoServicioId         String?
   datosTecnicos          String?
   km                     Int              @default(0)
+  /// Última vez que se actualizó el kilometraje (recordatorio 10 días).
+  kmActualizadoAt        DateTime?
   fechaUltimoAceite      DateTime?
   fechaCambioCorrea      DateTime?
   fechaCambioNeumaticos  DateTime?
@@ -167,6 +211,8 @@ model Camioneta {
   pedidos                Pedido[]
   solicitudes            SolicitudTaller[]
   tipoServicio           TipoServicio?    @relation(fields: [tipoServicioId], references: [id])
+  documentos             DocumentoEntidad[]
+  kmRegistros            KmRegistro[]
 }
 
 model EmpresaTransporte {
@@ -180,6 +226,8 @@ model EmpresaTransporte {
   asignaciones AsignacionFlota[]
 }
 
+/// Vínculo ternario: chofer y patente al mismo nivel bajo la empresa (sin chofer↔patente fijo).
+/// TODO (miércoles): al cambiar empresa de una unidad — ¿transferir historial o baja+alta?
 model AsignacionFlota {
   id           String    @id @default(cuid())
   camionetaId  String
@@ -233,6 +281,7 @@ model SolicitudTaller {
   camionetaId        String
   choferId           String?
   solicitante        SolicitanteTaller
+  /// Texto libre del problema (chofer) o catálogo legacy (ops).
   falla              String
   detalle            String
   habilitadaCircular Boolean           @default(true)
@@ -247,6 +296,7 @@ model SolicitudTaller {
 }
 
 /// 0 Solicitud · 1 Notif. ops · 2 Presupuestos · 3 Elección · 4 Aprobación · 5 Pago+factura
+/// TODO (miércoles): proceso de reactivación de unidad/chofer post-reparación.
 model OrdenTrabajo {
   id                      String    @id @default(cuid())
   solicitudTallerId       String    @unique
@@ -270,11 +320,12 @@ model OrdenTrabajo {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  solicitud          SolicitudTaller @relation(fields: [solicitudTallerId], references: [id])
+  solicitud          SolicitudTaller           @relation(fields: [solicitudTallerId], references: [id])
   presupuestos       PresupuestoOt[]
-  presupuestoElegido PresupuestoOt?  @relation("PresupuestoElegido", fields: [presupuestoElegidoId], references: [id])
+  presupuestoElegido PresupuestoOt?            @relation("PresupuestoElegido", fields: [presupuestoElegidoId], references: [id])
   avisos             AvisoInterno[]
   auditorias         OtAuditoria[]
+  diagnosticos       OrdenTrabajoDiagnostico[]
 
   @@index([currentStep])
 }
@@ -310,13 +361,13 @@ model OtAuditoria {
 }
 
 model AvisoInterno {
-  id         String  @id @default(cuid())
+  id         String   @id @default(cuid())
   rolDestino Role?
   usuarioId  String?
   titulo     String
   mensaje    String
   otId       String?
-  leido      Boolean @default(false)
+  leido      Boolean  @default(false)
   createdAt  DateTime @default(now())
 
   ot      OrdenTrabajo? @relation(fields: [otId], references: [id])
@@ -345,6 +396,8 @@ enum TipoComunicacion {
   RECORDATORIO_KM
   ALERTA_VTV
   ALERTA_LICENCIA
+  ALERTA_DOCUMENTO
+  ALERTA_KM_ANOMALIA
 }
 
 enum EstadoComunicacion {
@@ -381,4 +434,122 @@ model Comunicacion {
   @@index([tipo])
   @@index([loteId])
   @@index([estado])
+}
+
+/// ABM de talleres proveedores (no confundir con /api/talleres = OT).
+/// Futuro: automatizar pedido de presupuesto por mail según tipo (no implementar envío aún).
+model TallerProveedor {
+  id          String   @id @default(cuid())
+  cuit        String   @unique
+  razonSocial String
+  direccion   String?
+  mail        String?
+  celular     String?
+  aliasCbu    String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tipos       TallerProveedorTipo[]
+}
+
+model TallerProveedorTipo {
+  id      String            @id @default(cuid())
+  tallerId String
+  tipo    TipoTaller
+  taller  TallerProveedor   @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+
+  @@unique([tallerId, tipo])
+  @@index([tipo])
+}
+
+/// Documentación chofer/unidad — archivos en Supabase Storage (bucket privado).
+model DocumentoEntidad {
+  id               String               @id @default(cuid())
+  tipo             TipoDocumento
+  choferId         String?
+  camionetaId      String?
+  storagePath      String
+  mimeType         String
+  nombreOriginal   String?
+  /// DNI frente/dorso no llevan vencimiento.
+  vencimiento      DateTime?
+  estadoValidacion EstadoValidacionDoc  @default(PENDIENTE)
+  validadoPorId    String?
+  motivoRechazo    String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  chofer      Chofer?    @relation(fields: [choferId], references: [id], onDelete: Cascade)
+  camioneta   Camioneta? @relation(fields: [camionetaId], references: [id], onDelete: Cascade)
+  validadoPor Usuario?   @relation("DocValidador", fields: [validadoPorId], references: [id])
+
+  @@index([choferId])
+  @@index([camionetaId])
+  @@index([tipo])
+  @@index([vencimiento])
+}
+
+/// Árbol de diagnóstico jerárquico (nivel 1/2/3) — se usa al final del OT (presupuesto/cierre).
+model CategoriaDiagnostico {
+  id        String  @id @default(cuid())
+  nombre    String
+  padreId   String?
+  nivel     Int
+  activo    Boolean @default(true)
+  orden     Int     @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  padre     CategoriaDiagnostico?  @relation("DiagnosticoArbol", fields: [padreId], references: [id])
+  hijos     CategoriaDiagnostico[] @relation("DiagnosticoArbol")
+  ots       OrdenTrabajoDiagnostico[]
+
+  @@index([padreId])
+  @@index([nivel])
+}
+
+model OrdenTrabajoDiagnostico {
+  id           String @id @default(cuid())
+  otId         String
+  categoriaId  String
+  createdAt    DateTime @default(now())
+
+  ot        OrdenTrabajo         @relation(fields: [otId], references: [id], onDelete: Cascade)
+  categoria CategoriaDiagnostico @relation(fields: [categoriaId], references: [id])
+
+  @@unique([otId, categoriaId])
+  @@index([otId])
+}
+
+model KmRegistro {
+  id          String   @id @default(cuid())
+  camionetaId String
+  kmAnterior  Int
+  kmNuevo     Int
+  delta       Int
+  anomalia    Boolean  @default(false)
+  userId      String?
+  createdAt   DateTime @default(now())
+
+  camioneta Camioneta @relation(fields: [camionetaId], references: [id], onDelete: Cascade)
+
+  @@index([camionetaId, createdAt])
+}
+
+/// Correcciones de admin (Silvina/Patricio/Julieta) con motivo obligatorio.
+model CorreccionAdmin {
+  id            String   @id @default(cuid())
+  entidad       String
+  entidadId     String
+  campo         String
+  valorAnterior String?
+  valorNuevo    String?
+  motivo        String
+  userId        String
+  createdAt     DateTime @default(now())
+
+  user Usuario @relation(fields: [userId], references: [id])
+
+  @@index([entidad, entidadId])
+  @@index([createdAt])
 }
