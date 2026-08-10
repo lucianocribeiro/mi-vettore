@@ -1,11 +1,11 @@
 /**
  * Validaciones y catálogos de alta de camioneta (reunión 07/08).
  *
- * Año: reunión acordó >2000; la planilla del cliente decía >2005.
- * Usamos 2000 como piso hasta confirmación del miércoles.
+ * Año: piso desde 2000 inclusive (<= año actual).
+ * La planilla del cliente decía >2005 — pendiente miércoles.
  */
 
-export const ANIO_MIN_CAMIONETA = 2000; // planilla decía 2005 — reunión 07/08: 2000
+export const ANIO_MIN_CAMIONETA = 2000; // planilla decía 2005 — reunión: desde 2000
 
 /** Marca → modelos (planilla MI VETTORE). */
 export const MARCA_MODELO_CAMIONETA: Record<string, string[]> = {
@@ -28,11 +28,11 @@ export function anioCamionetaValido(
   if (!Number.isFinite(y) || String(y).length !== 4) {
     return { ok: false, error: "El año debe ser un número de 4 dígitos" };
   }
-  // Piso 2000 (reunión); planilla cliente >2005 — pendiente miércoles.
-  if (y <= ANIO_MIN_CAMIONETA || y > current) {
+  // Piso desde 2000 inclusive; planilla cliente >2005 — pendiente miércoles.
+  if (y < ANIO_MIN_CAMIONETA || y > current) {
     return {
       ok: false,
-      error: `El año debe ser mayor a ${ANIO_MIN_CAMIONETA} y menor o igual a ${current}`,
+      error: `El año debe ser desde ${ANIO_MIN_CAMIONETA} hasta ${current}`,
     };
   }
   return { ok: true, value: y };

@@ -180,7 +180,7 @@ model Camioneta {
   patente                String           @unique
   marca                  String?
   modelo                 String?
-  /// Reunión 07/08: >2000 y <= año actual. Planilla cliente decía >2005 — usar 2000 hasta confirmación miércoles.
+  /// Año: piso desde 2000 inclusive (<= año actual). Planilla cliente decía >2005 — pendiente miércoles.
   anio                   Int?
   /// Categoría de frío alineada a TipoServicio (Congelado, Supercongelado, Refrigerado, Seco).
   equipoFrio             String?

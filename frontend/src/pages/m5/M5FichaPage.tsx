@@ -89,7 +89,7 @@ const EQUIPO_FRIO_FALLBACK = [
   "Seco",
 ] as const;
 
-const ANIO_MIN = 2001; // reunión 2000 floor / planilla 2005
+const ANIO_MIN = 2000; // piso desde 2000 inclusive; planilla decía >2005
 const ANIO_MAX = new Date().getFullYear();
 
 export function M5FichaPage() {
@@ -150,7 +150,6 @@ export function M5FichaPage() {
   const [fEquipoFrio, setFEquipoFrio] = useState("");
   const [fCapacidadValor, setFCapacidadValor] = useState("");
   const [fCapacidadUnidad, setFCapacidadUnidad] = useState("");
-  const [fTipoTransporte, setFTipoTransporte] = useState<string>("");
   const [fTipoServicioId, setFTipoServicioId] = useState("");
   const [fDatosTecnicos, setFDatosTecnicos] = useState("");
   const [fKm, setFKm] = useState("0");
@@ -267,7 +266,6 @@ export function M5FichaPage() {
     setFEquipoFrio("");
     setFCapacidadValor("");
     setFCapacidadUnidad("");
-    setFTipoTransporte("");
     setFTipoServicioId("");
     setFDatosTecnicos("");
     setFKm("0");
@@ -343,7 +341,6 @@ export function M5FichaPage() {
       item.capacidadValor != null ? String(item.capacidadValor) : ""
     );
     setFCapacidadUnidad(item.capacidadUnidad ?? "");
-    setFTipoTransporte(item.tipoTransporte ?? "");
     setFTipoServicioId(item.tipoServicioId ?? "");
     setFDatosTecnicos(item.datosTecnicos ?? "");
     setFKm(String(item.km));
@@ -483,7 +480,6 @@ export function M5FichaPage() {
           equipoFrio: fEquipoFrio || null,
           capacidadValor: fCapacidadValor ? Number(fCapacidadValor) : null,
           capacidadUnidad: fCapacidadUnidad || null,
-          tipoTransporte: fTipoTransporte || null,
           tipoServicioId: fTipoServicioId || null,
           datosTecnicos: fDatosTecnicos || null,
           km: Number(fKm) || 0,
@@ -511,7 +507,6 @@ export function M5FichaPage() {
                 equipoFrio: body.equipoFrio,
                 capacidadValor: body.capacidadValor,
                 capacidadUnidad: body.capacidadUnidad,
-                tipoTransporte: body.tipoTransporte,
                 tipoServicioId: body.tipoServicioId,
                 datosTecnicos: body.datosTecnicos,
                 km: body.km,
@@ -1403,16 +1398,22 @@ export function M5FichaPage() {
                 </select>
               </Field>
               <Field label="Año">
-                {/* Reunión 07/08: >2000; planilla cliente decía >2005 */}
-                <input
-                  type="number"
-                  min={ANIO_MIN}
-                  max={ANIO_MAX}
+                {/* Piso desde 2000 inclusive hasta el año actual */}
+                <select
                   className={inputClass}
                   value={fAnio}
                   onChange={(e) => setFAnio(e.target.value)}
-                  placeholder={`${ANIO_MIN}–${ANIO_MAX}`}
-                />
+                >
+                  <option value="">—</option>
+                  {Array.from(
+                    { length: ANIO_MAX - ANIO_MIN + 1 },
+                    (_, i) => ANIO_MAX - i
+                  ).map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Equipo de frío">
                 <select
@@ -1461,19 +1462,6 @@ export function M5FichaPage() {
                         {!t.activo ? " (inactivo)" : ""}
                       </option>
                     ))}
-                </select>
-              </Field>
-              <Field label="Clasificación (legado)">
-                <select
-                  className={inputClass}
-                  value={fTipoTransporte}
-                  onChange={(e) => setFTipoTransporte(e.target.value)}
-                >
-                  <option value="">—</option>
-                  <option value="CONGELADO">Congelado</option>
-                  <option value="SUPERCONGELADO">Supercongelado</option>
-                  <option value="REFRIGERADO">Refrigerado</option>
-                  <option value="SECO">Seco</option>
                 </select>
               </Field>
               <Field label="Datos técnicos">
