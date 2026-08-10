@@ -1837,22 +1837,46 @@ function DiagnosticoOtPanel({
   }
 
   const roots = cats.filter((c) => c.nivel === 1);
+  const selectedLabels = selected
+    .map((id) => cats.find((c) => c.id === id))
+    .filter(Boolean) as CategoriaDiagnostico[];
 
-  function toggle(id: string) {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+  function addFromSelect(id: string) {
+    if (!id) return;
+    setSelected((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }
+
+  function removeId(id: string) {
+    setSelected((prev) => prev.filter((x) => x !== id));
   }
 
   return (
     <div className="rounded-xl border border-[var(--vl-card-border)] p-3">
       <div className="text-sm font-semibold text-[var(--vl-heading)]">
-        Diagnóstico detallado (multi)
+        Diagnóstico detallado
       </div>
       <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-        Planilla MI VETTORE — elegí uno o más ítems (nivel más específico).
+        Elegí con el desplegable de cada categoría. Podés sumar varios ítems.
       </p>
-      <div className="mt-3 max-h-72 space-y-3 overflow-y-auto">
+
+      {selectedLabels.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {selectedLabels.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => removeId(c.id)}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-900 bg-slate-900 px-2 py-0.5 text-[11px] text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+              title="Quitar"
+            >
+              {c.nombre}
+              <span aria-hidden>×</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 max-h-80 space-y-4 overflow-y-auto">
         {roots.map((r) => {
           const n2 = cats.filter((c) => c.padreId === r.id);
           return (
@@ -1861,31 +1885,47 @@ function DiagnosticoOtPanel({
                 {r.nombre}
               </div>
               {n2.length === 0 ? (
-                <Chip
-                  label={r.nombre}
-                  on={selected.includes(r.id)}
-                  onClick={() => toggle(r.id)}
-                />
+                <select
+                  className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-2 text-sm"
+                  defaultValue=""
+                  onChange={(e) => {
+                    addFromSelect(e.target.value);
+                    e.target.value = "";
+                  }}
+                >
+                  <option value="">Elegir…</option>
+                  <option value={r.id}>{r.nombre}</option>
+                </select>
               ) : (
                 n2.map((cat2) => {
                   const n3 = cats.filter((c) => c.padreId === cat2.id);
-                  const leaves = n3.length > 0 ? n3 : [cat2];
+                  const options = n3.length > 0 ? n3 : [cat2];
                   return (
-                    <div key={cat2.id} className="pl-1">
-                      <div className="text-[11px] font-semibold text-[var(--vl-text-muted)]">
+                    <label key={cat2.id} className="block">
+                      <span className="mb-1 block text-[11px] font-medium text-[var(--vl-text-muted)]">
                         {cat2.nombre}
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {leaves.map((leaf) => (
-                          <Chip
-                            key={leaf.id}
-                            label={leaf.nombre}
-                            on={selected.includes(leaf.id)}
-                            onClick={() => toggle(leaf.id)}
-                          />
+                      </span>
+                      <select
+                        className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-2.5 text-sm"
+                        defaultValue=""
+                        onChange={(e) => {
+                          addFromSelect(e.target.value);
+                          e.target.value = "";
+                        }}
+                      >
+                        <option value="">Elegir…</option>
+                        {options.map((opt) => (
+                          <option
+                            key={opt.id}
+                            value={opt.id}
+                            disabled={selected.includes(opt.id)}
+                          >
+                            {opt.nombre}
+                            {selected.includes(opt.id) ? " ✓" : ""}
+                          </option>
                         ))}
-                      </div>
-                    </div>
+                      </select>
+                    </label>
                   );
                 })
               )}
@@ -1903,29 +1943,5 @@ function DiagnosticoOtPanel({
         {busy ? "Guardando…" : "Guardar diagnóstico"}
       </button>
     </div>
-  );
-}
-
-function Chip({
-  label,
-  on,
-  onClick,
-}: {
-  label: string;
-  on: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full border px-2 py-0.5 text-[11px] ${
-        on
-          ? "border-slate-900 bg-slate-900 text-white"
-          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-      }`}
-    >
-      {label}
-    </button>
   );
 }
