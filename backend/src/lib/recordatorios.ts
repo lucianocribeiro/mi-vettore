@@ -49,6 +49,196 @@ export async function runRecordatorioKm() {
   return { loteId, enviados };
 }
 
+/** Recordatorio a choferes cuya unidad no actualizó km en 10+ días. */
+export async function runRecordatorioKm10Dias() {
+  const loteId = randomUUID();
+  const now = new Date();
+  const limite = new Date(now);
+  limite.setDate(limite.getDate() - 10);
+
+  const unidades = await prisma.camioneta.findMany({
+    where: {
+      estado: { not: "FUERA_SERVICIO" },
+      OR: [
+        { kmActualizadoAt: null },
+        { kmActualizadoAt: { lt: limite } },
+      ],
+    },
+    include: {
+      asignaciones: {
+        where: { periodoHasta: null },
+        include: {
+          chofer: true,
+          empresa: true,
+        },
+        take: 1,
+      },
+    },
+  });
+
+  let enviados = 0;
+  for (const u of unidades) {
+    const asig = u.asignaciones[0];
+    const ch = asig?.chofer;
+    if (!ch?.email) continue;
+    const asunto = `[Vettore] Recordatorio: actualizá el km de ${u.patente}`;
+    const cuerpo = `Hola ${ch.nombre},\n\nLa unidad ${u.patente} no tiene kilometraje actualizado en los últimos 10 días. Cargalo en Mi Vettore.\n\nGracias.`;
+    const mail = await sendMail({ to: ch.email, subject: asunto, text: cuerpo });
+    await prisma.comunicacion.create({
+      data: {
+        loteId,
+        tipo: TipoComunicacion.RECORDATORIO_KM,
+        destinatarioTipo: DestinatarioTipo.CHOFER,
+        destinatarioId: ch.id,
+        destinatarioNombre: ch.nombre,
+        destinatarioEmail: ch.email,
+        asunto,
+        cuerpoTexto: cuerpo,
+        coberturaDesde: now,
+        coberturaHasta: now,
+        coberturaLabel: `Km 10d ${u.patente}`,
+        estado:
+          mail.ok && mail.simulated
+            ? EstadoComunicacion.SIMULADO
+            : mail.ok
+              ? EstadoComunicacion.ENVIADO
+              : EstadoComunicacion.ERROR,
+        errorMensaje: mail.ok ? null : mail.error,
+      },
+    });
+    if (ch.esDuenoFlota) {
+      await prisma.avisoInterno.create({
+        data: {
+          titulo: asunto,
+          mensaje: cuerpo,
+          usuarioId: (
+            await prisma.usuario.findFirst({
+              where: { choferId: ch.id },
+              select: { id: true },
+            })
+          )?.id,
+        },
+      });
+    }
+    enviados++;
+  }
+  return { loteId, enviados };
+}
+
+/** Alertas de documentación con vencimiento → dueño/empresa (no al chofer común). SENASA en standby. */
+export async function runAlertasDocumentos() {
+  const loteId = randomUUID();
+  const now = new Date();
+  const lim = new Date(now);
+  lim.setDate(lim.getDate() + DIAS_ALERTA);
+
+  // TODO (miércoles): alertas SENASA en standby — excluidas deliberadamente.
+  const docs = await prisma.documentoEntidad.findMany({
+    where: {
+      vencimiento: { not: null, lte: lim },
+      tipo: { not: "SENASA" },
+      estadoValidacion: { not: "RECHAZADO" },
+    },
+    include: {
+      chofer: true,
+      camioneta: {
+        include: {
+          asignaciones: {
+            where: { periodoHasta: null },
+            include: { chofer: true, empresa: true },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  let n = 0;
+  for (const doc of docs) {
+    const dueno =
+      doc.camioneta?.asignaciones[0]?.chofer?.esDuenoFlota
+        ? doc.camioneta.asignaciones[0].chofer
+        : doc.chofer?.esDuenoFlota
+          ? doc.chofer
+          : doc.camioneta?.asignaciones[0]?.chofer?.esDuenoFlota
+            ? doc.camioneta.asignaciones[0].chofer
+            : (
+                await prisma.chofer.findFirst({
+                  where: {
+                    esDuenoFlota: true,
+                    asignaciones: {
+                      some: {
+                        periodoHasta: null,
+                        empresaId:
+                          doc.camioneta?.asignaciones[0]?.empresaId ??
+                          undefined,
+                      },
+                    },
+                  },
+                })
+              );
+
+    const target = dueno ?? doc.camioneta?.asignaciones[0]?.chofer ?? doc.chofer;
+    if (!target) continue;
+    const label = doc.camioneta?.patente ?? target.nombre;
+    const venc = doc.vencimiento!.toISOString().slice(0, 10);
+    const asunto = `[Vettore] Documento por vencer — ${doc.tipo} (${label})`;
+    const cuerpo = `El documento ${doc.tipo} de ${label} vence el ${venc}. Gestioná el turno desde la empresa de transporte.`;
+
+    if (target.email) {
+      const mail = await sendMail({
+        to: target.email,
+        subject: asunto,
+        text: cuerpo,
+      });
+      await prisma.comunicacion.create({
+        data: {
+          loteId,
+          tipo: TipoComunicacion.ALERTA_DOCUMENTO,
+          destinatarioTipo: DestinatarioTipo.CHOFER,
+          destinatarioId: target.id,
+          destinatarioNombre: target.nombre,
+          destinatarioEmail: target.email,
+          asunto,
+          cuerpoTexto: cuerpo,
+          coberturaDesde: now,
+          coberturaHasta: lim,
+          coberturaLabel: `${doc.tipo} ${label}`,
+          estado:
+            mail.ok && mail.simulated
+              ? EstadoComunicacion.SIMULADO
+              : mail.ok
+                ? EstadoComunicacion.ENVIADO
+                : EstadoComunicacion.ERROR,
+          errorMensaje: mail.ok ? null : mail.error,
+        },
+      });
+    }
+
+    const userDueno = await prisma.usuario.findFirst({
+      where: { choferId: target.id },
+    });
+    if (userDueno) {
+      await prisma.avisoInterno.create({
+        data: {
+          usuarioId: userDueno.id,
+          titulo: asunto,
+          mensaje: cuerpo,
+        },
+      });
+    }
+    await prisma.avisoInterno.create({
+      data: {
+        rolDestino: "SILVINA",
+        titulo: asunto,
+        mensaje: cuerpo,
+      },
+    });
+    n++;
+  }
+  return { loteId, documentos: n };
+}
+
 /** Alertas de VTV y licencia próximos a vencer (o vencidos). */
 export async function runAlertasVencimientos() {
   const loteId = randomUUID();

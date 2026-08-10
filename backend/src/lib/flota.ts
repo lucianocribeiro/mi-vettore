@@ -12,9 +12,12 @@ const includeAsignaciones = {
 };
 
 /**
- * Unidades visibles para un usuario chofer:
- * - Dueño de flota: todas las patentes de su/s empresa/s.
+ * Unidades visibles para un usuario chofer / empresa unipersonal (esDuenoFlota):
+ * - Dueño de flota: todas las patentes de su/s empresa/s (puede rotar entre ellas).
  * - Chofer común: solo las unidades donde está asignado.
+ * Chofer y patente están al mismo nivel bajo Empresa (AsignacionFlota); no hay vínculo fijo.
+ *
+ * TODO (miércoles): historial al cambiar empresa de una unidad — no migrar/borrar aún.
  */
 export async function camionetasParaUsuarioChofer(userId: string) {
   const me = await prisma.usuario.findUnique({

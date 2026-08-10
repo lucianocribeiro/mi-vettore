@@ -494,8 +494,14 @@ export async function runComunicacion(
     case TipoComunicacion.RECORDATORIO_KM:
     case TipoComunicacion.ALERTA_VTV:
     case TipoComunicacion.ALERTA_LICENCIA:
+    case TipoComunicacion.ALERTA_DOCUMENTO:
+    case TipoComunicacion.ALERTA_KM_ANOMALIA:
       throw new Error(
         `Usá POST /api/comunicaciones/recordatorios para ${tipo}`
       );
+    default: {
+      const _exhaustive: never = tipo;
+      throw new Error(`Tipo no soportado: ${_exhaustive}`);
+    }
   }
 }

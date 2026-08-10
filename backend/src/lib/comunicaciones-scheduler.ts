@@ -2,8 +2,10 @@ import cron from "node-cron";
 import { TipoComunicacion } from "@prisma/client";
 import { runComunicacion } from "./comunicaciones.js";
 import {
+  runAlertasDocumentos,
   runAlertasVencimientos,
   runRecordatorioKm,
+  runRecordatorioKm10Dias,
 } from "./recordatorios.js";
 
 /**
@@ -53,6 +55,9 @@ export function startComunicacionesScheduler(): void {
         void runRecordatorioKm().catch((err) =>
           console.error("[comunicaciones] error recordatorio km", err)
         );
+        void runRecordatorioKm10Dias().catch((err) =>
+          console.error("[comunicaciones] error recordatorio km 10d", err)
+        );
       },
       { timezone: tz }
     );
@@ -66,9 +71,12 @@ export function startComunicacionesScheduler(): void {
         void runAlertasVencimientos().catch((err) =>
           console.error("[comunicaciones] error alertas vencimientos", err)
         );
+        void runAlertasDocumentos().catch((err) =>
+          console.error("[comunicaciones] error alertas documentos", err)
+        );
       },
       { timezone: tz }
     );
-    console.log(`[comunicaciones] programado alertas VTV/licencia 08:30 diario TZ=${tz}`);
+    console.log(`[comunicaciones] programado alertas VTV/licencia/docs 08:30 diario TZ=${tz}`);
   }
 }

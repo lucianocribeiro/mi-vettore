@@ -8,9 +8,65 @@ import {
 } from "../lib/flota.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
+import {
+  anioCamionetaValido,
+  formatCapacidad,
+  kmAnomaliaMaxDelta,
+  parseCapacidadValor,
+} from "../lib/camioneta-fields.js";
+import {
+  canAdminCorregir,
+  registrarCorreccionAdmin,
+} from "../lib/correccion-admin.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
+
+async function applyKmUpdate(opts: {
+  camionetaId: string;
+  existingKm: number;
+  nextKm: number;
+  userId: string | null;
+  allowDecrease: boolean;
+  motivo?: string | null;
+}): Promise<
+  | { ok: true; anomalia: boolean; delta: number }
+  | { ok: false; status: number; error: string }
+> {
+  const next = opts.nextKm;
+  if (next < opts.existingKm && !opts.allowDecrease) {
+    return {
+      ok: false,
+      status: 400,
+      error: `El kilometraje no puede ser menor al actual (${opts.existingKm} km)`,
+    };
+  }
+  if (next < opts.existingKm && opts.allowDecrease) {
+    const reg = await registrarCorreccionAdmin({
+      userId: opts.userId!,
+      entidad: "Camioneta",
+      entidadId: opts.camionetaId,
+      campo: "km",
+      valorAnterior: String(opts.existingKm),
+      valorNuevo: String(next),
+      motivo: opts.motivo,
+    });
+    if (!reg.ok) return reg;
+  }
+  const delta = next - opts.existingKm;
+  const anomalia = delta > kmAnomaliaMaxDelta();
+  await prisma.kmRegistro.create({
+    data: {
+      camionetaId: opts.camionetaId,
+      kmAnterior: opts.existingKm,
+      kmNuevo: next,
+      delta,
+      anomalia,
+      userId: opts.userId,
+    },
+  });
+  return { ok: true, anomalia, delta };
+}
 
 const includeAsignaciones = {
   tipoServicio: true,
@@ -96,7 +152,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       { header: "Patente", key: "patente", width: 12 },
       { header: "Marca", key: "marca", width: 14 },
       { header: "Modelo", key: "modelo", width: 14 },
-      { header: "Capacidad", key: "capacidad", width: 14 },
+      { header: "Capacidad", key: "capacidad", width: 18 },
       { header: "Equipo de frío", key: "equipoFrio", width: 18 },
       { header: "Tipo servicio", key: "tipoServicio", width: 16 },
       { header: "Estado", key: "estado", width: 16 },
@@ -115,7 +171,11 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
         patente: c.patente,
         marca: c.marca ?? "",
         modelo: c.modelo ?? "",
-        capacidad: c.capacidad ?? "",
+        capacidad: formatCapacidad(
+          c.capacidadValor,
+          c.capacidadUnidad,
+          c.capacidad
+        ),
         equipoFrio: c.equipoFrio ?? "",
         tipoServicio: c.tipoServicio?.nombre ?? c.tipoTransporte ?? "",
         estado: c.estado,
@@ -138,6 +198,72 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al exportar Excel" });
+  }
+});
+
+/** Reporte de kilometraje por fecha y patente (exportable). */
+router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const desde = req.query.desde
+      ? new Date(String(req.query.desde))
+      : new Date(Date.now() - 30 * 86400000);
+    const hasta = req.query.hasta
+      ? new Date(String(req.query.hasta))
+      : new Date();
+    const patente = req.query.patente
+      ? String(req.query.patente).trim().toUpperCase()
+      : null;
+    const rows = await prisma.kmRegistro.findMany({
+      where: {
+        createdAt: { gte: desde, lte: hasta },
+        ...(patente
+          ? { camioneta: { patente: { contains: patente, mode: "insensitive" } } }
+          : {}),
+      },
+      include: { camioneta: { select: { patente: true, id: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (String(req.query.format ?? "") === "xlsx") {
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet("Km");
+      sheet.columns = [
+        { header: "Fecha", key: "fecha", width: 20 },
+        { header: "Patente", key: "patente", width: 12 },
+        { header: "Km anterior", key: "kmAnterior", width: 12 },
+        { header: "Km nuevo", key: "kmNuevo", width: 12 },
+        { header: "Delta", key: "delta", width: 10 },
+        { header: "Anomalía", key: "anomalia", width: 10 },
+      ];
+      sheet.getRow(1).font = { bold: true };
+      for (const r of rows) {
+        sheet.addRow({
+          fecha: r.createdAt.toISOString(),
+          patente: r.camioneta.patente,
+          kmAnterior: r.kmAnterior,
+          kmNuevo: r.kmNuevo,
+          delta: r.delta,
+          anomalia: r.anomalia ? "Sí" : "No",
+        });
+      }
+      const filename = `km_reporte_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      await workbook.xlsx.write(res);
+      res.end();
+      return;
+    }
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al generar reporte de km" });
   }
 });
 
@@ -187,21 +313,39 @@ router.post("/", ...write, async (req, res) => {
     const km = Number(req.body?.km ?? 0);
     const equipoFrio =
       strOrNull(req.body?.equipoFrio) ?? strOrNull(req.body?.color);
+    const anioCheck = anioCamionetaValido(
+      req.body?.anio === undefined || req.body?.anio === ""
+        ? null
+        : Number(req.body.anio)
+    );
+    if (!anioCheck.ok) {
+      res.status(400).json({ error: anioCheck.error });
+      return;
+    }
+    const capVal = parseCapacidadValor(
+      req.body?.capacidadValor ?? req.body?.capacidad
+    );
+    if (!capVal.ok) {
+      res.status(400).json({ error: capVal.error });
+      return;
+    }
+    const capacidadUnidad = strOrNull(req.body?.capacidadUnidad);
+    const kmInicial = Number.isFinite(km) ? Math.max(0, Math.floor(km)) : 0;
     const item = await prisma.camioneta.create({
       data: {
         patente,
         marca: strOrNull(req.body?.marca),
         modelo: strOrNull(req.body?.modelo),
-        anio: (() => {
-          const a = Number(req.body?.anio);
-          return Number.isFinite(a) ? Math.floor(a) : null;
-        })(),
+        anio: anioCheck.value,
         equipoFrio,
-        capacidad: strOrNull(req.body?.capacidad),
+        capacidadValor: capVal.value,
+        capacidadUnidad,
+        capacidad: formatCapacidad(capVal.value, capacidadUnidad) || null,
         tipoTransporte: tipo === undefined ? null : tipo,
         tipoServicioId: strOrNull(req.body?.tipoServicioId),
         datosTecnicos: strOrNull(req.body?.datosTecnicos),
-        km: Number.isFinite(km) ? Math.max(0, Math.floor(km)) : 0,
+        km: kmInicial,
+        kmActualizadoAt: kmInicial > 0 ? new Date() : null,
         fechaUltimoAceite: parseDate(req.body?.fechaUltimoAceite),
         fechaCambioCorrea: parseDate(req.body?.fechaCambioCorrea),
         fechaCambioNeumaticos: parseDate(req.body?.fechaCambioNeumaticos),
@@ -250,7 +394,7 @@ router.post("/", ...write, async (req, res) => {
   }
 });
 
-router.put("/:id", ...write, async (req, res) => {
+router.put("/:id", ...write, async (req: AuthedRequest, res) => {
   try {
     const existing = await prisma.camioneta.findUnique({
       where: { id: req.params.id },
@@ -269,16 +413,44 @@ router.put("/:id", ...write, async (req, res) => {
       if (req.body.anio === null || req.body.anio === "") {
         data.anio = null;
       } else {
-        const anio = Number(req.body.anio);
-        data.anio = Number.isFinite(anio) ? Math.floor(anio) : null;
+        const anioCheck = anioCamionetaValido(Number(req.body.anio));
+        if (!anioCheck.ok) {
+          res.status(400).json({ error: anioCheck.error });
+          return;
+        }
+        data.anio = anioCheck.value;
       }
     }
     if (req.body?.equipoFrio !== undefined || req.body?.color !== undefined) {
       data.equipoFrio =
         strOrNull(req.body?.equipoFrio) ?? strOrNull(req.body?.color);
     }
-    if (req.body?.capacidad !== undefined) {
-      data.capacidad = strOrNull(req.body.capacidad);
+    if (
+      req.body?.capacidadValor !== undefined ||
+      req.body?.capacidadUnidad !== undefined ||
+      req.body?.capacidad !== undefined
+    ) {
+      const capVal = parseCapacidadValor(
+        req.body?.capacidadValor !== undefined
+          ? req.body.capacidadValor
+          : req.body?.capacidad
+      );
+      if (!capVal.ok) {
+        res.status(400).json({ error: capVal.error });
+        return;
+      }
+      if (req.body?.capacidadValor !== undefined || req.body?.capacidad !== undefined) {
+        data.capacidadValor = capVal.value;
+      }
+      if (req.body?.capacidadUnidad !== undefined) {
+        data.capacidadUnidad = strOrNull(req.body.capacidadUnidad);
+      }
+      data.capacidad = formatCapacidad(
+        (data.capacidadValor as number | null | undefined) ??
+          existing.capacidadValor,
+        (data.capacidadUnidad as string | null | undefined) ??
+          existing.capacidadUnidad
+      ) || null;
     }
     if (req.body?.tipoServicioId !== undefined) {
       data.tipoServicioId = strOrNull(req.body.tipoServicioId);
@@ -294,6 +466,7 @@ router.put("/:id", ...write, async (req, res) => {
     if (req.body?.datosTecnicos !== undefined) {
       data.datosTecnicos = strOrNull(req.body.datosTecnicos);
     }
+    let kmAnomalia = false;
     if (req.body?.km !== undefined) {
       const km = Number(req.body.km);
       if (!Number.isFinite(km) || km < 0) {
@@ -301,13 +474,22 @@ router.put("/:id", ...write, async (req, res) => {
         return;
       }
       const next = Math.floor(km);
-      if (next < existing.km) {
-        res.status(400).json({
-          error: `El kilometraje no puede ser menor al actual (${existing.km} km)`,
-        });
+      const allowDecrease = canAdminCorregir(req.user?.rol);
+      const applied = await applyKmUpdate({
+        camionetaId: existing.id,
+        existingKm: existing.km,
+        nextKm: next,
+        userId: req.user!.id,
+        allowDecrease,
+        motivo: req.body?.motivo ?? req.body?.overrideComentario,
+      });
+      if (!applied.ok) {
+        res.status(applied.status).json({ error: applied.error });
         return;
       }
       data.km = next;
+      data.kmActualizadoAt = new Date();
+      kmAnomalia = applied.anomalia;
     }
     if (req.body?.fechaUltimoAceite !== undefined) {
       data.fechaUltimoAceite = parseDate(req.body.fechaUltimoAceite);
@@ -343,7 +525,16 @@ router.put("/:id", ...write, async (req, res) => {
       data,
       include: includeAsignaciones,
     });
-    res.json(item);
+    res.json({
+      ...item,
+      ...(kmAnomalia
+        ? {
+            alertaKmAnomalia: true,
+            mensaje:
+              "El salto de kilometraje es inusualmente alto; se registró una alerta (no se bloqueó la carga).",
+          }
+        : {}),
+    });
   } catch (err: unknown) {
     if (
       typeof err === "object" &&
@@ -386,6 +577,7 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
     }
 
     const data: Record<string, unknown> = {};
+    let kmAnomalia = false;
     if (req.body?.km !== undefined) {
       const km = Number(req.body.km);
       if (!Number.isFinite(km) || km < 0) {
@@ -393,13 +585,38 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
         return;
       }
       const next = Math.floor(km);
-      if (next < existing.km) {
-        res.status(400).json({
-          error: `El kilometraje no puede ser menor al actual (${existing.km} km)`,
-        });
+      const allowDecrease = canAdminCorregir(req.user!.rol);
+      const applied = await applyKmUpdate({
+        camionetaId,
+        existingKm: existing.km,
+        nextKm: next,
+        userId: req.user!.id,
+        allowDecrease,
+        motivo: req.body?.motivo ?? req.body?.overrideComentario,
+      });
+      if (!applied.ok) {
+        res.status(applied.status).json({ error: applied.error });
         return;
       }
       data.km = next;
+      data.kmActualizadoAt = new Date();
+      kmAnomalia = applied.anomalia;
+      if (kmAnomalia) {
+        await prisma.avisoInterno.createMany({
+          data: [
+            {
+              rolDestino: "SILVINA",
+              titulo: `Km anómalo — ${existing.patente}`,
+              mensaje: `Se cargaron ${applied.delta} km de golpe (umbral ${kmAnomaliaMaxDelta()}). No se bloqueó la carga.`,
+            },
+            {
+              rolDestino: "PABLO",
+              titulo: `Km anómalo — ${existing.patente}`,
+              mensaje: `Se cargaron ${applied.delta} km de golpe (umbral ${kmAnomaliaMaxDelta()}).`,
+            },
+          ],
+        });
+      }
     }
     if (req.body?.fechaUltimoAceite !== undefined) {
       data.fechaUltimoAceite = parseDate(req.body.fechaUltimoAceite);
@@ -425,7 +642,16 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
       data,
       include: includeAsignaciones,
     });
-    res.json(item);
+    res.json({
+      ...item,
+      ...(kmAnomalia
+        ? {
+            alertaKmAnomalia: true,
+            mensaje:
+              "El salto de kilometraje es inusualmente alto; se registró una alerta.",
+          }
+        : {}),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al actualizar mantenimiento" });
@@ -464,6 +690,8 @@ router.post("/:id/asignacion", ...write, async (req, res) => {
     }
 
     const now = new Date();
+    // TODO (miércoles): historial de patentes al cambiar de empresa —
+    // ¿transferir historial completo o baja + alta? No borrar datos hasta definición.
     const result = await prisma.$transaction(async (tx) => {
       await tx.asignacionFlota.updateMany({
         where: { camionetaId, periodoHasta: null },

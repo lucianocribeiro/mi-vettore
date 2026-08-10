@@ -275,7 +275,8 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
     }
 
     const camionetaId = String(req.body?.camionetaId ?? "");
-    const falla = String(req.body?.falla ?? "").trim();
+    // Chofer: texto libre del problema. Ops pueden seguir usando catálogo FALLAS_COMUNES.
+    const falla = String(req.body?.falla ?? req.body?.detalle ?? "").trim();
     let detalle = String(req.body?.detalle ?? "").trim();
     const solicitanteRaw = String(req.body?.solicitante ?? "CHOFER").toUpperCase();
     const habilitadaCircular =
@@ -287,10 +288,15 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
     let choferId = req.body?.choferId ? String(req.body.choferId) : null;
 
     if (!camionetaId || !falla) {
-      res.status(400).json({ error: "camionetaId y falla son obligatorios" });
+      res.status(400).json({
+        error:
+          rol === "CHOFER"
+            ? "Patente y descripción del problema son obligatorios"
+            : "camionetaId y falla son obligatorios",
+      });
       return;
     }
-    if (falla === "Otros" && !detalle) {
+    if (rol !== "CHOFER" && falla === "Otros" && !detalle) {
       res.status(400).json({ error: "Con falla «Otros» el detalle es obligatorio" });
       return;
     }

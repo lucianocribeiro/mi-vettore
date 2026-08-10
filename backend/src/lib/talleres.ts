@@ -106,13 +106,10 @@ export function canRetreat(rol: Role): boolean {
 }
 
 export const MARCAS_CAMIONETA = [
-  "Renault",
-  "Peugeot",
   "Fiat",
-  "Volkswagen",
-  "Ford",
-  "Chevrolet",
-  "Mercedes-Benz",
-  "Iveco",
-  "Otra",
+  "Peugeot",
+  "Citroën",
+  "Renault",
+  "Furgón",
+  "Otros",
 ] as const;
