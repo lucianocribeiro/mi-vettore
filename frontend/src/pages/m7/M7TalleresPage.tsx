@@ -36,7 +36,7 @@ const OT_STEPS = [
   { label: "Presupuestos", owner: "Silvina", detail: "Presupuesto opcional. Varios proveedores e ítems. Silvina autoaprueba el gasto habitual." },
   { label: "Facturación", owner: "Silvina", detail: "Facturas (más de una) e ítems. Si hay incremento, pasa a Patricio." },
   { label: "Incremento", owner: "Patricio", detail: "Solo si el taller facturó por encima del presupuesto." },
-  { label: "Cierre / pago", owner: "Silvina / Carla", detail: "Acá se declara el diagnóstico detallado (en qué se gastó), se cierra la OT y queda la cuenta corriente del proveedor." },
+  { label: "Cierre / pago", owner: "Silvina / Carla", detail: "Cierre, reporte de salida y cuenta corriente del proveedor." },
 ] as const;
 
 function roleActionHint(rol?: Role | null): string {
@@ -78,12 +78,6 @@ type OtFactura = {
   monto: number | null;
 };
 
-type OtDiagnostico = {
-  id: string;
-  categoriaId: string;
-  categoria?: { id: string; nombre: string; nivel: number };
-};
-
 type OrdenTrabajo = {
   id: string;
   numeroOT: string;
@@ -116,7 +110,6 @@ type OrdenTrabajo = {
   items?: OtItem[];
   facturas?: OtFactura[];
   presupuestos?: { id: string; taller: string; monto: number; descripcion?: string | null; archivo: string | null }[];
-  diagnosticos?: OtDiagnostico[];
   totales?: { presupuesto: number; facturado: number };
   resumenChofer?: { presupuestoTotal: number; gastoReal: number };
   auditorias?: { id: string; accion: string; createdAt: string; user?: { nombre: string | null; email: string } | null }[];
@@ -511,17 +504,6 @@ export function M7TalleresPage() {
                     </div>
                   </div>
 
-                  {!esChofer && (ot.currentStep === 5 || ot.cerradaAt) && (
-                    <div className="mt-4">
-                      <DiagnosticoOtPanel
-                        otId={ot.id}
-                        token={token!}
-                        initialCategoriaIds={ot.diagnosticos?.map((d) => d.categoriaId) ?? []}
-                        onSaved={(diagnosticos) => replaceOt({ ...ot, diagnosticos })}
-                      />
-                    </div>
-                  )}
-
                   {!esChofer && !ot.cerradaAt && (
                     <div className="mt-5 flex flex-col gap-2 sm:flex-row">
                       {ot.currentStep > 0 && (
@@ -725,82 +707,6 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
           {saving ? "Enviando…" : "Crear solicitud"}
         </button>
       </div>
-    </div>
-  );
-}
-
-type CategoriaDiagnostico = { id: string; nombre: string; padreId: string | null; nivel: number };
-
-function DiagnosticoOtPanel({
-  otId, token, initialCategoriaIds, onSaved,
-}: {
-  otId: string; token: string; initialCategoriaIds: string[];
-  onSaved: (diagnosticos: OtDiagnostico[]) => void;
-}) {
-  const [cats, setCats] = useState<CategoriaDiagnostico[]>([]);
-  const [selected, setSelected] = useState<string[]>(initialCategoriaIds);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => { setSelected(initialCategoriaIds); }, [otId, initialCategoriaIds.join("|")]);
-  useEffect(() => {
-    void apiFetch<CategoriaDiagnostico[]>("/api/diagnostico/categorias", {}, token).then(setCats).catch(() => setCats([]));
-  }, [token]);
-
-  async function save() {
-    if (!selected.length) { setErr("Elegí al menos un ítem"); return; }
-    setBusy(true); setErr(null);
-    try {
-      const updated = await apiFetch<{ diagnosticos: OtDiagnostico[] }>(`/api/diagnostico/ot/${otId}`, {
-        method: "PUT", body: JSON.stringify({ categoriaIds: selected }),
-      }, token);
-      setSelected(updated.diagnosticos.map((d) => d.categoriaId));
-      onSaved(updated.diagnosticos);
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Error");
-    } finally { setBusy(false); }
-  }
-
-  if (!cats.length) return <p className="text-xs text-[var(--vl-text-muted)]">Árbol de diagnóstico vacío.</p>;
-  const roots = cats.filter((c) => c.nivel === 1);
-  const labels = selected.map((id) => cats.find((c) => c.id === id)).filter(Boolean) as CategoriaDiagnostico[];
-
-  return (
-    <div className="rounded-xl border p-3">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between text-left">
-        <span className="text-sm font-semibold">Diagnóstico detallado</span>
-        <ChevronRight size={16} className={open ? "rotate-90" : ""} />
-      </button>
-      {open && (
-        <div className="mt-2 space-y-2">
-          <div className="flex flex-wrap gap-1">
-            {labels.map((c) => (
-              <button key={c.id} type="button" className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] text-white" onClick={() => setSelected((p) => p.filter((x) => x !== c.id))}>{c.nombre} ×</button>
-            ))}
-          </div>
-          {roots.map((r) => {
-            const n2 = cats.filter((c) => c.padreId === r.id);
-            return (
-              <div key={r.id}>
-                <div className="text-[11px] font-bold uppercase">{r.nombre}</div>
-                {(n2.length ? n2 : [r]).map((cat2) => {
-                  const n3 = cats.filter((c) => c.padreId === cat2.id);
-                  const options = n3.length ? n3 : [cat2];
-                  return (
-                    <select key={cat2.id} className="mt-1 w-full rounded-md border p-2 text-sm" defaultValue="" onChange={(e) => { if (e.target.value) setSelected((p) => p.includes(e.target.value) ? p : [...p, e.target.value]); e.target.value = ""; }}>
-                      <option value="">{cat2.nombre}: elegir…</option>
-                      {options.map((opt) => <option key={opt.id} value={opt.id}>{opt.nombre}</option>)}
-                    </select>
-                  );
-                })}
-              </div>
-            );
-          })}
-          {err && <p className="text-xs text-red-600">{err}</p>}
-          <button type="button" disabled={busy} onClick={() => void save()} className="rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900">Guardar diagnóstico</button>
-        </div>
-      )}
     </div>
   );
 }
