@@ -642,25 +642,44 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
   const [camionetaId, setCamionetaId] = useState("");
   const [falla, setFalla] = useState(user?.rol === "CHOFER" ? "" : FALLAS_COMUNES[0]);
   const [detalle, setDetalle] = useState("");
+  const [kmDraft, setKmDraft] = useState("");
   const [habilitadaCircular, setHabilitadaCircular] = useState(true);
   const [sugerencia, setSugerencia] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const esChofer = user?.rol === "CHOFER";
+  const selected = camionetas.find((c) => c.id === camionetaId) ?? null;
+  const unaSolaUnidad = camionetas.length === 1;
 
   useEffect(() => {
     if (!token) return;
     void apiFetch<Camioneta[]>("/api/camionetas", {}, token).then((list) => {
       setCamionetas(list);
-      setCamionetaId(list[0]?.id ?? "");
+      const first = list[0];
+      setCamionetaId(first?.id ?? "");
+      if (first) setKmDraft(String(first.km ?? ""));
     });
   }, [token]);
+
+  useEffect(() => {
+    if (!selected) return;
+    setKmDraft(String(selected.km ?? ""));
+  }, [selected?.id]);
 
   async function submit() {
     if (!token || !camionetaId) return;
     const problema = esChofer ? detalle.trim() : falla === "Otros" ? detalle.trim() : falla;
     if (!problema) {
       setErr(esChofer ? "Describí el problema" : "Indicá la falla");
+      return;
+    }
+    const km = Number(kmDraft);
+    if (!Number.isFinite(km) || km < 0) {
+      setErr("Indicá el kilometraje actual de la patente");
+      return;
+    }
+    if (selected && km < selected.km) {
+      setErr(`El km no puede ser menor al registrado (${selected.km})`);
       return;
     }
     setSaving(true);
@@ -672,6 +691,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
           camionetaId,
           falla: problema,
           detalle: detalle.trim(),
+          km,
           habilitadaCircular,
           solicitante: esChofer ? "CHOFER" : "ADMINISTRATIVO",
           sugerenciaChofer: sugerencia.trim() || undefined,
@@ -685,41 +705,85 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
     }
   }
 
+  const puedeEnviar =
+    !!camionetaId &&
+    !!(esChofer ? detalle.trim() : falla === "Otros" ? detalle.trim() : falla) &&
+    Number.isFinite(Number(kmDraft)) &&
+    Number(kmDraft) >= 0 &&
+    (!selected || Number(kmDraft) >= selected.km);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
       <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-[var(--vl-card)] p-5 sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="font-bold text-[var(--vl-heading)]">Nueva solicitud</h3>
+          <h3 className="font-bold text-[var(--vl-heading)]">Nueva solicitud de reparación</h3>
           <button type="button" onClick={onClose} aria-label="Cerrar"><X size={18} /></button>
         </div>
-        <label className="text-xs">Unidad
-          <select className="mt-1 mb-3 w-full rounded-md border p-2 text-sm" value={camionetaId} onChange={(e) => setCamionetaId(e.target.value)}>
-            {camionetas.map((c) => {
-              const asg = currentAsignacion(c);
-              return <option key={c.id} value={c.id}>{[c.patente, asg?.chofer?.nombre].filter(Boolean).join(" · ")}</option>;
-            })}
-          </select>
+
+        {unaSolaUnidad && selected ? (
+          <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2.5 text-sm font-semibold text-[var(--vl-heading)]">
+            {selected.patente}
+            <div className="mt-0.5 text-xs font-normal text-[var(--vl-text-muted)]">
+              Única unidad de tu flota
+            </div>
+          </div>
+        ) : (
+          <label className="text-xs text-[var(--vl-text-muted)]">
+            {esChofer
+              ? user?.esDuenoFlota
+                ? "Unidad (toda tu flota)"
+                : "Unidad (tu patente asignada)"
+              : "Unidad"}
+            <select className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" value={camionetaId} onChange={(e) => setCamionetaId(e.target.value)}>
+              {camionetas.map((c) => {
+                const asg = currentAsignacion(c);
+                return <option key={c.id} value={c.id}>{[c.patente, asg?.chofer?.nombre].filter(Boolean).join(" · ")}</option>;
+              })}
+            </select>
+          </label>
+        )}
+
+        <label className="text-xs text-[var(--vl-text-muted)]">
+          Kilometraje actual (obligatorio)
+          <input
+            type="number"
+            min={selected?.km ?? 0}
+            inputMode="numeric"
+            className="mt-1 mb-1 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]"
+            value={kmDraft}
+            onChange={(e) => setKmDraft(e.target.value)}
+            placeholder={selected ? `Actual: ${selected.km}` : "Km"}
+          />
         </label>
+        {selected && (
+          <p className="mb-3 text-[11px] text-[var(--vl-text-muted)]">
+            Registrado: {selected.km.toLocaleString("es-AR")} km. No puede ser menor.
+          </p>
+        )}
+
         {esChofer ? (
-          <textarea rows={4} className="mb-3 w-full rounded-md border p-2 text-sm" placeholder='Ej. "se rompió la caja"' value={detalle} onChange={(e) => setDetalle(e.target.value)} />
+          <label className="text-xs text-[var(--vl-text-muted)]">
+            ¿Qué pasó? (texto libre)
+            <textarea rows={4} className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" placeholder='Ej. "se rompió la caja"' value={detalle} onChange={(e) => setDetalle(e.target.value)} />
+          </label>
         ) : (
           <>
-            <select className="mb-3 w-full rounded-md border p-2 text-sm" value={falla} onChange={(e) => setFalla(e.target.value)}>
+            <select className="mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" value={falla} onChange={(e) => setFalla(e.target.value)}>
               {FALLAS_COMUNES.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
-            <textarea rows={2} className="mb-3 w-full rounded-md border p-2 text-sm" placeholder="Detalle" value={detalle} onChange={(e) => setDetalle(e.target.value)} />
+            <textarea rows={2} className="mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" placeholder="Detalle" value={detalle} onChange={(e) => setDetalle(e.target.value)} />
           </>
         )}
         <fieldset className="mb-3">
-          <legend className="text-xs">¿La unidad puede circular?</legend>
+          <legend className="text-xs text-[var(--vl-text-muted)]">¿La unidad puede circular?</legend>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setHabilitadaCircular(true)} className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${habilitadaCircular ? "border-emerald-700 bg-emerald-600 text-white dark:border-emerald-400 dark:bg-emerald-700" : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"}`}>Sí</button>
             <button type="button" onClick={() => setHabilitadaCircular(false)} className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${!habilitadaCircular ? "border-red-700 bg-red-600 text-white dark:border-red-400 dark:bg-red-700" : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"}`}>No (urgente)</button>
           </div>
         </fieldset>
-        <textarea rows={2} className="mb-3 w-full rounded-md border p-2 text-sm" placeholder="Sugerencia de taller (opcional)" value={sugerencia} onChange={(e) => setSugerencia(e.target.value)} />
+        <textarea rows={2} className="mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" placeholder="Sugerencia de taller (opcional)" value={sugerencia} onChange={(e) => setSugerencia(e.target.value)} />
         {err && <p className="mb-2 text-sm text-red-600">{err}</p>}
-        <button type="button" disabled={saving} onClick={() => void submit()} className="min-h-11 w-full rounded-md bg-slate-900 text-sm font-medium text-white dark:bg-slate-100 dark:text-slate-900">
+        <button type="button" disabled={saving || !puedeEnviar} onClick={() => void submit()} className="min-h-11 w-full rounded-md bg-slate-900 text-sm font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900">
           {saving ? "Enviando…" : "Crear solicitud"}
         </button>
       </div>

@@ -452,6 +452,15 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
 
+    const kmRaw = Number(req.body?.km ?? req.body?.kmAlMomento);
+    if (!Number.isFinite(kmRaw) || kmRaw < 0) {
+      res.status(400).json({
+        error: "El kilometraje de la patente es obligatorio",
+      });
+      return;
+    }
+    const kmReportado = Math.floor(kmRaw);
+
     const camioneta = await prisma.camioneta.findUnique({
       where: { id: camionetaId },
       include: {
@@ -464,6 +473,12 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
     });
     if (!camioneta) {
       res.status(404).json({ error: "Camioneta no encontrada" });
+      return;
+    }
+    if (kmReportado < camioneta.km) {
+      res.status(400).json({
+        error: `El kilometraje no puede ser menor al actual (${camioneta.km} km)`,
+      });
       return;
     }
 
@@ -515,12 +530,19 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
         });
       }
 
+      if (kmReportado > camioneta.km) {
+        await tx.camioneta.update({
+          where: { id: camionetaId },
+          data: { km: kmReportado },
+        });
+      }
+
       return tx.ordenTrabajo.create({
         data: {
           solicitudTallerId: solicitud.id,
           numeroOT,
           urgente: !habilitadaCircular,
-          kmAlMomento: camioneta.km,
+          kmAlMomento: kmReportado,
           sugerenciaChofer: req.body?.sugerenciaChofer
             ? String(req.body.sugerenciaChofer).trim() || null
             : null,
