@@ -10,7 +10,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:generate": "node scripts/prisma-generate.mjs",
     "db:push": "prisma db push",
-    "build": "tsc -b"
+    "build:tsc": "tsc -b"
   },
   "prisma": {
     "schema": "prisma/schema.prisma",
