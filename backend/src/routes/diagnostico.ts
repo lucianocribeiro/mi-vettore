@@ -20,7 +20,7 @@ router.get("/categorias", authenticate, async (_req, res) => {
   }
 });
 
-/** Asigna ítems del árbol a una OT (multi). Usado en presupuesto/cierre. */
+/** Asigna ítems del árbol a una OT (multi). Se carga al cierre / facturación. */
 router.put(
   "/ot/:otId",
   authenticate,
@@ -33,9 +33,9 @@ router.put(
         res.status(404).json({ error: "OT no encontrada" });
         return;
       }
-      if (ot.currentStep < 2) {
+      if (ot.currentStep < 3 && !ot.cerradaAt) {
         res.status(400).json({
-          error: "El diagnóstico detallado se carga en presupuesto/cierre",
+          error: "El diagnóstico detallado se carga al cierre de la OT",
         });
         return;
       }
@@ -94,5 +94,51 @@ router.put(
     }
   }
 );
+
+/** Últimas reparaciones por unidad + categoría del árbol. */
+router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const camionetaId = String(req.query.camionetaId ?? "").trim();
+    const categoriaId = String(req.query.categoriaId ?? "").trim();
+    if (!camionetaId) {
+      res.status(400).json({ error: "camionetaId es obligatorio" });
+      return;
+    }
+    const rows = await prisma.ordenTrabajoDiagnostico.findMany({
+      where: {
+        categoriaId: categoriaId || undefined,
+        ot: {
+          cerradaAt: { not: null },
+          solicitud: { camionetaId },
+        },
+      },
+      include: {
+        categoria: true,
+        ot: {
+          select: {
+            id: true,
+            numeroOT: true,
+            cerradaAt: true,
+            trabajoDescripcion: true,
+          },
+        },
+      },
+      orderBy: { ot: { cerradaAt: "desc" } },
+      take: 50,
+    });
+    res.json(
+      rows.map((r) => ({
+        otId: r.ot.id,
+        numeroOT: r.ot.numeroOT,
+        fecha: r.ot.cerradaAt,
+        trabajoDescripcion: r.ot.trabajoDescripcion,
+        categoria: r.categoria,
+      }))
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al consultar historial de reparaciones" });
+  }
+});
 
 export { router as diagnosticoRouter };

@@ -7,9 +7,9 @@ export function fechaAplicacionCambio(from = new Date()): Date {
   const day = d.getDay(); // 0=domingo … 5=viernes
   if (day === 5) {
     d.setDate(d.getDate() + 3); // lunes
-  } else {
-    d.setDate(d.getDate() + 1);
+    return d;
   }
+  d.setDate(d.getDate() + 1);
   return d;
 }
 
@@ -24,6 +24,10 @@ export const FALLAS_COMUNES = [
   "Otros",
 ] as const;
 
+/**
+ * Circuito OT reunión 12/08.
+ * 0 se completa al crear (notif automática). Urgente salta a 3.
+ */
 export const OT_STEPS = [
   {
     key: 0,
@@ -32,8 +36,8 @@ export const OT_STEPS = [
   },
   {
     key: 1,
-    label: "Notificación ops",
-    ownerRoles: [Role.PABLO, Role.FACU] as Role[] | null,
+    label: "Asignación",
+    ownerRoles: [Role.FACU] as Role[] | null,
   },
   {
     key: 2,
@@ -42,20 +46,22 @@ export const OT_STEPS = [
   },
   {
     key: 3,
-    label: "Elección taller",
-    ownerRoles: [Role.FACU],
+    label: "Facturación",
+    ownerRoles: [Role.SILVINA],
   },
   {
     key: 4,
-    label: "Aprobación",
-    ownerRoles: [Role.PATRICIO, Role.JULIETA],
+    label: "Incremento",
+    ownerRoles: [Role.PATRICIO],
   },
   {
     key: 5,
-    label: "Pago",
+    label: "Cierre / pago",
     ownerRoles: [Role.SILVINA, Role.CARLA],
   },
 ] as const;
+
+export const OT_STEP_LAST = OT_STEPS.length - 1;
 
 export function canCreateSolicitud(rol: Role): boolean {
   return (
@@ -67,18 +73,13 @@ export function canCreateSolicitud(rol: Role): boolean {
   );
 }
 
-/** Quién puede avanzar DESDE currentStep hacia el siguiente. */
+/** Quién es el “dueño” habitual de avanzar DESDE currentStep. Ops pueden igual (log silencioso). */
 export function canAdvanceFromStep(rol: Role, currentStep: number): boolean {
   if (currentStep === 0) return canCreateSolicitud(rol);
-  // Notificación ops: Pablo o Facu confirman / sacan de circulación
-  if (currentStep === 1) return rol === Role.PABLO || rol === Role.FACU;
-  // Silvina carga presupuestos
+  if (currentStep === 1) return rol === Role.FACU;
   if (currentStep === 2) return rol === Role.SILVINA;
-  // Facu elige presupuesto/taller
-  if (currentStep === 3) return rol === Role.FACU;
-  // Patricio/Julieta aprueban
-  if (currentStep === 4) return rol === Role.PATRICIO || rol === Role.JULIETA;
-  // Pago se cierra con POST /cerrar
+  if (currentStep === 3) return rol === Role.SILVINA;
+  if (currentStep === 4) return rol === Role.PATRICIO;
   if (currentStep === 5) return false;
   return false;
 }
@@ -87,12 +88,13 @@ export function canCerrarOt(rol: Role): boolean {
   return rol === Role.SILVINA || rol === Role.CARLA;
 }
 
-/** Aviso al pasar a notificación ops (sacar de circulación). */
-export const NOTIF_OPS_ROLES: Role[] = [Role.PABLO, Role.FACU];
+/** Aviso al crear la solicitud: Pablo y Silvina (notif automática, reunión 12/08). */
+export const NOTIF_OPS_ROLES: Role[] = [Role.PABLO, Role.SILVINA];
 
 /** Notificación final de pago. */
 export const CIERRE_AVISO_ROLES: Role[] = [Role.SILVINA, Role.CARLA];
 
+/** Retroceder: solo staff interno, nunca el chofer. */
 export function canRetreat(rol: Role): boolean {
   return (
     rol === Role.PABLO ||
@@ -100,8 +102,7 @@ export function canRetreat(rol: Role): boolean {
     rol === Role.SILVINA ||
     rol === Role.PATRICIO ||
     rol === Role.JULIETA ||
-    rol === Role.CARLA ||
-    rol === Role.CHOFER
+    rol === Role.CARLA
   );
 }
 

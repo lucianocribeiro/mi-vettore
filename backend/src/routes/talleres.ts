@@ -6,11 +6,12 @@ import ExcelJS from "exceljs";
 import {
   EstadoCamioneta,
   EstadoPedido,
+  EstadoTallerMovimiento,
   OrigenPedido,
   Prisma,
   SolicitanteTaller,
+  TipoOtItem,
   TipoPedido,
-  type PresupuestoOt,
   type Role,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
@@ -35,6 +36,11 @@ import {
   canActOnStepAsOps,
   parseOverrideComentario,
 } from "../lib/ot-override.js";
+import {
+  hayIncrementoSobrePresupuesto,
+  totalFacturado,
+  totalPresupuesto,
+} from "../lib/ot-totales.js";
 
 const router = Router();
 
@@ -52,6 +58,24 @@ function pdfOnly(
     file.originalname.toLowerCase().endsWith(".pdf");
   if (!ok) {
     cb(new Error("Solo se aceptan archivos PDF"));
+    return;
+  }
+  cb(null, true);
+}
+
+function pdfOrImage(
+  _req: Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback
+) {
+  const name = file.originalname.toLowerCase();
+  const ok =
+    file.mimetype === "application/pdf" ||
+    file.mimetype.startsWith("image/") ||
+    name.endsWith(".pdf") ||
+    /\.(jpe?g|png|webp|heic)$/.test(name);
+  if (!ok) {
+    cb(new Error("Solo PDF o imagen"));
     return;
   }
   cb(null, true);
@@ -77,11 +101,11 @@ const uploadFactura = multer({
       cb(null, `${Date.now()}_${safe}`);
     },
   }),
-  fileFilter: pdfOnly,
+  fileFilter: pdfOrImage,
   limits: { fileSize: 15 * 1024 * 1024 },
 });
 
-function includeOTFor(viewerUserId: string) {
+function includeOTFor(_viewerUserId?: string) {
   return {
     solicitud: {
       include: {
@@ -97,17 +121,18 @@ function includeOTFor(viewerUserId: string) {
         chofer: true,
       },
     },
+    tallerProveedor: { include: { tipos: true } },
     presupuestos: { orderBy: { createdAt: "asc" as const } },
     presupuestoElegido: true,
+    items: { orderBy: { createdAt: "asc" as const } },
+    facturas: { orderBy: { createdAt: "asc" as const } },
     diagnosticos: {
       include: { categoria: true },
       orderBy: { createdAt: "asc" as const },
     },
-    /** Cada usuario solo ve sus propias excepciones de rol. */
     auditorias: {
-      where: { userId: viewerUserId },
       orderBy: { createdAt: "desc" as const },
-      take: 20,
+      take: 30,
       include: {
         user: { select: { id: true, nombre: true, email: true, rol: true } },
       },
@@ -115,10 +140,67 @@ function includeOTFor(viewerUserId: string) {
   } as const;
 }
 
+type OtLoaded = Prisma.OrdenTrabajoGetPayload<{
+  include: ReturnType<typeof includeOTFor>;
+}>;
+
+function otTotales(ot: {
+  items?: { tipo: TipoOtItem; importe: number }[];
+  presupuestos?: { monto: number }[];
+  valorAprobado?: number | null;
+  montoAutorizado?: number | null;
+  valorFinal?: number | null;
+}) {
+  const items = ot.items ?? [];
+  const presupuesto = totalPresupuesto({
+    items,
+    presupuestos: ot.presupuestos,
+    valorAprobado: ot.valorAprobado,
+    montoAutorizado: ot.montoAutorizado,
+  });
+  const facturado = totalFacturado({ items, valorFinal: ot.valorFinal });
+  return { presupuesto, facturado };
+}
+
+/** El chofer solo ve estado + totales, no negociación interna. */
+function sanitizeOtForViewer<T extends OtLoaded>(ot: T, rol: Role) {
+  const totales = otTotales(ot);
+  if (rol !== "CHOFER") {
+    return { ...ot, totales };
+  }
+  return {
+    id: ot.id,
+    numeroOT: ot.numeroOT,
+    currentStep: ot.currentStep,
+    urgente: ot.urgente,
+    cerradaAt: ot.cerradaAt,
+    createdAt: ot.createdAt,
+    tallerAsignado: ot.tallerAsignado,
+    kmAlMomento: ot.kmAlMomento,
+    sugerenciaChofer: ot.sugerenciaChofer,
+    sugerenciaArchivo: ot.sugerenciaArchivo,
+    solicitud: ot.solicitud,
+    diagnosticos: ot.diagnosticos,
+    totales,
+    resumenChofer: {
+      presupuestoTotal: totales.presupuesto,
+      gastoReal: ot.cerradaAt
+        ? totales.facturado || totales.presupuesto
+        : totales.facturado,
+    },
+    items: [] as T["items"],
+    facturas: [] as T["facturas"],
+    presupuestos: [] as T["presupuestos"],
+    presupuestoElegido: null,
+    auditorias: [] as T["auditorias"],
+    incrementoJustificacion: null,
+    tallerProveedor: null,
+  };
+}
+
 /**
- * Si el rol es el “dueño” de la etapa, pasa.
- * Si no, cualquier rol con acceso a Talleres (ops o chofer) puede continuar
- * con comentario obligatorio de override.
+ * Dueño habitual pasa. Otro rol de ops avanza sin fricción (log silencioso).
+ * El chofer no opera el flujo después de crear, salvo rendición/sugerencia.
  */
 async function gateOrOverride(opts: {
   rol: Role;
@@ -129,7 +211,7 @@ async function gateOrOverride(opts: {
   overrideComentario: string | null;
 }): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   if (opts.allowed) return { ok: true };
-  if (!canActOnStepAsOps(opts.rol) && opts.rol !== "CHOFER") {
+  if (!canActOnStepAsOps(opts.rol)) {
     return { ok: false, status: 403, error: "Sin permiso para esta acción" };
   }
   return assertRoleOrOverride(opts);
@@ -144,21 +226,70 @@ async function choferScope(userId: string): Promise<{
   return { userId: me.id, choferId: me.choferId };
 }
 
-function whereOwnSolicitudes(scope: { userId: string }) {
-  return { solicitud: { createdById: scope.userId } };
+function whereOwnSolicitudes(scope: { userId: string; choferId: string | null }) {
+  return {
+    solicitud: {
+      OR: [
+        { createdById: scope.userId },
+        ...(scope.choferId ? [{ choferId: scope.choferId }] : []),
+      ],
+    },
+  };
 }
 
 function choferOwnsOt(
-  ot: { solicitud: { createdById: string | null } },
-  scope: { userId: string }
+  ot: { solicitud: { createdById: string | null; choferId: string | null } },
+  scope: { userId: string; choferId: string | null }
 ): boolean {
-  return ot.solicitud.createdById === scope.userId;
+  if (ot.solicitud.createdById === scope.userId) return true;
+  if (scope.choferId && ot.solicitud.choferId === scope.choferId) return true;
+  return false;
 }
 
 async function nextNumeroOT(): Promise<string> {
   const count = await prisma.ordenTrabajo.count();
   const n = 140 + count + 1;
   return `OT-${String(n).padStart(4, "0")}`;
+}
+
+async function registrarPedidoBaja(
+  otId: string,
+  camionetaId: string,
+  choferId: string | null,
+  patente: string,
+  falla: string,
+  numeroOT: string
+) {
+  let cliente = await prisma.cliente.findFirst({
+    where: { nombre: "Operación Talleres" },
+  });
+  if (!cliente) {
+    cliente = await prisma.cliente.create({
+      data: {
+        nombre: "Operación Talleres",
+        segmento: "ESTATICO",
+        contacto: "talleres@vettore.test",
+      },
+    });
+  }
+  const pedido = await prisma.pedido.create({
+    data: {
+      clienteId: cliente.id,
+      fecha: fechaAplicacionCambio(),
+      tipo: TipoPedido.BAJA,
+      hora: null,
+      zona: "—",
+      motivo: `${falla} — unidad ${patente} a taller (${numeroOT})`,
+      estado: EstadoPedido.PENDIENTE,
+      choferId,
+      camionetaId,
+      origen: OrigenPedido.SISTEMA,
+    },
+  });
+  await prisma.ordenTrabajo.update({
+    where: { id: otId },
+    data: { pedidoNotificacionId: pedido.id },
+  });
 }
 
 router.get("/meta", authenticate, (_req, res) => {
@@ -176,7 +307,11 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       include: includeOTFor(req.user!.id),
       orderBy: { createdAt: "desc" },
     });
-    res.json({ ots: items, steps: OT_STEPS, fallas: FALLAS_COMUNES });
+    res.json({
+      ots: items.map((ot) => sanitizeOtForViewer(ot, req.user!.rol as Role)),
+      steps: OT_STEPS,
+      fallas: FALLAS_COMUNES,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al listar órdenes de trabajo" });
@@ -263,7 +398,7 @@ router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
       res.status(403).json({ error: "Solo podés ver tus propias solicitudes" });
       return;
     }
-    res.json(item);
+    res.json(sanitizeOtForViewer(item, req.user!.rol as Role));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al obtener OT" });
@@ -377,21 +512,31 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
         data: {
           solicitudTallerId: solicitud.id,
           numeroOT,
-          currentStep: 0,
+          urgente: !habilitadaCircular,
+          kmAlMomento: camioneta.km,
+          sugerenciaChofer: req.body?.sugerenciaChofer
+            ? String(req.body.sugerenciaChofer).trim() || null
+            : null,
+          currentStep: !habilitadaCircular ? 3 : 1,
         },
         include: includeOTFor(req.user!.id),
       });
     });
 
-    // Aviso + mail a ops al crear la OT (reunión 31/7)
+    // Aviso automático a Pablo y Silvina al crear (reemplaza el paso manual de notif).
     const patente = ot.solicitud.camioneta.patente;
+    const fuera = !habilitadaCircular;
+    const titulo = fuera
+      ? `OT ${ot.numeroOT}: unidad fuera de circulación`
+      : `Nueva OT ${ot.numeroOT}`;
+    const mensaje = fuera
+      ? `Unidad ${patente} no puede circular — ${falla}. Camino urgente (rendición 24hs).`
+      : `Solicitud nueva: ${patente} — ${falla}. Puede circular. Facu asigna taller.`;
     await prisma.avisoInterno.createMany({
       data: NOTIF_OPS_ROLES.map((rolDestino) => ({
         rolDestino,
-        titulo: `Nueva OT ${ot.numeroOT}`,
-        mensaje: `Solicitud nueva: ${patente} — ${falla}. Habilitada circular: ${
-          habilitadaCircular ? "Sí" : "No"
-        }.`,
+        titulo,
+        mensaje,
         otId: ot.id,
       })),
     });
@@ -401,11 +546,13 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
     for (const u of ops) {
       await sendMail({
         to: u.email,
-        subject: `[Vettore] Nueva OT ${ot.numeroOT} — ${patente}`,
-        text: `Se creó la OT ${ot.numeroOT} para ${patente}.\nFalla: ${falla}\nHabilitada circular: ${
-          habilitadaCircular ? "Sí" : "No"
-        }.\nRevisá la app.`,
+        subject: `[Vettore] ${titulo}`,
+        text: `${mensaje}\nOT: ${ot.numeroOT}.\nRevisá la app.`,
       });
+    }
+
+    if (fuera) {
+      await registrarPedidoBaja(ot.id, camionetaId, choferId, patente, falla, ot.numeroOT);
     }
 
     // Notificar a la empresa de transporte / dueño de flota (reunión 05/8)
@@ -452,7 +599,7 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
       }
     }
 
-    res.status(201).json(ot);
+    res.status(201).json(sanitizeOtForViewer(ot, rol));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al crear solicitud" });
@@ -480,10 +627,13 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     const overrideComentario = parseOverrideComentario(req.body);
     const data: Record<string, unknown> = {};
 
-    // Facu elige presupuesto (paso 3)
-    if (req.body?.presupuestoElegidoId !== undefined) {
-      if (ot.currentStep !== 3) {
-        res.status(400).json({ error: "El presupuesto se elige en esa etapa" });
+    // Facu: asigna taller y decide inhabilitar (paso 1)
+    if (
+      req.body?.tallerProveedorId !== undefined ||
+      req.body?.inhabilitar !== undefined
+    ) {
+      if (ot.currentStep !== 1) {
+        res.status(400).json({ error: "La asignación de taller es en esa etapa" });
         return;
       }
       const gate = await gateOrOverride({
@@ -491,40 +641,66 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
         allowed: rol === "FACU",
         userId: req.user!.id,
         otId: ot.id,
-        accion: "Elegir presupuesto",
+        accion: "Asignar taller / inhabilitar unidad",
         overrideComentario,
       });
       if (!gate.ok) {
         res.status(gate.status).json({ error: gate.error });
         return;
       }
-      const elegId = String(req.body.presupuestoElegidoId);
-      const pres = ot.presupuestos.find((p: PresupuestoOt) => p.id === elegId);
-      if (!pres) {
-        res.status(400).json({ error: "Presupuesto inválido" });
-        return;
+      if (req.body?.tallerProveedorId) {
+        const tp = await prisma.tallerProveedor.findFirst({
+          where: { id: String(req.body.tallerProveedorId), activo: true },
+        });
+        if (!tp) {
+          res.status(400).json({ error: "Taller inválido" });
+          return;
+        }
+        data.tallerProveedorId = tp.id;
+        data.tallerAsignado = tp.razonSocial;
       }
-      data.presupuestoElegidoId = elegId;
-      data.tallerAsignado = pres.taller;
-      data.presupuestoMonto = pres.monto;
-      data.presupuestoArchivo = pres.archivo;
-      if (req.body?.montoAutorizado === undefined) {
-        data.montoAutorizado = pres.monto;
-        data.valorAprobado = pres.monto;
+      if (req.body?.inhabilitar === true || req.body?.inhabilitar === "true") {
+        await prisma.solicitudTaller.update({
+          where: { id: ot.solicitudTallerId },
+          data: { habilitadaCircular: false, inhabilitado: true },
+        });
+        await prisma.camioneta.update({
+          where: { id: ot.solicitud.camionetaId },
+          data: { estado: EstadoCamioneta.EN_TALLER },
+        });
+        if (!ot.pedidoNotificacionId) {
+          await registrarPedidoBaja(
+            ot.id,
+            ot.solicitud.camionetaId,
+            ot.solicitud.choferId,
+            ot.solicitud.camioneta.patente,
+            ot.solicitud.falla,
+            ot.numeroOT
+          );
+        }
+        await prisma.avisoInterno.createMany({
+          data: NOTIF_OPS_ROLES.map((rolDestino) => ({
+            rolDestino,
+            titulo: `OT ${ot.numeroOT}: unidad fuera de circulación`,
+            mensaje: `Facu inhabilitó ${ot.solicitud.camioneta.patente}.`,
+            otId: ot.id,
+          })),
+        });
       }
     }
 
+    // Silvina puede ajustar montos autorizados en presupuesto/factura
     if (req.body?.montoAutorizado !== undefined) {
-      if (ot.currentStep !== 3) {
-        res.status(400).json({ error: "El valor del arreglo se carga en esa etapa" });
+      if (ot.currentStep !== 2 && ot.currentStep !== 3) {
+        res.status(400).json({ error: "El monto se edita en presupuesto o factura" });
         return;
       }
       const gate = await gateOrOverride({
         rol,
-        allowed: rol === "FACU",
+        allowed: rol === "SILVINA",
         userId: req.user!.id,
         otId: ot.id,
-        accion: "Asignar valor del arreglo",
+        accion: "Ajustar monto autorizado",
         overrideComentario,
       });
       if (!gate.ok) {
@@ -532,7 +708,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
         return;
       }
       const monto = Number(req.body.montoAutorizado);
-      if (!Number.isFinite(monto) || monto <= 0) {
+      if (!Number.isFinite(monto) || monto < 0) {
         res.status(400).json({ error: "Monto inválido" });
         return;
       }
@@ -541,22 +717,6 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
 
     if (req.body?.plazoEntrega !== undefined) {
-      if (ot.currentStep !== 3) {
-        res.status(400).json({ error: "El plazo se carga en esa etapa" });
-        return;
-      }
-      const gate = await gateOrOverride({
-        rol,
-        allowed: rol === "FACU",
-        userId: req.user!.id,
-        otId: ot.id,
-        accion: "Cargar plazo de entrega",
-        overrideComentario,
-      });
-      if (!gate.ok) {
-        res.status(gate.status).json({ error: gate.error });
-        return;
-      }
       const d = new Date(String(req.body.plazoEntrega));
       if (Number.isNaN(d.getTime())) {
         res.status(400).json({ error: "Plazo inválido" });
@@ -565,37 +725,17 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       data.plazoEntrega = d;
     }
 
-    if (req.body?.valorFinal !== undefined) {
-      if (ot.currentStep !== 4) {
-        res.status(400).json({ error: "El valor final se carga en aprobación" });
-        return;
-      }
-      const gate = await gateOrOverride({
-        rol,
-        allowed: rol === "PATRICIO" || rol === "JULIETA",
-        userId: req.user!.id,
-        otId: ot.id,
-        accion: "Setear valor final",
-        overrideComentario,
-      });
-      if (!gate.ok) {
-        res.status(gate.status).json({ error: gate.error });
-        return;
-      }
-      data.valorFinal = Number(req.body.valorFinal);
-    }
-
     if (req.body?.incrementoJustificacion !== undefined) {
-      if (ot.currentStep !== 4) {
-        res.status(400).json({ error: "La justificación se carga en aprobación" });
+      if (ot.currentStep !== 3 && ot.currentStep !== 4) {
+        res.status(400).json({ error: "La justificación del incremento va en facturación" });
         return;
       }
       const gate = await gateOrOverride({
         rol,
-        allowed: rol === "PATRICIO" || rol === "JULIETA",
+        allowed: rol === "SILVINA",
         userId: req.user!.id,
         otId: ot.id,
-        accion: "Justificar incremento",
+        accion: "Justificar incremento de taller",
         overrideComentario,
       });
       if (!gate.ok) {
@@ -605,11 +745,27 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       data.incrementoJustificacion = String(req.body.incrementoJustificacion).trim();
     }
 
-    if (req.body?.trabajoDescripcion !== undefined) {
-      if (ot.currentStep !== 4 && ot.currentStep !== 5) {
-        res.status(400).json({ error: "Descripción solo en aprobación/pago" });
+    if (req.body?.incrementoAprobado === true || req.body?.incrementoAprobado === "true") {
+      if (ot.currentStep !== 4) {
+        res.status(400).json({ error: "Patricio aprueba el incremento en esa etapa" });
         return;
       }
+      const gate = await gateOrOverride({
+        rol,
+        allowed: rol === "PATRICIO",
+        userId: req.user!.id,
+        otId: ot.id,
+        accion: "Aprobar incremento",
+        overrideComentario,
+      });
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
+        return;
+      }
+      data.incrementoAprobadoAt = new Date();
+    }
+
+    if (req.body?.trabajoDescripcion !== undefined) {
       data.trabajoDescripcion = String(req.body.trabajoDescripcion).trim();
     }
 
@@ -618,7 +774,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       data,
       include: includeOTFor(req.user!.id),
     });
-    res.json(updated);
+    res.json(sanitizeOtForViewer(updated, rol));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al actualizar OT" });
@@ -664,7 +820,20 @@ router.post(
         return;
       }
 
-      const taller = String(req.body?.taller ?? "").trim();
+      const tallerProveedorId = req.body?.tallerProveedorId
+        ? String(req.body.tallerProveedorId)
+        : "";
+      let taller = String(req.body?.taller ?? "").trim();
+      if (tallerProveedorId) {
+        const tp = await prisma.tallerProveedor.findFirst({
+          where: { id: tallerProveedorId, activo: true },
+        });
+        if (!tp) {
+          res.status(400).json({ error: "Taller inválido" });
+          return;
+        }
+        taller = tp.razonSocial;
+      }
       const monto = Number(req.body?.monto);
       const descripcion = String(req.body?.descripcion ?? "").trim();
       if (!taller) {
@@ -685,12 +854,26 @@ router.post(
           archivo: req.file ? req.file.filename : null,
         },
       });
+      if (descripcion) {
+        await prisma.otItem.create({
+          data: {
+            otId: ot.id,
+            tipo: TipoOtItem.PRESUPUESTO,
+            tallerProveedorId: tallerProveedorId || null,
+            tallerNombre: taller,
+            descripcion,
+            importe: monto,
+            observacion: String(req.body?.observacion ?? "").trim() || null,
+            archivo: req.file ? req.file.filename : null,
+          },
+        });
+      }
 
       const updated = await prisma.ordenTrabajo.findUnique({
         where: { id: ot.id },
         include: includeOTFor(req.user!.id),
       });
-      res.json(updated);
+      res.json(sanitizeOtForViewer(updated!, req.user!.rol as Role));
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al adjuntar presupuesto" });
@@ -739,7 +922,7 @@ router.delete(
         where: { id: ot.id },
         include: includeOTFor(req.user!.id),
       });
-      res.json(updated);
+      res.json(sanitizeOtForViewer(updated!, req.user!.rol as Role));
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al eliminar presupuesto" });
@@ -783,22 +966,16 @@ router.post("/:id/sin-presupuesto", authenticate, async (req: AuthedRequest, res
 
     const sinPresupuesto = Boolean(req.body?.sinPresupuesto);
     const motivo = String(req.body?.sinPresupuestoMotivo ?? "").trim();
-    if (sinPresupuesto && motivo.length < 10) {
-      res.status(400).json({
-        error: "El motivo es obligatorio (mínimo 10 caracteres)",
-      });
-      return;
-    }
 
     const updated = await prisma.ordenTrabajo.update({
       where: { id: ot.id },
       data: {
         sinPresupuesto,
-        sinPresupuestoMotivo: sinPresupuesto ? motivo : null,
+        sinPresupuestoMotivo: sinPresupuesto ? motivo || null : null,
       },
       include: includeOTFor(req.user!.id),
     });
-    res.json(updated);
+    res.json(sanitizeOtForViewer(updated, req.user!.rol as Role));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al marcar sin presupuesto" });
@@ -828,12 +1005,12 @@ router.post(
       const ot = await prisma.ordenTrabajo.findUnique({
         where: { id: req.params.id },
       });
-      if (!ot || ot.currentStep !== 5) {
-        res.status(400).json({ error: "Factura solo en etapa de pago" });
+      if (!ot || (ot.currentStep !== 3 && ot.currentStep !== 5)) {
+        res.status(400).json({ error: "La factura se carga en facturación/cierre" });
         return;
       }
       if (!req.file) {
-        res.status(400).json({ error: "Factura PDF obligatoria" });
+        res.status(400).json({ error: "Comprobante obligatorio (PDF o foto)" });
         return;
       }
 
@@ -841,17 +1018,39 @@ router.post(
       const overrideComentario = parseOverrideComentario(req.body);
       const gate = await gateOrOverride({
         rol,
-        allowed:
-          rol === "PATRICIO" || rol === "JULIETA" || rol === "SILVINA",
+        allowed: rol === "SILVINA" || rol === "CARLA",
         userId: req.user!.id,
         otId: ot.id,
-        accion: "Cargar factura PDF",
+        accion: "Cargar factura",
         overrideComentario,
       });
       if (!gate.ok) {
         res.status(gate.status).json({ error: gate.error });
         return;
       }
+
+      const tallerProveedorId = req.body?.tallerProveedorId
+        ? String(req.body.tallerProveedorId)
+        : ot.tallerProveedorId;
+      let tallerNombre = String(req.body?.taller ?? ot.tallerAsignado ?? "").trim();
+      if (tallerProveedorId) {
+        const tp = await prisma.tallerProveedor.findUnique({
+          where: { id: tallerProveedorId },
+        });
+        if (tp) tallerNombre = tp.razonSocial;
+      }
+
+      await prisma.otFactura.create({
+        data: {
+          otId: ot.id,
+          tallerProveedorId: tallerProveedorId || null,
+          tallerNombre,
+          archivo: req.file.filename,
+          nombreOriginal: req.file.originalname,
+          mimeType: req.file.mimetype,
+          monto: req.body?.monto ? Number(req.body.monto) : null,
+        },
+      });
 
       const trabajoDescripcion = String(
         req.body?.trabajoDescripcion ?? ot.trabajoDescripcion ?? ""
@@ -865,7 +1064,7 @@ router.post(
         },
         include: includeOTFor(req.user!.id),
       });
-      res.json(updated);
+      res.json(sanitizeOtForViewer(updated, rol));
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al adjuntar factura" });
@@ -885,8 +1084,8 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
     }
 
     const scope = await choferScope(req.user!.id);
-    if (scope && !choferOwnsOt(ot, scope)) {
-      res.status(403).json({ error: "Solo podés operar tus propias solicitudes" });
+    if (scope) {
+      res.status(403).json({ error: "El chofer no avanza etapas de la OT" });
       return;
     }
 
@@ -914,165 +1113,67 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
 
-    if (
-      ot.currentStep === 2 &&
-      ot.presupuestos.length < 1 &&
-      !ot.sinPresupuesto
-    ) {
-      const skip = await assertRoleOrOverride({
-        rol,
-        allowed: false,
-        userId: req.user!.id,
-        otId: ot.id,
-        accion: "Avanzar presupuestos sin cargar PDF / sin presupuesto",
-        overrideComentario,
-      });
-      if (!skip.ok) {
-        res.status(skip.status).json({
-          error:
-            "Debés cargar al menos un presupuesto PDF o marcar «sin presupuesto», o indicar un motivo (overrideComentario).",
-        });
-        return;
-      }
+    const extra: Record<string, unknown> = {};
+    let nextStep = ot.currentStep + 1;
+
+    if (ot.currentStep === 0) {
+      nextStep = ot.urgente ? 3 : 1;
     }
+
+    if (ot.currentStep === 2) {
+      const tot = otTotales(ot);
+      extra.valorAprobado = tot.presupuesto || ot.valorAprobado || ot.montoAutorizado;
+      extra.montoAutorizado = extra.valorAprobado;
+      extra.sinPresupuesto =
+        ot.sinPresupuesto ||
+        (tot.presupuesto <= 0 && (ot.presupuestos?.length ?? 0) === 0);
+    }
+
     if (ot.currentStep === 3) {
-      const eleccionOk =
-        !!ot.presupuestoElegidoId &&
-        !!ot.tallerAsignado &&
-        ot.montoAutorizado != null &&
-        ot.montoAutorizado > 0;
-      if (!eleccionOk) {
-        const skip = await assertRoleOrOverride({
-          rol,
-          allowed: false,
-          userId: req.user!.id,
-          otId: ot.id,
-          accion: "Avanzar elección sin presupuesto/taller/monto",
-          overrideComentario,
-        });
-        if (!skip.ok) {
-          res.status(skip.status).json({
+      const tot = otTotales(ot);
+      const aprobado = tot.presupuesto || ot.valorAprobado || ot.montoAutorizado || 0;
+      const facturado = tot.facturado || aprobado;
+      extra.valorAprobado = aprobado;
+      extra.valorFinal = facturado;
+      extra.montoAutorizado = aprobado || facturado;
+      if (req.body?.incrementoJustificacion) {
+        extra.incrementoJustificacion = String(req.body.incrementoJustificacion).trim();
+      }
+      if (hayIncrementoSobrePresupuesto(aprobado, facturado)) {
+        const justif = String(
+          extra.incrementoJustificacion ?? ot.incrementoJustificacion ?? ""
+        ).trim();
+        if (!justif) {
+          res.status(400).json({
             error:
-              "Debés elegir presupuesto/taller y monto, o indicar un motivo (overrideComentario).",
+              "El taller facturó por encima del presupuesto: hace falta una justificación por escrito del incremento.",
           });
           return;
         }
+        extra.incrementoJustificacion = justif;
+        nextStep = 4;
+      } else {
+        nextStep = 5;
       }
     }
-    if (ot.currentStep === 4) {
-      const valorFinal =
-        req.body?.valorFinal !== undefined
-          ? Number(req.body.valorFinal)
-          : ot.valorFinal ?? ot.montoAutorizado ?? 0;
-      const aprobado = ot.valorAprobado ?? ot.montoAutorizado ?? 0;
-      const justificacion = String(
-        req.body?.incrementoJustificacion ?? ot.incrementoJustificacion ?? ""
-      ).trim();
 
-      if (valorFinal > aprobado && !justificacion && !overrideComentario) {
+    if (ot.currentStep === 4) {
+      if (!ot.incrementoAprobadoAt && rol !== "PATRICIO") {
         res.status(400).json({
-          error: "Incremento sobre lo autorizado: justificación obligatoria",
+          error: "Patricio tiene que aprobar el incremento antes de cerrar",
         });
         return;
       }
-      // La factura ahora se carga en la etapa de Pago (5), no acá.
-
-      await prisma.ordenTrabajo.update({
-        where: { id: ot.id },
-        data: {
-          valorFinal: Number.isFinite(valorFinal) ? valorFinal : null,
-          valorAprobado: aprobado,
-          incrementoJustificacion: justificacion || null,
-        },
-      });
+      extra.incrementoAprobadoAt = ot.incrementoAprobadoAt ?? new Date();
+      nextStep = 5;
     }
 
-    const nextStep = ot.currentStep + 1;
-
-    const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // 0→1: notificar Pablo/Facu + sacar de circulación + pedido sistema
-      if (ot.currentStep === 0) {
-        const sol = ot.solicitud;
-        await tx.camioneta.update({
-          where: { id: sol.camionetaId },
-          data: { estado: EstadoCamioneta.EN_TALLER },
-        });
-
-        let cliente = await tx.cliente.findFirst({
-          where: { nombre: "Operación Talleres" },
-        });
-        if (!cliente) {
-          cliente = await tx.cliente.create({
-            data: {
-              nombre: "Operación Talleres",
-              segmento: "ESTATICO",
-              contacto: "talleres@vettore.test",
-            },
-          });
-        }
-
-        const fecha = fechaAplicacionCambio();
-        const pedido = await tx.pedido.create({
-          data: {
-            clienteId: cliente.id,
-            fecha,
-            tipo: TipoPedido.BAJA,
-            hora: null,
-            zona: "—",
-            motivo: `${sol.falla} — unidad ${sol.camioneta.patente} a taller (${ot.numeroOT})`,
-            estado: EstadoPedido.PENDIENTE,
-            choferId: sol.choferId,
-            camionetaId: sol.camionetaId,
-            origen: OrigenPedido.SISTEMA,
-          },
-        });
-
-        const titulo = `${ot.numeroOT}: sacar de circulación`;
-        const mensaje = `Unidad ${sol.camioneta.patente} — ${sol.falla}. Habilitada circular: ${
-          sol.habilitadaCircular ? "Sí" : "No"
-        }. Revisar y avanzar notificación.`;
-
-        await tx.avisoInterno.createMany({
-          data: NOTIF_OPS_ROLES.map((rolDestino) => ({
-            rolDestino,
-            titulo,
-            mensaje,
-            otId: ot.id,
-          })),
-        });
-
-        return tx.ordenTrabajo.update({
-          where: { id: ot.id },
-          data: {
-            currentStep: nextStep,
-            pedidoNotificacionId: pedido.id,
-          },
-          include: includeOTFor(req.user!.id),
-        });
-      }
-
-      return tx.ordenTrabajo.update({
-        where: { id: ot.id },
-        data: { currentStep: nextStep },
-        include: includeOTFor(req.user!.id),
-      });
+    const updated = await prisma.ordenTrabajo.update({
+      where: { id: ot.id },
+      data: { currentStep: nextStep, ...extra },
+      include: includeOTFor(req.user!.id),
     });
-
-    // Email simulado/real a Pablo y Facu al salir de solicitud
-    if (ot.currentStep === 0) {
-      const ops = await prisma.usuario.findMany({
-        where: { rol: { in: NOTIF_OPS_ROLES }, estado: "ACTIVO" },
-      });
-      for (const u of ops) {
-        await sendMail({
-          to: u.email,
-          subject: `[Vettore] ${ot.numeroOT} — unidad a taller`,
-          text: `Se registró la OT ${ot.numeroOT} para ${ot.solicitud.camioneta.patente}.\nFalla: ${ot.solicitud.falla}\nRevisá la app para sacar la unidad de circulación.`,
-        });
-      }
-    }
-
-    res.json(updated);
+    res.json(sanitizeOtForViewer(updated, rol));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al avanzar etapa" });
@@ -1114,16 +1215,22 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
 
-    if (!ot.facturaPDF) {
-      res.status(400).json({ error: "Falta la factura PDF" });
-      return;
+    if (!ot.facturaPDF && ot.facturas.length === 0) {
+      const rendicion = (ot.items ?? []).some(
+        (i) => i.tipo === TipoOtItem.RENDICION || i.tipo === TipoOtItem.FACTURA
+      );
+      if (!rendicion && !ot.urgente) {
+        res.status(400).json({ error: "Falta al menos una factura o comprobante" });
+        return;
+      }
     }
 
+    const tot = otTotales(ot);
     const patente = ot.solicitud.camioneta.patente;
     const titulo = `${ot.numeroOT}: proceder con el pago`;
-    const mensaje = `Reparación de ${patente} aprobada. Taller: ${
+    const mensaje = `Reparación de ${patente} lista. Taller: ${
       ot.tallerAsignado ?? "—"
-    }. Valor: ${ot.valorFinal ?? ot.montoAutorizado ?? "—"}.`;
+    }. Valor: ${tot.facturado || tot.presupuesto || ot.valorFinal || ot.montoAutorizado || "—"}.`;
 
     const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.avisoInterno.createMany({
@@ -1140,9 +1247,44 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         data: { estado: EstadoCamioneta.OPERATIVA },
       });
 
+      const porProveedor = new Map<string, { id: string | null; nombre: string; monto: number }>();
+      for (const it of ot.items.filter(
+        (i) => i.tipo === TipoOtItem.FACTURA || i.tipo === TipoOtItem.RENDICION
+      )) {
+        const key = it.tallerProveedorId || it.tallerNombre || "sin-proveedor";
+        const prev = porProveedor.get(key);
+        porProveedor.set(key, {
+          id: it.tallerProveedorId,
+          nombre: it.tallerNombre,
+          monto: (prev?.monto ?? 0) + it.importe,
+        });
+      }
+      if (porProveedor.size === 0 && ot.tallerProveedorId && tot.facturado > 0) {
+        porProveedor.set(ot.tallerProveedorId, {
+          id: ot.tallerProveedorId,
+          nombre: ot.tallerAsignado ?? "",
+          monto: tot.facturado,
+        });
+      }
+      for (const p of porProveedor.values()) {
+        if (!p.id || p.monto <= 0) continue;
+        await tx.tallerMovimiento.create({
+          data: {
+            tallerProveedorId: p.id,
+            otId: ot.id,
+            montoFacturado: p.monto,
+            estado: EstadoTallerMovimiento.PENDIENTE,
+          },
+        });
+      }
+
       return tx.ordenTrabajo.update({
         where: { id: ot.id },
-        data: { cerradaAt: new Date() },
+        data: {
+          cerradaAt: new Date(),
+          valorFinal: tot.facturado || ot.valorFinal,
+          valorAprobado: tot.presupuesto || ot.valorAprobado,
+        },
         include: includeOTFor(req.user!.id),
       });
     });
@@ -1159,7 +1301,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       });
     }
 
-    res.json(updated);
+    res.json(sanitizeOtForViewer(updated, rol));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al cerrar pago" });
@@ -1177,8 +1319,8 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
       return;
     }
     const scope = await choferScope(req.user!.id);
-    if (scope && !choferOwnsOt(ot, scope)) {
-      res.status(403).json({ error: "Solo podés operar tus propias solicitudes" });
+    if (scope) {
+      res.status(403).json({ error: "El chofer no retrocede etapas de la OT" });
       return;
     }
     if (ot.currentStep === 0) {
@@ -1195,7 +1337,7 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
     const indicated =
       canAdvanceFromStep(rol, ot.currentStep) ||
       (ot.currentStep === 5 && canCerrarOt(rol));
-    if (!canRetreat(rol) && rol !== "CHOFER") {
+    if (!canRetreat(rol)) {
       res.status(403).json({ error: "Sin permiso para retroceder" });
       return;
     }
@@ -1217,11 +1359,299 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
       data: { currentStep: ot.currentStep - 1 },
       include: includeOTFor(req.user!.id),
     });
-    res.json(updated);
+    res.json(sanitizeOtForViewer(updated, rol));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al retroceder" });
   }
 });
+
+async function reloadOt(id: string, userId: string, rol: Role) {
+  const ot = await prisma.ordenTrabajo.findUnique({
+    where: { id },
+    include: includeOTFor(userId),
+  });
+  return ot ? sanitizeOtForViewer(ot, rol) : null;
+}
+
+router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const ot = await prisma.ordenTrabajo.findUnique({ where: { id: req.params.id } });
+    if (!ot || ot.cerradaAt) {
+      res.status(400).json({ error: "OT no disponible" });
+      return;
+    }
+    const scope = await choferScope(req.user!.id);
+    if (scope) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const rol = req.user!.rol as Role;
+    const gate = await gateOrOverride({
+      rol,
+      allowed: rol === "SILVINA",
+      userId: req.user!.id,
+      otId: ot.id,
+      accion: "Agregar ítem OT",
+      overrideComentario: parseOverrideComentario(req.body),
+    });
+    if (!gate.ok) {
+      res.status(gate.status).json({ error: gate.error });
+      return;
+    }
+    const tipoRaw = String(req.body?.tipo ?? "PRESUPUESTO").toUpperCase();
+    if (!(tipoRaw in TipoOtItem)) {
+      res.status(400).json({ error: "Tipo de ítem inválido" });
+      return;
+    }
+    const descripcion = String(req.body?.descripcion ?? "").trim();
+    const importe = Number(req.body?.importe);
+    if (!descripcion || !Number.isFinite(importe) || importe < 0) {
+      res.status(400).json({ error: "Descripción e importe son obligatorios" });
+      return;
+    }
+    const tallerProveedorId = req.body?.tallerProveedorId
+      ? String(req.body.tallerProveedorId)
+      : null;
+    let tallerNombre = String(req.body?.tallerNombre ?? "").trim();
+    if (tallerProveedorId) {
+      const tp = await prisma.tallerProveedor.findUnique({
+        where: { id: tallerProveedorId },
+      });
+      if (tp) tallerNombre = tp.razonSocial;
+    }
+    await prisma.otItem.create({
+      data: {
+        otId: ot.id,
+        tipo: tipoRaw as TipoOtItem,
+        tallerProveedorId,
+        tallerNombre,
+        descripcion,
+        importe,
+        observacion: String(req.body?.observacion ?? "").trim() || null,
+      },
+    });
+    res.json(await reloadOt(ot.id, req.user!.id, rol));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al agregar ítem" });
+  }
+});
+
+router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const ot = await prisma.ordenTrabajo.findUnique({ where: { id: req.params.id } });
+    if (!ot || ot.cerradaAt) {
+      res.status(400).json({ error: "OT no disponible" });
+      return;
+    }
+    if (await choferScope(req.user!.id)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const rol = req.user!.rol as Role;
+    const gate = await gateOrOverride({
+      rol,
+      allowed: rol === "SILVINA",
+      userId: req.user!.id,
+      otId: ot.id,
+      accion: "Editar ítem OT",
+      overrideComentario: parseOverrideComentario(req.body),
+    });
+    if (!gate.ok) {
+      res.status(gate.status).json({ error: gate.error });
+      return;
+    }
+    const data: Prisma.OtItemUpdateInput = {};
+    if (req.body?.descripcion !== undefined) {
+      data.descripcion = String(req.body.descripcion).trim();
+    }
+    if (req.body?.importe !== undefined) {
+      const importe = Number(req.body.importe);
+      if (!Number.isFinite(importe) || importe < 0) {
+        res.status(400).json({ error: "Importe inválido" });
+        return;
+      }
+      data.importe = importe;
+    }
+    if (req.body?.observacion !== undefined) {
+      data.observacion = String(req.body.observacion).trim() || null;
+    }
+    await prisma.otItem.update({
+      where: { id: req.params.itemId },
+      data,
+    });
+    res.json(await reloadOt(ot.id, req.user!.id, rol));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al editar ítem" });
+  }
+});
+
+router.delete("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const ot = await prisma.ordenTrabajo.findUnique({ where: { id: req.params.id } });
+    if (!ot || ot.cerradaAt) {
+      res.status(400).json({ error: "OT no disponible" });
+      return;
+    }
+    if (await choferScope(req.user!.id)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const rol = req.user!.rol as Role;
+    const gate = await gateOrOverride({
+      rol,
+      allowed: rol === "SILVINA",
+      userId: req.user!.id,
+      otId: ot.id,
+      accion: "Eliminar ítem OT",
+      overrideComentario: parseOverrideComentario(req.body),
+    });
+    if (!gate.ok) {
+      res.status(gate.status).json({ error: gate.error });
+      return;
+    }
+    await prisma.otItem.delete({ where: { id: req.params.itemId } });
+    res.json(await reloadOt(ot.id, req.user!.id, rol));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al eliminar ítem" });
+  }
+});
+
+router.post(
+  "/:id/sugerencia",
+  authenticate,
+  (req, res, next) => {
+    uploadFactura.single("archivo")(req, res, (err) => {
+      if (err) {
+        res.status(400).json({ error: err.message || "Error de archivo" });
+        return;
+      }
+      next();
+    });
+  },
+  async (req: AuthedRequest, res) => {
+    try {
+      const ot = await prisma.ordenTrabajo.findUnique({
+        where: { id: req.params.id },
+        include: { solicitud: true },
+      });
+      if (!ot || ot.cerradaAt) {
+        res.status(400).json({ error: "OT no disponible" });
+        return;
+      }
+      const scope = await choferScope(req.user!.id);
+      if (scope && !choferOwnsOt(ot, scope)) {
+        res.status(403).json({ error: "Solo tu solicitud" });
+        return;
+      }
+      if (!scope && !canActOnStepAsOps(req.user!.rol as Role)) {
+        res.status(403).json({ error: "Sin permiso" });
+        return;
+      }
+      const texto = String(req.body?.sugerenciaChofer ?? req.body?.texto ?? "").trim();
+      const updated = await prisma.ordenTrabajo.update({
+        where: { id: ot.id },
+        data: {
+          sugerenciaChofer: texto || ot.sugerenciaChofer,
+          sugerenciaArchivo: req.file ? req.file.filename : ot.sugerenciaArchivo,
+        },
+        include: includeOTFor(req.user!.id),
+      });
+      res.json(sanitizeOtForViewer(updated, req.user!.rol as Role));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al guardar sugerencia" });
+    }
+  }
+);
+
+router.post(
+  "/:id/rendicion",
+  authenticate,
+  (req, res, next) => {
+    uploadFactura.single("archivo")(req, res, (err) => {
+      if (err) {
+        res.status(400).json({ error: err.message || "Error de archivo" });
+        return;
+      }
+      next();
+    });
+  },
+  async (req: AuthedRequest, res) => {
+    try {
+      const ot = await prisma.ordenTrabajo.findUnique({
+        where: { id: req.params.id },
+        include: includeOTFor(req.user!.id),
+      });
+      if (!ot || ot.cerradaAt) {
+        res.status(400).json({ error: "OT no disponible" });
+        return;
+      }
+      if (!ot.urgente) {
+        res.status(400).json({ error: "La rendición aplica a OT urgentes" });
+        return;
+      }
+      const scope = await choferScope(req.user!.id);
+      if (scope && !choferOwnsOt(ot, scope)) {
+        res.status(403).json({ error: "Solo tu solicitud" });
+        return;
+      }
+      if (!scope) {
+        const gate = await gateOrOverride({
+          rol: req.user!.rol as Role,
+          allowed: req.user!.rol === "SILVINA",
+          userId: req.user!.id,
+          otId: ot.id,
+          accion: "Cargar rendición urgente",
+          overrideComentario: parseOverrideComentario(req.body),
+        });
+        if (!gate.ok) {
+          res.status(gate.status).json({ error: gate.error });
+          return;
+        }
+      }
+      const descripcion = String(req.body?.descripcion ?? "Rendición de gasto urgente").trim();
+      const importe = Number(req.body?.importe);
+      if (!Number.isFinite(importe) || importe < 0) {
+        res.status(400).json({ error: "Importe inválido" });
+        return;
+      }
+      await prisma.otItem.create({
+        data: {
+          otId: ot.id,
+          tipo: TipoOtItem.RENDICION,
+          tallerNombre: String(req.body?.tallerNombre ?? "").trim(),
+          descripcion,
+          importe,
+          observacion: String(req.body?.observacion ?? "").trim() || null,
+          archivo: req.file ? req.file.filename : null,
+        },
+      });
+      if (req.file) {
+        await prisma.otFactura.create({
+          data: {
+            otId: ot.id,
+            tallerNombre: String(req.body?.tallerNombre ?? "").trim(),
+            archivo: req.file.filename,
+            nombreOriginal: req.file.originalname,
+            mimeType: req.file.mimetype,
+            monto: importe,
+          },
+        });
+        await prisma.ordenTrabajo.update({
+          where: { id: ot.id },
+          data: { facturaPDF: req.file.filename },
+        });
+      }
+      res.json(await reloadOt(ot.id, req.user!.id, req.user!.rol as Role));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al cargar rendición" });
+    }
+  }
+);
 
 export { router as talleresRouter };
