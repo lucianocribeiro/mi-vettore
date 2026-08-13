@@ -1,29 +1,29 @@
-import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import fs from "fs";
-import path from "path";
-import { authRouter } from "./routes/auth.js";
-import { meRouter } from "./routes/me.js";
-import { clientesRouter } from "./routes/clientes.js";
-import { choferesRouter } from "./routes/choferes.js";
-import { empresasRouter } from "./routes/empresas.js";
-import { camionetasRouter } from "./routes/camionetas.js";
-import { usuariosRouter } from "./routes/usuarios.js";
-import { pedidosRouter } from "./routes/pedidos.js";
-import { talleresRouter } from "./routes/talleres.js";
-import { cambiosRouter } from "./routes/cambios.js";
-import { comunicacionesRouter } from "./routes/comunicaciones.js";
-import { avisosRouter } from "./routes/avisos.js";
-import { tiposServicioRouter } from "./routes/tipos-servicio.js";
-import { sugerenciasRouter } from "./routes/sugerencias.js";
-import { alertasRouter } from "./routes/alertas.js";
-import { talleresProveedoresRouter } from "./routes/talleres-proveedores.js";
-import { documentosRouter } from "./routes/documentos.js";
-import { diagnosticoRouter } from "./routes/diagnostico.js";
-import { startComunicacionesScheduler } from "./lib/comunicaciones-scheduler.js";
-import { isSmtpConfigured } from "./lib/mailer.js";
-import { getUploadsRoot } from "./lib/uploads.js";
+require("dotenv/config");
+const express = require("express");
+const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
+const { authRouter } = require("./routes/auth.js");
+const { meRouter } = require("./routes/me.js");
+const { clientesRouter } = require("./routes/clientes.js");
+const { choferesRouter } = require("./routes/choferes.js");
+const { empresasRouter } = require("./routes/empresas.js");
+const { camionetasRouter } = require("./routes/camionetas.js");
+const { usuariosRouter } = require("./routes/usuarios.js");
+const { pedidosRouter } = require("./routes/pedidos.js");
+const { talleresRouter } = require("./routes/talleres.js");
+const { cambiosRouter } = require("./routes/cambios.js");
+const { comunicacionesRouter } = require("./routes/comunicaciones.js");
+const { avisosRouter } = require("./routes/avisos.js");
+const { tiposServicioRouter } = require("./routes/tipos-servicio.js");
+const { sugerenciasRouter } = require("./routes/sugerencias.js");
+const { alertasRouter } = require("./routes/alertas.js");
+const { talleresProveedoresRouter } = require("./routes/talleres-proveedores.js");
+const { documentosRouter } = require("./routes/documentos.js");
+const { diagnosticoRouter } = require("./routes/diagnostico.js");
+const { startComunicacionesScheduler } = require("./lib/comunicaciones-scheduler.js");
+const { isSmtpConfigured } = require("./lib/mailer.js");
+const { getUploadsRoot } = require("./lib/uploads.js");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -48,7 +48,7 @@ app.use(
 app.use(express.json());
 app.use("/uploads", express.static(getUploadsRoot()));
 
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", (_req: any, res: any) => {
   res.json({
     ok: true,
     service: "mi-vettore-backend",
@@ -81,7 +81,7 @@ const serveFrontend = process.env.SERVE_FRONTEND === "true";
 const frontendDist = path.resolve(process.cwd(), "../frontend/dist");
 if (serveFrontend && fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
-  app.get("*", (req, res, next) => {
+  app.get("*", (req: any, res: any, next: any) => {
     if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
       next();
       return;
@@ -91,7 +91,6 @@ if (serveFrontend && fs.existsSync(frontendDist)) {
   console.log(`[static] sirviendo frontend desde ${frontendDist}`);
 }
 
-export default app;
 module.exports = app;
 
 const isVercel = !!process.env.VERCEL;
