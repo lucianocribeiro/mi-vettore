@@ -8,7 +8,7 @@
       "root": "backend/",
       "framework": "express",
       "entrypoint": "src/index.ts",
-      "installCommand": "npm install"
+      "installCommand": "npm install && npx prisma generate"
     }
   },
   "headers": [

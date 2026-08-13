@@ -6,13 +6,13 @@ import ExcelJS from "exceljs";
 import {
   EstadoCamioneta,
   EstadoPedido,
-  EstadoTallerMovimiento,
   OrigenPedido,
   Prisma,
   SolicitanteTaller,
-  TipoOtItem,
   TipoPedido,
+  type EstadoTallerMovimiento,
   type Role,
+  type TipoOtItem,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { choferPuedeEditarCamioneta } from "../lib/flota.js";
@@ -43,6 +43,12 @@ import {
 } from "../lib/ot-totales.js";
 
 const router = Router();
+
+const TIPOS_OT_ITEM = new Set<TipoOtItem>([
+  "PRESUPUESTO",
+  "FACTURA",
+  "RENDICION",
+]);
 
 const uploadsRoot = ensureUploadDirs("presupuestos", "facturas");
 const presupuestosDir = path.join(uploadsRoot, "presupuestos");
@@ -858,7 +864,7 @@ router.post(
         await prisma.otItem.create({
           data: {
             otId: ot.id,
-            tipo: TipoOtItem.PRESUPUESTO,
+            tipo: "PRESUPUESTO" as TipoOtItem,
             tallerProveedorId: tallerProveedorId || null,
             tallerNombre: taller,
             descripcion,
@@ -1217,7 +1223,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
 
     if (!ot.facturaPDF && ot.facturas.length === 0) {
       const rendicion = (ot.items ?? []).some(
-        (i) => i.tipo === TipoOtItem.RENDICION || i.tipo === TipoOtItem.FACTURA
+        (i) => i.tipo === "RENDICION" || i.tipo === "FACTURA"
       );
       if (!rendicion && !ot.urgente) {
         res.status(400).json({ error: "Falta al menos una factura o comprobante" });
@@ -1249,7 +1255,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
 
       const porProveedor = new Map<string, { id: string | null; nombre: string; monto: number }>();
       for (const it of ot.items.filter(
-        (i) => i.tipo === TipoOtItem.FACTURA || i.tipo === TipoOtItem.RENDICION
+        (i) => i.tipo === "FACTURA" || i.tipo === "RENDICION"
       )) {
         const key = it.tallerProveedorId || it.tallerNombre || "sin-proveedor";
         const prev = porProveedor.get(key);
@@ -1273,7 +1279,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
             tallerProveedorId: p.id,
             otId: ot.id,
             montoFacturado: p.monto,
-            estado: EstadoTallerMovimiento.PENDIENTE,
+            estado: "PENDIENTE" as EstadoTallerMovimiento,
           },
         });
       }
@@ -1400,7 +1406,7 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
     const tipoRaw = String(req.body?.tipo ?? "PRESUPUESTO").toUpperCase();
-    if (!(tipoRaw in TipoOtItem)) {
+    if (!TIPOS_OT_ITEM.has(tipoRaw as TipoOtItem)) {
       res.status(400).json({ error: "Tipo de ítem inválido" });
       return;
     }
@@ -1622,7 +1628,7 @@ router.post(
       await prisma.otItem.create({
         data: {
           otId: ot.id,
-          tipo: TipoOtItem.RENDICION,
+          tipo: "RENDICION" as TipoOtItem,
           tallerNombre: String(req.body?.tallerNombre ?? "").trim(),
           descripcion,
           importe,
