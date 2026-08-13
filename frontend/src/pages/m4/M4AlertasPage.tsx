@@ -111,7 +111,7 @@ export function M4AlertasPage() {
           >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+                <Badge className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
                   {a.tipo}
                 </Badge>
                 <span className="text-sm font-semibold text-[var(--vl-heading)]">

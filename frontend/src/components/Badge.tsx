@@ -17,13 +17,13 @@ export function Badge({
 }
 
 export const ESTADO_CAMIONETA_STYLE: Record<string, string> = {
-  OPERATIVA: "bg-emerald-100 text-emerald-700 border-emerald-300",
-  EN_TALLER: "bg-amber-100 text-amber-700 border-amber-300",
-  DE_VACACIONES: "bg-amber-100 text-amber-700 border-amber-300",
-  FUERA_SERVICIO: "bg-slate-100 text-slate-600 border-slate-300",
+  OPERATIVA: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-700",
+  EN_TALLER: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-700",
+  DE_VACACIONES: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-700",
+  FUERA_SERVICIO: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600",
 };
 
 export const ESTADO_CHOFER_STYLE: Record<string, string> = {
-  ACTIVO: "bg-emerald-100 text-emerald-700 border-emerald-300",
-  INACTIVO: "bg-slate-100 text-slate-600 border-slate-300",
+  ACTIVO: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-700",
+  INACTIVO: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600",
 };

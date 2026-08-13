@@ -16,7 +16,8 @@
   --vl-shell: #ffffff;
   --vl-shell-border: rgb(203 213 225 / 0.6);
   --vl-text: #0f172a;
-  --vl-text-muted: #64748b;
+  --vl-text-muted: #475569;
+  --vl-placeholder: #64748b;
   --vl-card: #ffffff;
   --vl-card-border: #e2e8f0;
   --vl-heading: #0f172a;
@@ -28,19 +29,20 @@
   --vl-sidebar-border: #152238;
   --vl-sidebar-search: #101c30;
   --vl-nav: #9bb4cc;
-  --vl-nav-muted: #6b88aa;
+  --vl-nav-muted: #8aa3bd;
   --vl-nav-active: #2563eb;
-  --vl-brand-sub: #6b88aa;
+  --vl-brand-sub: #8aa3bd;
   --vl-main: #0b1220;
   --vl-page: #020617;
-  --vl-role-label: #64748b;
+  --vl-role-label: #94a3b8;
   --vl-shell: #0f172a;
   --vl-shell-border: #1e293b;
-  --vl-text: #e2e8f0;
-  --vl-text-muted: #b6c2d1;
+  --vl-text: #f1f5f9;
+  --vl-text-muted: #cbd5e1;
+  --vl-placeholder: #94a3b8;
   --vl-card: #111827;
-  --vl-card-border: #1f2937;
-  --vl-heading: #f8fafc;
+  --vl-card-border: #334155;
+  --vl-heading: #ffffff;
   --vl-login-card: #0f172a;
 }
 
@@ -72,6 +74,18 @@ body {
 select {
   color: var(--vl-text);
   background-color: var(--vl-card);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]),
+textarea {
+  color: var(--vl-text);
+  background-color: var(--vl-page);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--vl-placeholder);
+  opacity: 1;
 }
 
 select option,

@@ -61,7 +61,7 @@ export function FormModal({
         </div>
         <div className="space-y-3">{children}</div>
         {error && (
-          <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
             {error}
           </div>
         )}
@@ -76,7 +76,7 @@ export function FormModal({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-11 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-600"
+            className="min-h-11 rounded-md border border-[var(--vl-card-border)] px-3 py-2 text-sm text-[var(--vl-text)]"
           >
             Cancelar
           </button>

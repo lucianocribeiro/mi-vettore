@@ -351,7 +351,7 @@ export function M7TalleresPage() {
                       const active = !ot.cerradaAt && i === d;
                       return (
                       <div key={s.label} className="flex flex-1 items-center last:flex-none">
-                        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${done ? "bg-emerald-500 text-white" : active ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "bg-slate-100 text-slate-400"}`} title={s.label}>
+                        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${done ? "bg-emerald-500 text-white" : active ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`} title={s.label}>
                           {done ? <Check size={13} /> : i + 1}
                         </div>
                         {i < OT_STEPS.length - 1 && <div className={`h-0.5 flex-1 ${done ? "bg-emerald-400" : "bg-slate-100"}`} />}
@@ -414,7 +414,7 @@ export function M7TalleresPage() {
                     ) : (
                       <div className="mt-4 space-y-4">
                         {ot.sugerenciaChofer && (
-                          <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs dark:border-sky-900 dark:bg-sky-950/40">
+                          <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-950 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
                             <strong>Sugerencia del chofer:</strong> {ot.sugerenciaChofer}
                           </div>
                         )}
@@ -713,8 +713,8 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
         <fieldset className="mb-3">
           <legend className="text-xs">¿La unidad puede circular?</legend>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setHabilitadaCircular(true)} className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${habilitadaCircular ? "border-emerald-600 bg-emerald-50" : "border-[var(--vl-card-border)]"}`}>Sí</button>
-            <button type="button" onClick={() => setHabilitadaCircular(false)} className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${!habilitadaCircular ? "border-red-600 bg-red-50" : "border-[var(--vl-card-border)]"}`}>No (urgente)</button>
+            <button type="button" onClick={() => setHabilitadaCircular(true)} className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${habilitadaCircular ? "border-emerald-700 bg-emerald-600 text-white dark:border-emerald-400 dark:bg-emerald-700" : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"}`}>Sí</button>
+            <button type="button" onClick={() => setHabilitadaCircular(false)} className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${!habilitadaCircular ? "border-red-700 bg-red-600 text-white dark:border-red-400 dark:bg-red-700" : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"}`}>No (urgente)</button>
           </div>
         </fieldset>
         <textarea rows={2} className="mb-3 w-full rounded-md border p-2 text-sm" placeholder="Sugerencia de taller (opcional)" value={sugerencia} onChange={(e) => setSugerencia(e.target.value)} />
