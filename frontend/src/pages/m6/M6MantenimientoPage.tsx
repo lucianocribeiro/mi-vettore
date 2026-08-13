@@ -347,6 +347,7 @@ export function M6MantenimientoPage() {
           )}
 
           {selected && (
+            <>
             <form
               onSubmit={(e) => void guardar(e)}
               className="mt-5 rounded-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 shadow-sm"
@@ -441,9 +442,86 @@ export function M6MantenimientoPage() {
                 {saving ? "Guardando…" : "Guardar en ficha"}
               </button>
             </form>
+            <HistorialReparaciones camionetaId={selected.id} token={token} />
+            </>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function HistorialReparaciones({
+  camionetaId,
+  token,
+}: {
+  camionetaId: string;
+  token: string | null;
+}) {
+  const [q, setQ] = useState("");
+  const [cats, setCats] = useState<{ id: string; nombre: string; nivel: number }[]>([]);
+  const [rows, setRows] = useState<
+    { numeroOT: string; fecha: string | null; categoria: { nombre: string } }[]
+  >([]);
+
+  useEffect(() => {
+    if (!token) return;
+    void apiFetch<{ id: string; nombre: string; nivel: number }[]>(
+      "/api/diagnostico/categorias",
+      {},
+      token
+    ).then(setCats).catch(() => setCats([]));
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const cat = cats.find(
+      (c) => c.nombre.toLowerCase() === q.trim().toLowerCase()
+    );
+    const qs = new URLSearchParams({ camionetaId });
+    if (cat) qs.set("categoriaId", cat.id);
+    void apiFetch<typeof rows>(`/api/diagnostico/historial?${qs}`, {}, token)
+      .then(setRows)
+      .catch(() => setRows([]));
+  }, [token, camionetaId, q, cats]);
+
+  return (
+    <div className="mt-4 rounded-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5">
+      <h3 className="text-sm font-bold text-[var(--vl-heading)]">
+        Historial de reparaciones
+      </h3>
+      <p className="mt-1 text-xs text-[var(--vl-text-muted)]">
+        Últimas OT cerradas de esta unidad, filtrables por categoría del árbol
+        (frenos, bomba de agua, neumáticos…).
+      </p>
+      <input
+        className="mt-2 w-full rounded-md border border-[var(--vl-card-border)] p-2 text-sm"
+        placeholder="Filtrar por categoría (ej. Frenos)"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        list="diag-cats"
+      />
+      <datalist id="diag-cats">
+        {cats.map((c) => (
+          <option key={c.id} value={c.nombre} />
+        ))}
+      </datalist>
+      <ul className="mt-3 space-y-1.5 text-sm">
+        {rows.length === 0 && (
+          <li className="text-xs text-[var(--vl-text-muted)]">
+            Sin reparaciones cerradas con diagnóstico.
+          </li>
+        )}
+        {rows.slice(0, 15).map((r, i) => (
+          <li key={`${r.numeroOT}-${i}`}>
+            <span className="font-medium">{r.numeroOT}</span>
+            {" · "}
+            {r.fecha ? new Date(r.fecha).toLocaleDateString("es-AR") : "—"}
+            {" · "}
+            {r.categoria.nombre}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
