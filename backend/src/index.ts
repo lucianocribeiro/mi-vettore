@@ -92,6 +92,7 @@ if (serveFrontend && fs.existsSync(frontendDist)) {
 }
 
 export default app;
+module.exports = app;
 
 const isVercel = !!process.env.VERCEL;
 if (!isVercel) {
