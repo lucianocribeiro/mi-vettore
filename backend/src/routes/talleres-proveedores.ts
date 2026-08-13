@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { TipoTaller } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { MASTER_WRITE_ROLES } from "../lib/roles.js";
-import { authenticate, authorize } from "../middleware/auth.js";
+import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
+import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -36,6 +36,93 @@ router.get("/", authenticate, async (_req, res) => {
 router.get("/meta", authenticate, (_req, res) => {
   res.json({ tipos: TIPOS });
 });
+
+router.get("/saldos", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const talleres = await prisma.tallerProveedor.findMany({
+      where: { activo: true },
+      orderBy: { razonSocial: "asc" },
+      include: {
+        movimientos: { orderBy: { createdAt: "desc" } },
+      },
+    });
+    res.json(
+      talleres.map((t) => {
+        const pendiente = t.movimientos
+          .filter((m) => m.estado === "PENDIENTE")
+          .reduce((a, m) => a + m.montoFacturado, 0);
+        const pagado = t.movimientos
+          .filter((m) => m.estado === "PAGADO")
+          .reduce((a, m) => a + m.montoFacturado, 0);
+        return {
+          id: t.id,
+          razonSocial: t.razonSocial,
+          cuit: t.cuit,
+          aliasCbu: t.aliasCbu,
+          pendiente,
+          pagado,
+          movimientos: t.movimientos,
+        };
+      })
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al listar cuenta corriente" });
+  }
+});
+
+router.get("/:id/movimientos", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const items = await prisma.tallerMovimiento.findMany({
+      where: { tallerProveedorId: req.params.id },
+      include: { ot: { select: { id: true, numeroOT: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    const pendiente = items
+      .filter((m) => m.estado === "PENDIENTE")
+      .reduce((a, m) => a + m.montoFacturado, 0);
+    res.json({ movimientos: items, pendiente });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al listar movimientos" });
+  }
+});
+
+router.post(
+  "/:id/movimientos/:movId/pagar",
+  authenticate,
+  async (req: AuthedRequest, res) => {
+    try {
+      if (!isInternalOpsRole(req.user!.rol)) {
+        res.status(403).json({ error: "Sin permiso" });
+        return;
+      }
+      const mov = await prisma.tallerMovimiento.findFirst({
+        where: { id: req.params.movId, tallerProveedorId: req.params.id },
+      });
+      if (!mov) {
+        res.status(404).json({ error: "Movimiento no encontrado" });
+        return;
+      }
+      const updated = await prisma.tallerMovimiento.update({
+        where: { id: mov.id },
+        data: { estado: "PAGADO", fechaPago: new Date() },
+      });
+      res.json(updated);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al marcar pago" });
+    }
+  }
+);
 
 router.get("/:id", authenticate, async (req, res) => {
   try {
