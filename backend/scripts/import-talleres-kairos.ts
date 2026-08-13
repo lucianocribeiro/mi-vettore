@@ -15,7 +15,7 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString }),
 });
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const XLSX = path.join(__dirname, "..", "..", "Talleres KAIROS.xlsx");
+const XLSX = path.join(__dirname, "..", "prisma", "data", "talleres-kairos.xlsx");
 
 function cellVal(cell: ExcelJS.Cell): string | null {
   const x = cell.value;
