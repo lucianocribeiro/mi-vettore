@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "postinstall": "npx prisma generate --schema=prisma/schema.prisma",
+    "postinstall": "node scripts/prisma-generate.mjs",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:generate": "prisma generate --schema=prisma/schema.prisma",
+    "db:generate": "node scripts/prisma-generate.mjs",
     "db:push": "prisma db push",
     "build": "tsc -b"
   },
