@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { apiFetch, ApiError } from "../lib/api";
 import { isSugerenciasOnly } from "../types";
 import { AppLogo } from "./AppLogo";
+import { AvisosBell } from "./AvisosBell";
 import { MessageSquare, Menu, X } from "./icons";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "./ThemeToggle";
@@ -68,6 +69,7 @@ export function AppLayout() {
             </div>
           </div>
           <ThemeToggle variant="header" />
+          <AvisosBell />
         </header>
 
         {menuOpen && (
@@ -81,9 +83,14 @@ export function AppLayout() {
 
         <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-        <main className="min-h-0 flex-1 overflow-y-auto bg-[var(--vl-main)] p-4 sm:p-5 md:p-6 safe-bottom">
-          <Outlet />
-        </main>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="hidden items-center justify-end border-b border-[var(--vl-card-border)] bg-[var(--vl-main)] px-4 py-2 md:flex">
+            <AvisosBell />
+          </div>
+          <main className="min-h-0 flex-1 overflow-y-auto bg-[var(--vl-main)] p-4 sm:p-5 md:p-6 safe-bottom">
+            <Outlet />
+          </main>
+        </div>
 
       </div>
 
