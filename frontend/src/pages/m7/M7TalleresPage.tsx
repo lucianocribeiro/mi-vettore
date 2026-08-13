@@ -36,7 +36,7 @@ const OT_STEPS = [
   { label: "Presupuestos", owner: "Silvina", detail: "Presupuesto opcional. Varios proveedores e ítems. Silvina autoaprueba el gasto habitual." },
   { label: "Facturación", owner: "Silvina", detail: "Facturas (más de una) e ítems. Si hay incremento, pasa a Patricio." },
   { label: "Incremento", owner: "Patricio", detail: "Solo si el taller facturó por encima del presupuesto." },
-  { label: "Cierre / pago", owner: "Silvina / Carla", detail: "Cierre, reporte de salida y cuenta corriente del proveedor." },
+  { label: "Cierre / pago", owner: "Silvina / Carla", detail: "Acá se declara el diagnóstico detallado (en qué se gastó), se cierra la OT y queda la cuenta corriente del proveedor." },
 ] as const;
 
 function roleActionHint(rol?: Role | null): string {
@@ -486,15 +486,6 @@ export function M7TalleresPage() {
                           </div>
                         )}
 
-                        {(ot.currentStep >= 3 || ot.cerradaAt) && (
-                          <DiagnosticoOtPanel
-                            otId={ot.id}
-                            token={token!}
-                            initialCategoriaIds={ot.diagnosticos?.map((d) => d.categoriaId) ?? []}
-                            onSaved={(diagnosticos) => replaceOt({ ...ot, diagnosticos })}
-                          />
-                        )}
-
                         {!esChofer && (ot.auditorias?.length ?? 0) > 0 && (
                           <details className="text-xs text-[var(--vl-text-muted)]">
                             <summary>Registro de acciones ({ot.auditorias!.length})</summary>
@@ -519,6 +510,17 @@ export function M7TalleresPage() {
                       <div className="font-bold">{money(totF)}</div>
                     </div>
                   </div>
+
+                  {!esChofer && (ot.currentStep === 5 || ot.cerradaAt) && (
+                    <div className="mt-4">
+                      <DiagnosticoOtPanel
+                        otId={ot.id}
+                        token={token!}
+                        initialCategoriaIds={ot.diagnosticos?.map((d) => d.categoriaId) ?? []}
+                        onSaved={(diagnosticos) => replaceOt({ ...ot, diagnosticos })}
+                      />
+                    </div>
+                  )}
 
                   {!esChofer && !ot.cerradaAt && (
                     <div className="mt-5 flex flex-col gap-2 sm:flex-row">

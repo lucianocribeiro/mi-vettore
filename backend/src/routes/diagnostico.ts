@@ -20,7 +20,7 @@ router.get("/categorias", authenticate, async (_req, res) => {
   }
 });
 
-/** Asigna ítems del árbol a una OT (multi). Se carga al cierre / facturación. */
+/** Asigna ítems del árbol a una OT (multi). Se carga en el cierre, cuando ya está el gasto. */
 router.put(
   "/ot/:otId",
   authenticate,
@@ -33,9 +33,9 @@ router.put(
         res.status(404).json({ error: "OT no encontrada" });
         return;
       }
-      if (ot.currentStep < 3 && !ot.cerradaAt) {
+      if (ot.currentStep < 5 && !ot.cerradaAt) {
         res.status(400).json({
-          error: "El diagnóstico detallado se carga al cierre de la OT",
+          error: "El diagnóstico detallado se carga en el cierre, cuando ya está declarado el gasto",
         });
         return;
       }
