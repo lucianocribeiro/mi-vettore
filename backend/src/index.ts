@@ -59,24 +59,93 @@ async function mountRouter(
   }
 }
 
-await mountRouter("/api/auth", async () => (await import("./routes/auth.js")).authRouter);
-await mountRouter("/api/me", async () => (await import("./routes/me.js")).meRouter);
-await mountRouter("/api/clientes", async () => (await import("./routes/clientes.js")).clientesRouter);
-await mountRouter("/api/choferes", async () => (await import("./routes/choferes.js")).choferesRouter);
-await mountRouter("/api/empresas", async () => (await import("./routes/empresas.js")).empresasRouter);
-await mountRouter("/api/camionetas", async () => (await import("./routes/camionetas.js")).camionetasRouter);
-await mountRouter("/api/usuarios", async () => (await import("./routes/usuarios.js")).usuariosRouter);
-await mountRouter("/api/pedidos", async () => (await import("./routes/pedidos.js")).pedidosRouter);
-await mountRouter("/api/talleres", async () => (await import("./routes/talleres.js")).talleresRouter);
-await mountRouter("/api/talleres-proveedores", async () => (await import("./routes/talleres-proveedores.js")).talleresProveedoresRouter);
-await mountRouter("/api/documentos", async () => (await import("./routes/documentos.js")).documentosRouter);
-await mountRouter("/api/diagnostico", async () => (await import("./routes/diagnostico.js")).diagnosticoRouter);
-await mountRouter("/api/cambios", async () => (await import("./routes/cambios.js")).cambiosRouter);
-await mountRouter("/api/comunicaciones", async () => (await import("./routes/comunicaciones.js")).comunicacionesRouter);
-await mountRouter("/api/avisos", async () => (await import("./routes/avisos.js")).avisosRouter);
-await mountRouter("/api/tipos-servicio", async () => (await import("./routes/tipos-servicio.js")).tiposServicioRouter);
-await mountRouter("/api/sugerencias", async () => (await import("./routes/sugerencias.js")).sugerenciasRouter);
-await mountRouter("/api/alertas", async () => (await import("./routes/alertas.js")).alertasRouter);
+async function mountRoutes(): Promise<void> {
+  await mountRouter(
+    "/api/auth",
+    async () => (await import("./routes/auth.js")).authRouter
+  );
+  await Promise.all([
+    mountRouter("/api/me", async () => (await import("./routes/me.js")).meRouter),
+    mountRouter(
+      "/api/clientes",
+      async () => (await import("./routes/clientes.js")).clientesRouter
+    ),
+    mountRouter(
+      "/api/choferes",
+      async () => (await import("./routes/choferes.js")).choferesRouter
+    ),
+    mountRouter(
+      "/api/empresas",
+      async () => (await import("./routes/empresas.js")).empresasRouter
+    ),
+    mountRouter(
+      "/api/camionetas",
+      async () => (await import("./routes/camionetas.js")).camionetasRouter
+    ),
+    mountRouter(
+      "/api/usuarios",
+      async () => (await import("./routes/usuarios.js")).usuariosRouter
+    ),
+    mountRouter(
+      "/api/pedidos",
+      async () => (await import("./routes/pedidos.js")).pedidosRouter
+    ),
+    mountRouter(
+      "/api/talleres",
+      async () => (await import("./routes/talleres.js")).talleresRouter
+    ),
+    mountRouter(
+      "/api/talleres-proveedores",
+      async () =>
+        (await import("./routes/talleres-proveedores.js")).talleresProveedoresRouter
+    ),
+    mountRouter(
+      "/api/documentos",
+      async () => (await import("./routes/documentos.js")).documentosRouter
+    ),
+    mountRouter(
+      "/api/diagnostico",
+      async () => (await import("./routes/diagnostico.js")).diagnosticoRouter
+    ),
+    mountRouter(
+      "/api/cambios",
+      async () => (await import("./routes/cambios.js")).cambiosRouter
+    ),
+    mountRouter(
+      "/api/comunicaciones",
+      async () => (await import("./routes/comunicaciones.js")).comunicacionesRouter
+    ),
+    mountRouter(
+      "/api/avisos",
+      async () => (await import("./routes/avisos.js")).avisosRouter
+    ),
+    mountRouter(
+      "/api/tipos-servicio",
+      async () => (await import("./routes/tipos-servicio.js")).tiposServicioRouter
+    ),
+    mountRouter(
+      "/api/sugerencias",
+      async () => (await import("./routes/sugerencias.js")).sugerenciasRouter
+    ),
+    mountRouter(
+      "/api/alertas",
+      async () => (await import("./routes/alertas.js")).alertasRouter
+    ),
+  ]);
+}
+
+const routesReady = mountRoutes().catch((err) => {
+  console.error("[boot] mountRoutes", err);
+});
+
+app.use("/api", async (req, res, next) => {
+  if (req.path === "/health") {
+    next();
+    return;
+  }
+  await routesReady;
+  next();
+});
 
 /** Producción single-host: servir el build de Vite desde ../frontend/dist */
 const serveFrontend = process.env.SERVE_FRONTEND === "true";
@@ -97,14 +166,16 @@ export default app;
 
 const isVercel = !!process.env.VERCEL;
 if (!isVercel) {
-  app.listen(PORT, () => {
-    console.log(`Mi Vettore API escuchando en http://localhost:${PORT}`);
-    console.log(
-      `Email: ${isSmtpConfigured() ? "SMTP activo" : "modo simulado (sin SMTP_*)"}`
-    );
-    console.log(`CORS: ${corsOrigins.join(", ")}`);
-    void import("./lib/comunicaciones-scheduler.js").then((m) =>
-      m.startComunicacionesScheduler()
-    );
+  void routesReady.then(() => {
+    app.listen(PORT, () => {
+      console.log(`Mi Vettore API escuchando en http://localhost:${PORT}`);
+      console.log(
+        `Email: ${isSmtpConfigured() ? "SMTP activo" : "modo simulado (sin SMTP_*)"}`
+      );
+      console.log(`CORS: ${corsOrigins.join(", ")}`);
+      void import("./lib/comunicaciones-scheduler.js").then((m) =>
+        m.startComunicacionesScheduler()
+      );
+    });
   });
 }
