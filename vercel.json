@@ -8,7 +8,7 @@
       "root": "backend/",
       "framework": "express",
       "entrypoint": "src/index.ts",
-      "installCommand": "if [ -f backend/package.json ]; then cd backend; fi && npm install --no-audit --no-fund"
+      "installCommand": "npm install"
     }
   },
   "headers": [
