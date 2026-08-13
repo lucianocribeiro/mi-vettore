@@ -295,14 +295,22 @@ model SolicitudTaller {
   ordenTrabajo OrdenTrabajo?
 }
 
-/// 0 Solicitud · 1 Notif. ops · 2 Presupuestos · 3 Elección · 4 Aprobación · 5 Pago+factura
+/// 0 Solicitud · 1 Asignación Facu · 2 Presupuestos · 3 Facturación · 4 Incremento · 5 Cierre/pago
 /// TODO (miércoles): proceso de reactivación de unidad/chofer post-reparación.
+/// TODO (reunión 12/08): qué facturas (si alguna) siguen pidiendo OK de Patricio
+/// además del incremento sobre presupuesto. Hoy: solo el paso 4 (incremento).
 model OrdenTrabajo {
   id                      String    @id @default(cuid())
   solicitudTallerId       String    @unique
   numeroOT                String    @unique
   currentStep             Int       @default(0)
+  /// Unidad no puede circular → camino corto (rendición 24hs).
+  urgente                 Boolean   @default(false)
   tallerAsignado          String?
+  tallerProveedorId       String?
+  kmAlMomento             Int?
+  sugerenciaChofer        String?
+  sugerenciaArchivo       String?
   montoAutorizado         Float?
   plazoEntrega            DateTime?
   presupuestoMonto        Float?
@@ -311,6 +319,7 @@ model OrdenTrabajo {
   valorAprobado           Float?
   valorFinal              Float?
   incrementoJustificacion String?
+  incrementoAprobadoAt    DateTime?
   facturaPDF              String?
   trabajoDescripcion      String?
   pedidoNotificacionId    String?
@@ -321,13 +330,19 @@ model OrdenTrabajo {
   updatedAt               DateTime  @updatedAt
 
   solicitud          SolicitudTaller           @relation(fields: [solicitudTallerId], references: [id])
+  tallerProveedor    TallerProveedor?          @relation(fields: [tallerProveedorId], references: [id])
   presupuestos       PresupuestoOt[]
   presupuestoElegido PresupuestoOt?            @relation("PresupuestoElegido", fields: [presupuestoElegidoId], references: [id])
+  items              OtItem[]
+  facturas           OtFactura[]
   avisos             AvisoInterno[]
   auditorias         OtAuditoria[]
   diagnosticos       OrdenTrabajoDiagnostico[]
+  movimientos        TallerMovimiento[]
 
   @@index([currentStep])
+  @@index([urgente])
+  @@index([tallerProveedorId])
 }
 
 model PresupuestoOt {
@@ -350,7 +365,7 @@ model OtAuditoria {
   otId       String
   userId     String
   accion     String
-  comentario String
+  comentario String   @default("")
   createdAt  DateTime @default(now())
 
   ot   OrdenTrabajo @relation(fields: [otId], references: [id], onDelete: Cascade)
@@ -436,6 +451,74 @@ model Comunicacion {
   @@index([estado])
 }
 
+enum TipoOtItem {
+  PRESUPUESTO
+  FACTURA
+  RENDICION
+}
+
+enum EstadoTallerMovimiento {
+  PENDIENTE
+  PAGADO
+}
+
+/// Ítems de presupuesto/factura de una OT (varios proveedores en la misma orden).
+model OtItem {
+  id                String     @id @default(cuid())
+  otId              String
+  tipo              TipoOtItem
+  tallerProveedorId String?
+  tallerNombre      String     @default("")
+  descripcion       String
+  importe           Float
+  observacion       String?
+  archivo           String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  ot              OrdenTrabajo     @relation(fields: [otId], references: [id], onDelete: Cascade)
+  tallerProveedor TallerProveedor? @relation(fields: [tallerProveedorId], references: [id])
+
+  @@index([otId])
+  @@index([tipo])
+}
+
+/// Adjuntos de factura (PDF/foto) — más de uno por OT.
+model OtFactura {
+  id                String   @id @default(cuid())
+  otId              String
+  tallerProveedorId String?
+  tallerNombre      String   @default("")
+  archivo           String
+  nombreOriginal    String?
+  mimeType          String?
+  monto             Float?
+  createdAt         DateTime @default(now())
+
+  ot              OrdenTrabajo     @relation(fields: [otId], references: [id], onDelete: Cascade)
+  tallerProveedor TallerProveedor? @relation(fields: [tallerProveedorId], references: [id])
+
+  @@index([otId])
+}
+
+/// Historia de cuenta corriente por taller/proveedor.
+model TallerMovimiento {
+  id              String                 @id @default(cuid())
+  tallerProveedorId String
+  otId            String?
+  montoFacturado  Float
+  fechaFactura    DateTime               @default(now())
+  fechaPago       DateTime?
+  estado          EstadoTallerMovimiento @default(PENDIENTE)
+  createdAt       DateTime               @default(now())
+
+  tallerProveedor TallerProveedor @relation(fields: [tallerProveedorId], references: [id], onDelete: Cascade)
+  ot              OrdenTrabajo?   @relation(fields: [otId], references: [id], onDelete: SetNull)
+
+  @@index([tallerProveedorId, estado])
+  @@index([otId])
+}
+
 /// ABM de talleres proveedores (no confundir con /api/talleres = OT).
 /// Futuro: automatizar pedido de presupuesto por mail según tipo (no implementar envío aún).
 model TallerProveedor {
@@ -450,6 +533,10 @@ model TallerProveedor {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   tipos       TallerProveedorTipo[]
+  ots         OrdenTrabajo[]
+  items       OtItem[]
+  facturas    OtFactura[]
+  movimientos TallerMovimiento[]
 }
 
 model TallerProveedorTipo {
