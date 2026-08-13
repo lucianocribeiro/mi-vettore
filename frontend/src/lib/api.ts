@@ -39,7 +39,10 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     throw new ApiError(
-      (data as { error?: string }).error || "Error de red",
+      (data as { error?: string }).error ||
+        (res.status >= 500
+          ? "El servidor no está disponible"
+          : "Error de red"),
       res.status
     );
   }

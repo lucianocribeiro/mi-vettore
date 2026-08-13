@@ -1,27 +1,8 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Router } from "express";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
-import { authRouter } from "./routes/auth.js";
-import { meRouter } from "./routes/me.js";
-import { clientesRouter } from "./routes/clientes.js";
-import { choferesRouter } from "./routes/choferes.js";
-import { empresasRouter } from "./routes/empresas.js";
-import { camionetasRouter } from "./routes/camionetas.js";
-import { usuariosRouter } from "./routes/usuarios.js";
-import { pedidosRouter } from "./routes/pedidos.js";
-import { talleresRouter } from "./routes/talleres.js";
-import { cambiosRouter } from "./routes/cambios.js";
-import { comunicacionesRouter } from "./routes/comunicaciones.js";
-import { avisosRouter } from "./routes/avisos.js";
-import { tiposServicioRouter } from "./routes/tipos-servicio.js";
-import { sugerenciasRouter } from "./routes/sugerencias.js";
-import { alertasRouter } from "./routes/alertas.js";
-import { talleresProveedoresRouter } from "./routes/talleres-proveedores.js";
-import { documentosRouter } from "./routes/documentos.js";
-import { diagnosticoRouter } from "./routes/diagnostico.js";
-import { startComunicacionesScheduler } from "./lib/comunicaciones-scheduler.js";
 import { isSmtpConfigured } from "./lib/mailer.js";
 import { getUploadsRoot } from "./lib/uploads.js";
 
@@ -57,24 +38,45 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-app.use("/api/auth", authRouter);
-app.use("/api/me", meRouter);
-app.use("/api/clientes", clientesRouter);
-app.use("/api/choferes", choferesRouter);
-app.use("/api/empresas", empresasRouter);
-app.use("/api/camionetas", camionetasRouter);
-app.use("/api/usuarios", usuariosRouter);
-app.use("/api/pedidos", pedidosRouter);
-app.use("/api/talleres", talleresRouter);
-app.use("/api/talleres-proveedores", talleresProveedoresRouter);
-app.use("/api/documentos", documentosRouter);
-app.use("/api/diagnostico", diagnosticoRouter);
-app.use("/api/cambios", cambiosRouter);
-app.use("/api/comunicaciones", comunicacionesRouter);
-app.use("/api/avisos", avisosRouter);
-app.use("/api/tipos-servicio", tiposServicioRouter);
-app.use("/api/sugerencias", sugerenciasRouter);
-app.use("/api/alertas", alertasRouter);
+async function mountRouter(
+  routePath: string,
+  load: () => Promise<Router>
+): Promise<void> {
+  try {
+    const router = await load();
+    app.use(routePath, router);
+  } catch (err) {
+    const detail =
+      err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.error(`[boot] ${routePath}`, err);
+    app.use(routePath, (_req, res) => {
+      res.status(503).json({
+        error: "Servicio no disponible",
+        path: routePath,
+        detail,
+      });
+    });
+  }
+}
+
+await mountRouter("/api/auth", async () => (await import("./routes/auth.js")).authRouter);
+await mountRouter("/api/me", async () => (await import("./routes/me.js")).meRouter);
+await mountRouter("/api/clientes", async () => (await import("./routes/clientes.js")).clientesRouter);
+await mountRouter("/api/choferes", async () => (await import("./routes/choferes.js")).choferesRouter);
+await mountRouter("/api/empresas", async () => (await import("./routes/empresas.js")).empresasRouter);
+await mountRouter("/api/camionetas", async () => (await import("./routes/camionetas.js")).camionetasRouter);
+await mountRouter("/api/usuarios", async () => (await import("./routes/usuarios.js")).usuariosRouter);
+await mountRouter("/api/pedidos", async () => (await import("./routes/pedidos.js")).pedidosRouter);
+await mountRouter("/api/talleres", async () => (await import("./routes/talleres.js")).talleresRouter);
+await mountRouter("/api/talleres-proveedores", async () => (await import("./routes/talleres-proveedores.js")).talleresProveedoresRouter);
+await mountRouter("/api/documentos", async () => (await import("./routes/documentos.js")).documentosRouter);
+await mountRouter("/api/diagnostico", async () => (await import("./routes/diagnostico.js")).diagnosticoRouter);
+await mountRouter("/api/cambios", async () => (await import("./routes/cambios.js")).cambiosRouter);
+await mountRouter("/api/comunicaciones", async () => (await import("./routes/comunicaciones.js")).comunicacionesRouter);
+await mountRouter("/api/avisos", async () => (await import("./routes/avisos.js")).avisosRouter);
+await mountRouter("/api/tipos-servicio", async () => (await import("./routes/tipos-servicio.js")).tiposServicioRouter);
+await mountRouter("/api/sugerencias", async () => (await import("./routes/sugerencias.js")).sugerenciasRouter);
+await mountRouter("/api/alertas", async () => (await import("./routes/alertas.js")).alertasRouter);
 
 /** Producción single-host: servir el build de Vite desde ../frontend/dist */
 const serveFrontend = process.env.SERVE_FRONTEND === "true";
@@ -101,6 +103,8 @@ if (!isVercel) {
       `Email: ${isSmtpConfigured() ? "SMTP activo" : "modo simulado (sin SMTP_*)"}`
     );
     console.log(`CORS: ${corsOrigins.join(", ")}`);
-    startComunicacionesScheduler();
+    void import("./lib/comunicaciones-scheduler.js").then((m) =>
+      m.startComunicacionesScheduler()
+    );
   });
 }
