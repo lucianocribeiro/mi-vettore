@@ -151,6 +151,12 @@ export const ChevronRight = (p: IconProps) => (
   </SI>
 );
 
+export const ChevronDown = (p: IconProps) => (
+  <SI {...p}>
+    <path d="m6 9 6 6 6-6" />
+  </SI>
+);
+
 export const Lock = (p: IconProps) => (
   <SI {...p}>
     <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />

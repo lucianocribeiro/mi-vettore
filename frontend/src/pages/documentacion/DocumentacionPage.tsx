@@ -1,18 +1,80 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { DocumentUpload } from "../../components/DocumentUpload";
+import {
+  ESTADOS_CAMIONETA,
+  type TipoFiltroTransporte,
+  TIPOS_TRANSPORTE,
+} from "../../components/FlotaUnitFilterBar";
+import { ChevronDown, Search, X } from "../../components/icons";
 import { apiFetch, ApiError } from "../../lib/api";
-import { currentAsignacion, isInternalOps, type Camioneta, type Chofer } from "../../types";
+import {
+  currentAsignacion,
+  currentChoferAsignacion,
+  isInternalOps,
+  type Camioneta,
+  type Chofer,
+  type EstadoCamioneta,
+} from "../../types";
+
+function compact(s: string): string {
+  return s.toLowerCase().replace(/[\s.\-_/]/g, "");
+}
+
+function matchesText(
+  fields: Array<string | number | null | undefined>,
+  query: string
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const hay = fields.filter((f) => f != null && f !== "").join(" ").toLowerCase();
+  const hayC = compact(hay);
+  return q.split(/\s+/).every(
+    (token) => hay.includes(token) || hayC.includes(compact(token))
+  );
+}
+
+function toggleInArray<T>(arr: T[], value: T): T[] {
+  return arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value];
+}
+
+type AdvFilters = {
+  estados: EstadoCamioneta[];
+  tipos: TipoFiltroTransporte[];
+  empresa: string;
+  sinChofer: boolean;
+  sinUnidad: boolean;
+};
+
+const EMPTY_ADV: AdvFilters = {
+  estados: [],
+  tipos: [],
+  empresa: "",
+  sinChofer: false,
+  sinUnidad: false,
+};
 
 export function DocumentacionPage() {
   const { token, user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const query = searchParams.get("q") ?? "";
   const [tab, setTab] = useState<"unidades" | "choferes">("unidades");
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);
   const [choferes, setChoferes] = useState<Chofer[]>([]);
   const [selectedCam, setSelectedCam] = useState<string | null>(null);
   const [selectedChofer, setSelectedChofer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [advanced, setAdvanced] = useState(false);
+  const [adv, setAdv] = useState<AdvFilters>(EMPTY_ADV);
   const ops = isInternalOps(user?.rol);
+
+  const setQuery = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (next.trim()) params.set("q", next);
+    else params.delete("q");
+    setSearchParams(params, { replace: true });
+  };
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -35,6 +97,78 @@ export function DocumentacionPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const filteredCams = useMemo(() => {
+    const empresaQ = adv.empresa.trim().toLowerCase();
+    return camionetas.filter((c) => {
+      const asg = currentAsignacion(c);
+      if (adv.estados.length > 0 && !adv.estados.includes(c.estado)) return false;
+      if (adv.tipos.length > 0) {
+        const matchTipo = adv.tipos.some((t) =>
+          t === "SIN_TIPO" ? !c.tipoTransporte : c.tipoTransporte === t
+        );
+        if (!matchTipo) return false;
+      }
+      if (adv.sinChofer && asg?.chofer) return false;
+      if (
+        empresaQ &&
+        !(asg?.empresa?.nombre ?? "").toLowerCase().includes(empresaQ)
+      ) {
+        return false;
+      }
+      return matchesText(
+        [
+          c.patente,
+          c.marca,
+          c.modelo,
+          c.estado,
+          c.tipoTransporte,
+          asg?.chofer?.nombre,
+          asg?.chofer?.dni,
+          asg?.empresa?.nombre,
+        ],
+        query
+      );
+    });
+  }, [camionetas, query, adv]);
+
+  const filteredChoferes = useMemo(() => {
+    const empresaQ = adv.empresa.trim().toLowerCase();
+    return choferes.filter((ch) => {
+      const asg = currentChoferAsignacion(ch);
+      if (adv.sinUnidad && asg?.camioneta) return false;
+      if (
+        empresaQ &&
+        !(asg?.empresa?.nombre ?? "").toLowerCase().includes(empresaQ)
+      ) {
+        return false;
+      }
+      return matchesText(
+        [
+          ch.nombre,
+          ch.dni,
+          ch.cuil,
+          ch.licencia,
+          ch.telefono,
+          ch.email,
+          asg?.camioneta?.patente,
+          asg?.empresa?.nombre,
+        ],
+        query
+      );
+    });
+  }, [choferes, query, adv]);
+
+  const advActive =
+    adv.estados.length > 0 ||
+    adv.tipos.length > 0 ||
+    !!adv.empresa.trim() ||
+    adv.sinChofer ||
+    adv.sinUnidad;
+  const searchActive = !!query.trim() || advActive;
+
+  const shown = tab === "unidades" ? filteredCams.length : filteredChoferes.length;
+  const total = tab === "unidades" ? camionetas.length : choferes.length;
 
   return (
     <div>
@@ -71,31 +205,203 @@ export function DocumentacionPage() {
         </button>
       </div>
 
+      <div className="mt-3 space-y-2 rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
+        <div className="relative">
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--vl-text-muted)]"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={
+              tab === "unidades"
+                ? "Buscar unidad: patente, chofer, DNI, empresa…"
+                : "Buscar chofer: nombre, DNI, patente…"
+            }
+            autoComplete="off"
+            className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] py-2 pl-9 pr-9 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--vl-text-muted)] hover:text-[var(--vl-heading)]"
+              aria-label="Limpiar búsqueda"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setAdvanced((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--vl-heading)]"
+          >
+            <ChevronDown
+              size={14}
+              className={advanced ? "rotate-180 transition" : "transition"}
+            />
+            Búsqueda avanzada
+            {advActive && (
+              <span className="rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] text-white dark:bg-slate-100 dark:text-slate-900">
+                on
+              </span>
+            )}
+          </button>
+          <span className="text-[11px] text-[var(--vl-text-muted)]">
+            Mostrando {shown} de {total} {tab === "unidades" ? "unidades" : "choferes"}
+          </span>
+        </div>
+
+        {advanced && (
+          <div className="grid gap-2 border-t border-[var(--vl-card-border)] pt-2 sm:grid-cols-2 lg:grid-cols-3">
+            {tab === "unidades" && (
+              <>
+                <fieldset className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2">
+                  <legend className="px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+                    Estado
+                  </legend>
+                  <div className="flex flex-col gap-1">
+                    {ESTADOS_CAMIONETA.map((e) => (
+                      <label
+                        key={e.value}
+                        className="flex items-center gap-2 text-xs text-[var(--vl-text)]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={adv.estados.includes(e.value)}
+                          onChange={() =>
+                            setAdv((prev) => ({
+                              ...prev,
+                              estados: toggleInArray(prev.estados, e.value),
+                            }))
+                          }
+                        />
+                        {e.label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <fieldset className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2">
+                  <legend className="px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+                    Clasificación
+                  </legend>
+                  <div className="flex flex-col gap-1">
+                    {TIPOS_TRANSPORTE.map((t) => (
+                      <label
+                        key={t.value}
+                        className="flex items-center gap-2 text-xs text-[var(--vl-text)]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={adv.tipos.includes(t.value)}
+                          onChange={() =>
+                            setAdv((prev) => ({
+                              ...prev,
+                              tipos: toggleInArray(prev.tipos, t.value),
+                            }))
+                          }
+                        />
+                        {t.label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              </>
+            )}
+            <div className="flex flex-col gap-2">
+              <input
+                type="text"
+                value={adv.empresa}
+                onChange={(e) =>
+                  setAdv((prev) => ({ ...prev, empresa: e.target.value }))
+                }
+                placeholder="Empresa de transporte"
+                aria-label="Filtrar por empresa"
+                className="min-h-11 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
+              />
+              {tab === "unidades" ? (
+                <label className="flex items-center gap-2 text-xs text-[var(--vl-text)]">
+                  <input
+                    type="checkbox"
+                    checked={adv.sinChofer}
+                    onChange={(e) =>
+                      setAdv((prev) => ({ ...prev, sinChofer: e.target.checked }))
+                    }
+                  />
+                  Sin chofer asignado
+                </label>
+              ) : (
+                <label className="flex items-center gap-2 text-xs text-[var(--vl-text)]">
+                  <input
+                    type="checkbox"
+                    checked={adv.sinUnidad}
+                    onChange={(e) =>
+                      setAdv((prev) => ({ ...prev, sinUnidad: e.target.checked }))
+                    }
+                  />
+                  Sin unidad asignada
+                </label>
+              )}
+              {searchActive && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setAdv(EMPTY_ADV);
+                  }}
+                  className="self-start text-xs font-medium text-[var(--vl-heading)] underline-offset-2 hover:underline"
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       {tab === "unidades" && (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[240px_1fr]">
-          <div className="space-y-2">
-            {camionetas.map((c) => {
-              const asg = currentAsignacion(c);
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setSelectedCam(c.id)}
-                  className={`w-full rounded-xl border p-3 text-left text-sm ${
-                    selectedCam === c.id
-                      ? "border-slate-900 dark:border-slate-100"
-                      : "border-[var(--vl-card-border)]"
-                  }`}
-                >
-                  <div className="font-semibold text-[var(--vl-heading)]">{c.patente}</div>
-                  <div className="text-[11px] text-[var(--vl-text-muted)]">
-                    {asg?.chofer?.nombre ?? "Sin chofer"}
-                  </div>
-                </button>
-              );
-            })}
+        <div className="mt-4 grid gap-4 lg:grid-cols-[280px_1fr]">
+          <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1">
+            {filteredCams.length === 0 ? (
+              <p className="rounded-xl border border-[var(--vl-card-border)] p-3 text-sm text-[var(--vl-text-muted)]">
+                No hay unidades con ese filtro
+              </p>
+            ) : (
+              filteredCams.map((c) => {
+                const asg = currentAsignacion(c);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelectedCam(c.id)}
+                    className={`w-full rounded-xl border p-3 text-left text-sm ${
+                      selectedCam === c.id
+                        ? "border-slate-900 dark:border-slate-100"
+                        : "border-[var(--vl-card-border)]"
+                    }`}
+                  >
+                    <div className="font-semibold text-[var(--vl-heading)]">
+                      {c.patente}
+                    </div>
+                    <div className="text-[11px] text-[var(--vl-text-muted)]">
+                      {asg?.chofer?.nombre ?? "Sin chofer"}
+                    </div>
+                    {asg?.empresa?.nombre && (
+                      <div className="truncate text-[10px] text-[var(--vl-text-muted)]">
+                        {asg.empresa.nombre}
+                      </div>
+                    )}
+                  </button>
+                );
+              })
+            )}
           </div>
           {selectedCam && (
             <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
@@ -106,22 +412,39 @@ export function DocumentacionPage() {
       )}
 
       {tab === "choferes" && (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[240px_1fr]">
-          <div className="space-y-2">
-            {choferes.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setSelectedChofer(c.id)}
-                className={`w-full rounded-xl border p-3 text-left text-sm ${
-                  selectedChofer === c.id
-                    ? "border-slate-900 dark:border-slate-100"
-                    : "border-[var(--vl-card-border)]"
-                }`}
-              >
-                <div className="font-semibold text-[var(--vl-heading)]">{c.nombre}</div>
-              </button>
-            ))}
+        <div className="mt-4 grid gap-4 lg:grid-cols-[280px_1fr]">
+          <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1">
+            {filteredChoferes.length === 0 ? (
+              <p className="rounded-xl border border-[var(--vl-card-border)] p-3 text-sm text-[var(--vl-text-muted)]">
+                No hay choferes con ese filtro
+              </p>
+            ) : (
+              filteredChoferes.map((c) => {
+                const asg = currentChoferAsignacion(c);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelectedChofer(c.id)}
+                    className={`w-full rounded-xl border p-3 text-left text-sm ${
+                      selectedChofer === c.id
+                        ? "border-slate-900 dark:border-slate-100"
+                        : "border-[var(--vl-card-border)]"
+                    }`}
+                  >
+                    <div className="font-semibold text-[var(--vl-heading)]">
+                      {c.nombre}
+                    </div>
+                    <div className="text-[11px] text-[var(--vl-text-muted)]">
+                      {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
+                      {asg?.camioneta?.patente
+                        ? ` · ${asg.camioneta.patente}`
+                        : ""}
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
           {selectedChofer && (
             <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">

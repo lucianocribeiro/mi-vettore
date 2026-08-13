@@ -1,4 +1,5 @@
-import { NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS, type Role } from "../types";
 import { AppLogo } from "./AppLogo";
@@ -133,9 +134,19 @@ type Props = {
 
 export function Sidebar({ open, onClose }: Props) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const [q, setQ] = useState("");
   const isDev = import.meta.env.DEV;
   const rol = user?.rol;
   const items = NAV.filter((n) => !n.roles || (rol && n.roles.includes(rol)));
+
+  useEffect(() => {
+    if (location.pathname === "/documentacion") {
+      setQ(searchParams.get("q") ?? "");
+    }
+  }, [location.pathname, searchParams]);
 
   return (
     <aside
@@ -181,10 +192,29 @@ export function Sidebar({ open, onClose }: Props) {
 
       <div className="px-3 pb-2">
         {rol !== "SUGERENCIAS" && (
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--vl-sidebar-border)] bg-[var(--vl-sidebar-search)] px-2.5 py-2.5 text-xs text-[var(--vl-nav-muted)]">
-            <Search size={14} />
-            <span>Buscar patente, DNI...</span>
-          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const next = q.trim();
+              navigate(
+                next
+                  ? `/documentacion?q=${encodeURIComponent(next)}`
+                  : "/documentacion"
+              );
+              onClose();
+            }}
+          >
+            <label className="flex items-center gap-2 rounded-lg border border-[var(--vl-sidebar-border)] bg-[var(--vl-sidebar-search)] px-2.5 py-1.5 text-xs text-[var(--vl-nav-muted)] focus-within:border-[#6b9ed4]">
+              <Search size={14} className="shrink-0" />
+              <input
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar patente, DNI..."
+                className="min-h-9 w-full bg-transparent text-xs text-[#e8edf5] outline-none placeholder:text-[var(--vl-nav-muted)]"
+              />
+            </label>
+          </form>
         )}
       </div>
 

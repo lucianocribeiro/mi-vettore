@@ -306,6 +306,11 @@ export function currentAsignacion(camioneta: Camioneta): AsignacionFlota | null 
   return list.find((a) => !a.periodoHasta) ?? list[0] ?? null;
 }
 
+export function currentChoferAsignacion(chofer: Chofer): AsignacionFlota | null {
+  const list = chofer.asignaciones ?? [];
+  return list.find((a) => !a.periodoHasta) ?? list[0] ?? null;
+}
+
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
