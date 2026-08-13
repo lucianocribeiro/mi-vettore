@@ -33,11 +33,22 @@ const FALLAS_COMUNES = [
 const OT_STEPS = [
   { label: "Solicitud", owner: null as string | null, detail: "El chofer reporta patente, problema y si puede circular." },
   { label: "Asignación", owner: "Facu", detail: "Facu evalúa la falla, asigna taller y decide si inhabilitar." },
-  { label: "Presupuestos", owner: "Silvina", detail: "Presupuesto opcional. Varios proveedores e ítems. Silvina autoaprueba el gasto habitual." },
-  { label: "Facturación", owner: "Silvina", detail: "Facturas (más de una) e ítems. Si hay incremento, pasa a Patricio." },
+  { label: "Presupuesto y factura", owner: "Silvina", detail: "Cargá presupuesto (opcional) e ítems de factura en el mismo paso. Si hay incremento, pasa a Patricio." },
   { label: "Incremento", owner: "Patricio", detail: "Solo si el taller facturó por encima del presupuesto." },
   { label: "Cierre / pago", owner: "Silvina / Carla", detail: "Cierre, reporte de salida y cuenta corriente del proveedor." },
 ] as const;
+
+/** El circuito viejo tenía Presupuestos (2) y Facturación (3) separados. */
+function displayStep(step: number): number {
+  if (step <= 2) return step;
+  if (step === 3) return 2;
+  if (step === 4) return 3;
+  return 4;
+}
+
+function isGastoStep(step: number) {
+  return step === 2 || step === 3;
+}
 
 function roleActionHint(rol?: Role | null): string {
   switch (rol) {
@@ -46,7 +57,7 @@ function roleActionHint(rol?: Role | null): string {
     case "FACU":
       return "Tu rol: asignar taller e inhabilitar si hace falta.";
     case "SILVINA":
-      return "Tu rol: presupuestos, facturas e ítems. Autoaprobás el gasto habitual.";
+      return "Tu rol: presupuesto y facturas en el mismo paso. Autoaprobás el gasto habitual.";
     case "PATRICIO":
       return "Tu rol: aprobar solo el incremento sobre presupuesto.";
     case "JULIETA":
@@ -202,12 +213,12 @@ export function M7TalleresPage() {
     if (!ot) return;
     setTallerId(ot.tallerProveedorId ?? "");
     setJustif(ot.incrementoJustificacion ?? "");
-    setItemTipo(ot.currentStep >= 3 ? "FACTURA" : "PRESUPUESTO");
+    setItemTipo("PRESUPUESTO");
   }, [ot?.id]);
 
   function needsMyAction(o: OrdenTrabajo) {
     if (o.cerradaAt) return false;
-    if (esChofer) return !!o.urgente && o.currentStep === 3 && !(o.totales?.facturado);
+    if (esChofer) return !!o.urgente && isGastoStep(o.currentStep) && !(o.totales?.facturado);
     return canAdvanceFromStep(rol, o.currentStep) || (o.currentStep === 5 && canCerrarOt(rol));
   }
 
@@ -313,7 +324,7 @@ export function M7TalleresPage() {
                     </div>
                     <div className="mt-1 text-xs text-[var(--vl-text-muted)]">{o.solicitud.falla}</div>
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                      <span>{o.cerradaAt ? "Cerrada" : OT_STEPS[o.currentStep]?.label}</span>
+                      <span>{o.cerradaAt ? "Cerrada" : OT_STEPS[displayStep(o.currentStep)]?.label}</span>
                       {o.urgente && <span className="rounded bg-red-100 px-1.5 text-red-800 dark:bg-red-950 dark:text-red-200">Urgente</span>}
                       {needsMyAction(o) && <span className="rounded bg-amber-100 px-1.5 text-amber-800">Tu turno</span>}
                     </div>
@@ -334,21 +345,26 @@ export function M7TalleresPage() {
                   <p className="mt-1 text-xs text-[var(--vl-text-muted)]">{ot.solicitud.detalle}</p>
 
                   <div className="my-5 flex items-center">
-                    {OT_STEPS.map((s, i) => (
+                    {OT_STEPS.map((s, i) => {
+                      const d = displayStep(ot.currentStep);
+                      const done = ot.cerradaAt || i < d;
+                      const active = !ot.cerradaAt && i === d;
+                      return (
                       <div key={s.label} className="flex flex-1 items-center last:flex-none">
-                        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${ot.cerradaAt || i < ot.currentStep ? "bg-emerald-500 text-white" : i === ot.currentStep ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "bg-slate-100 text-slate-400"}`} title={s.label}>
-                          {ot.cerradaAt || i < ot.currentStep ? <Check size={13} /> : i + 1}
+                        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${done ? "bg-emerald-500 text-white" : active ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "bg-slate-100 text-slate-400"}`} title={s.label}>
+                          {done ? <Check size={13} /> : i + 1}
                         </div>
-                        {i < OT_STEPS.length - 1 && <div className={`h-0.5 flex-1 ${ot.cerradaAt || i < ot.currentStep ? "bg-emerald-400" : "bg-slate-100"}`} />}
+                        {i < OT_STEPS.length - 1 && <div className={`h-0.5 flex-1 ${done ? "bg-emerald-400" : "bg-slate-100"}`} />}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900/40">
-                    <div className="text-sm font-semibold">{OT_STEPS[ot.currentStep]?.label}</div>
-                    <p className="mt-1 text-sm text-[var(--vl-text-muted)]">{OT_STEPS[ot.currentStep]?.detail}</p>
-                    {OT_STEPS[ot.currentStep]?.owner && (
-                      <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">Habitual: {OT_STEPS[ot.currentStep].owner}</p>
+                    <div className="text-sm font-semibold">{OT_STEPS[displayStep(ot.currentStep)]?.label}</div>
+                    <p className="mt-1 text-sm text-[var(--vl-text-muted)]">{OT_STEPS[displayStep(ot.currentStep)]?.detail}</p>
+                    {OT_STEPS[displayStep(ot.currentStep)]?.owner && (
+                      <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">Habitual: {OT_STEPS[displayStep(ot.currentStep)].owner}</p>
                     )}
 
                     {esChofer ? (
@@ -375,7 +391,7 @@ export function M7TalleresPage() {
                           }}>Enviar sugerencia</button>
                           {ot.sugerenciaChofer && <p className="mt-1 text-xs text-[var(--vl-text-muted)]">Enviada: {ot.sugerenciaChofer}</p>}
                         </div>
-                        {ot.urgente && !ot.cerradaAt && ot.currentStep >= 3 && (
+                        {ot.urgente && !ot.cerradaAt && isGastoStep(ot.currentStep) && (
                           <div className="rounded-lg border border-amber-200 p-3">
                             <div className="text-xs font-semibold">Rendición de gasto (24hs)</div>
                             <input className="mt-2 w-full rounded-md border p-2 text-sm" placeholder="Qué se reparó" value={rendDesc} onChange={(e) => setRendDesc(e.target.value)} />
@@ -423,7 +439,7 @@ export function M7TalleresPage() {
                           </div>
                         )}
 
-                        {(ot.currentStep === 2 || ot.currentStep === 3) && (
+                        {isGastoStep(ot.currentStep) && (
                           <ItemsEditor
                             ot={ot}
                             token={token!}
@@ -443,13 +459,13 @@ export function M7TalleresPage() {
                           />
                         )}
 
-                        {ot.currentStep === 2 && (
+                        {isGastoStep(ot.currentStep) && (
                           <button type="button" className="text-xs underline" onClick={() => void call(`/api/talleres/${ot.id}/sin-presupuesto`, { method: "POST", body: JSON.stringify({ sinPresupuesto: true }) })}>
-                            Avanzar sin presupuesto
+                            Continuar sin presupuesto
                           </button>
                         )}
 
-                        {ot.currentStep === 3 && (
+                        {isGastoStep(ot.currentStep) && (
                           <div>
                             <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed text-sm">
                               <Upload size={16} /> {facturaFile ? facturaFile.name : "Adjuntar factura (PDF o foto)"}

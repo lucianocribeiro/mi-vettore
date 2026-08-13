@@ -25,8 +25,10 @@ export const FALLAS_COMUNES = [
 ] as const;
 
 /**
- * Circuito OT reunión 12/08.
- * 0 se completa al crear (notif automática). Urgente salta a 3.
+ * Circuito OT.
+ * 0 se completa al crear (notif automática). Urgente salta a presupuesto/factura (2).
+ * Los índices 2 y 3 son el mismo paso unificado (presupuesto + factura); 3 queda
+ * por OTs viejas que ya estaban en “Facturación”.
  */
 export const OT_STEPS = [
   {
@@ -41,12 +43,12 @@ export const OT_STEPS = [
   },
   {
     key: 2,
-    label: "Presupuestos",
+    label: "Presupuesto y factura",
     ownerRoles: [Role.SILVINA],
   },
   {
     key: 3,
-    label: "Facturación",
+    label: "Presupuesto y factura",
     ownerRoles: [Role.SILVINA],
   },
   {
@@ -63,6 +65,11 @@ export const OT_STEPS = [
 
 export const OT_STEP_LAST = OT_STEPS.length - 1;
 
+/** Presupuesto y facturación son un solo paso (2, o 3 en OT viejas). */
+export function isGastoStep(step: number): boolean {
+  return step === 2 || step === 3;
+}
+
 export function canCreateSolicitud(rol: Role): boolean {
   return (
     rol === Role.CHOFER ||
@@ -77,8 +84,7 @@ export function canCreateSolicitud(rol: Role): boolean {
 export function canAdvanceFromStep(rol: Role, currentStep: number): boolean {
   if (currentStep === 0) return canCreateSolicitud(rol);
   if (currentStep === 1) return rol === Role.FACU;
-  if (currentStep === 2) return rol === Role.SILVINA;
-  if (currentStep === 3) return rol === Role.SILVINA;
+  if (currentStep === 2 || currentStep === 3) return rol === Role.SILVINA;
   if (currentStep === 4) return rol === Role.PATRICIO;
   if (currentStep === 5) return false;
   return false;

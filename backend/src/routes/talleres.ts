@@ -30,6 +30,7 @@ import {
   fechaAplicacionCambio,
   NOTIF_OPS_ROLES,
   OT_STEPS,
+  isGastoStep,
 } from "../lib/talleres.js";
 import {
   assertRoleOrOverride,
@@ -523,7 +524,7 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
           sugerenciaChofer: req.body?.sugerenciaChofer
             ? String(req.body.sugerenciaChofer).trim() || null
             : null,
-          currentStep: !habilitadaCircular ? 3 : 1,
+          currentStep: !habilitadaCircular ? 2 : 1,
         },
         include: includeOTFor(req.user!.id),
       });
@@ -697,7 +698,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
 
     // Silvina puede ajustar montos autorizados en presupuesto/factura
     if (req.body?.montoAutorizado !== undefined) {
-      if (ot.currentStep !== 2 && ot.currentStep !== 3) {
+      if (!isGastoStep(ot.currentStep)) {
         res.status(400).json({ error: "El monto se edita en presupuesto o factura" });
         return;
       }
@@ -732,8 +733,8 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
 
     if (req.body?.incrementoJustificacion !== undefined) {
-      if (ot.currentStep !== 3 && ot.currentStep !== 4) {
-        res.status(400).json({ error: "La justificación del incremento va en facturación" });
+      if (!isGastoStep(ot.currentStep) && ot.currentStep !== 4) {
+        res.status(400).json({ error: "La justificación del incremento va con la factura" });
         return;
       }
       const gate = await gateOrOverride({
@@ -806,8 +807,8 @@ router.post(
         where: { id: req.params.id },
         include: { presupuestos: true },
       });
-      if (!ot || ot.currentStep !== 2) {
-        res.status(400).json({ error: "OT no está en etapa de presupuestos" });
+      if (!ot || !isGastoStep(ot.currentStep)) {
+        res.status(400).json({ error: "OT no está en etapa de presupuesto/factura" });
         return;
       }
 
@@ -895,8 +896,8 @@ router.delete(
       const ot = await prisma.ordenTrabajo.findUnique({
         where: { id: req.params.id },
       });
-      if (!ot || ot.currentStep !== 2) {
-        res.status(400).json({ error: "Solo en etapa de presupuestos" });
+      if (!ot || !isGastoStep(ot.currentStep)) {
+        res.status(400).json({ error: "Solo en etapa de presupuesto/factura" });
         return;
       }
 
@@ -946,8 +947,8 @@ router.post("/:id/sin-presupuesto", authenticate, async (req: AuthedRequest, res
       res.status(404).json({ error: "OT no encontrada" });
       return;
     }
-    if (ot.currentStep !== 2) {
-      res.status(400).json({ error: "Solo aplica en etapa de presupuestos" });
+    if (!isGastoStep(ot.currentStep)) {
+      res.status(400).json({ error: "Solo aplica en etapa de presupuesto/factura" });
       return;
     }
     if (ot.cerradaAt) {
@@ -1011,8 +1012,8 @@ router.post(
       const ot = await prisma.ordenTrabajo.findUnique({
         where: { id: req.params.id },
       });
-      if (!ot || (ot.currentStep !== 3 && ot.currentStep !== 5)) {
-        res.status(400).json({ error: "La factura se carga en facturación/cierre" });
+      if (!ot || (!isGastoStep(ot.currentStep) && ot.currentStep !== 5)) {
+        res.status(400).json({ error: "La factura se carga en presupuesto/factura o al cierre" });
         return;
       }
       if (!req.file) {
@@ -1123,25 +1124,19 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
     let nextStep = ot.currentStep + 1;
 
     if (ot.currentStep === 0) {
-      nextStep = ot.urgente ? 3 : 1;
+      nextStep = ot.urgente ? 2 : 1;
     }
 
-    if (ot.currentStep === 2) {
-      const tot = otTotales(ot);
-      extra.valorAprobado = tot.presupuesto || ot.valorAprobado || ot.montoAutorizado;
-      extra.montoAutorizado = extra.valorAprobado;
-      extra.sinPresupuesto =
-        ot.sinPresupuesto ||
-        (tot.presupuesto <= 0 && (ot.presupuestos?.length ?? 0) === 0);
-    }
-
-    if (ot.currentStep === 3) {
+    if (isGastoStep(ot.currentStep)) {
       const tot = otTotales(ot);
       const aprobado = tot.presupuesto || ot.valorAprobado || ot.montoAutorizado || 0;
       const facturado = tot.facturado || aprobado;
-      extra.valorAprobado = aprobado;
+      extra.valorAprobado = aprobado || tot.presupuesto || ot.valorAprobado || ot.montoAutorizado;
       extra.valorFinal = facturado;
-      extra.montoAutorizado = aprobado || facturado;
+      extra.montoAutorizado = extra.valorAprobado || facturado;
+      extra.sinPresupuesto =
+        ot.sinPresupuesto ||
+        (tot.presupuesto <= 0 && (ot.presupuestos?.length ?? 0) === 0);
       if (req.body?.incrementoJustificacion) {
         extra.incrementoJustificacion = String(req.body.incrementoJustificacion).trim();
       }
@@ -1360,9 +1355,13 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
       return;
     }
 
+    let prevStep = ot.currentStep - 1;
+    if (ot.currentStep === 4) prevStep = 2;
+    if (ot.currentStep === 3) prevStep = 1;
+
     const updated = await prisma.ordenTrabajo.update({
       where: { id: ot.id },
-      data: { currentStep: ot.currentStep - 1 },
+      data: { currentStep: prevStep },
       include: includeOTFor(req.user!.id),
     });
     res.json(sanitizeOtForViewer(updated, rol));
