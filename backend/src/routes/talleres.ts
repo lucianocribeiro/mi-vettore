@@ -390,6 +390,110 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
+/** Historial interno: unidad → taller → repuestos/ítems → facturado. */
+router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso para ver el historial" });
+      return;
+    }
+    const q = String(req.query?.q ?? "").trim().toLowerCase();
+    const ots = await prisma.ordenTrabajo.findMany({
+      include: {
+        solicitud: {
+          include: {
+            camioneta: true,
+            chofer: true,
+          },
+        },
+        tallerProveedor: true,
+        items: { orderBy: { createdAt: "asc" } },
+        facturas: true,
+        movimientos: true,
+      },
+      orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
+      take: 300,
+    });
+
+    const rows = ots.map((ot) => {
+      const facturaItems = ot.items.filter(
+        (i) => i.tipo === "FACTURA" || i.tipo === "RENDICION"
+      );
+      const presupuestoItems = ot.items.filter((i) => i.tipo === "PRESUPUESTO");
+      const repuestos = (facturaItems.length ? facturaItems : presupuestoItems).map(
+        (i) => ({
+          descripcion: i.descripcion,
+          importe: i.importe,
+          taller: i.tallerNombre || i.tallerProveedorId || "",
+          tipo: i.tipo,
+        })
+      );
+      const sumFacturaItems = facturaItems.reduce((a, i) => a + i.importe, 0);
+      const sumFacturasAdj = ot.facturas.reduce(
+        (a, f) => a + (f.monto ?? 0),
+        0
+      );
+      const sumMovs = ot.movimientos.reduce((a, m) => a + m.montoFacturado, 0);
+      const facturado =
+        ot.valorFinal ??
+        (sumFacturaItems > 0
+          ? sumFacturaItems
+          : sumFacturasAdj > 0
+            ? sumFacturasAdj
+            : sumMovs > 0
+              ? sumMovs
+              : ot.valorAprobado ?? ot.montoAutorizado ?? null);
+
+      const talleres = [
+        ot.tallerProveedor?.razonSocial,
+        ot.tallerAsignado,
+        ...repuestos.map((r) => r.taller).filter(Boolean),
+      ].filter((v, i, arr) => !!v && arr.indexOf(v) === i) as string[];
+
+      return {
+        id: ot.id,
+        numeroOT: ot.numeroOT,
+        patente: ot.solicitud.camioneta.patente,
+        falla: ot.solicitud.falla,
+        detalle: ot.solicitud.detalle,
+        chofer: ot.solicitud.chofer?.nombre ?? null,
+        talleres,
+        tallerPrincipal:
+          ot.tallerProveedor?.razonSocial ?? ot.tallerAsignado ?? talleres[0] ?? null,
+        repuestos,
+        facturado,
+        kmAlMomento: ot.kmAlMomento,
+        currentStep: ot.currentStep,
+        cerradaAt: ot.cerradaAt,
+        createdAt: ot.createdAt,
+      };
+    });
+
+    const filtered = q
+      ? rows.filter((r) => {
+          const hay = [
+            r.numeroOT,
+            r.patente,
+            r.falla,
+            r.detalle,
+            r.chofer ?? "",
+            r.tallerPrincipal ?? "",
+            ...r.talleres,
+            ...r.repuestos.map((x) => x.descripcion),
+          ]
+            .join(" ")
+            .toLowerCase();
+          return hay.includes(q);
+        })
+      : rows;
+
+    res.json({ items: filtered });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al cargar historial de talleres" });
+  }
+});
+
 router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.ordenTrabajo.findUnique({

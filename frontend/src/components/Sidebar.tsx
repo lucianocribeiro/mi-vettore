@@ -6,6 +6,7 @@ import { AppLogo } from "./AppLogo";
 import { ThemeToggle } from "./ThemeToggle";
 import {
   AlertCircle,
+  Clock,
   CreditCard,
   FileText,
   Folder,
@@ -46,6 +47,20 @@ const NAV: NavItem[] = [
     icon: Wrench,
     roles: [
       "CHOFER",
+      "PABLO",
+      "SILVINA",
+      "FACU",
+      "PATRICIO",
+      "JULIETA",
+      "CARLA",
+    ],
+  },
+  {
+    to: "/historial-talleres",
+    label: "Historial talleres",
+    sub: "Unidad / taller / $",
+    icon: Clock,
+    roles: [
       "PABLO",
       "SILVINA",
       "FACU",
