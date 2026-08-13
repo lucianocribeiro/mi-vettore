@@ -1,7 +1,18 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+
+/** Vercel NFT does not follow Prisma's runtime fs.open() of this WASM. */
+try {
+  readFileSync(
+    join(__dirname, "../../node_modules/.prisma/client/query_compiler_bg.wasm")
+  );
+} catch {
+  // Best-effort pin for file tracing; Prisma loads the WASM itself.
+}
 
 function createPrisma(): PrismaClient {
   const connectionString = process.env.DATABASE_URL;

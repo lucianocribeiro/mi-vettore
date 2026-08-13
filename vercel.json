@@ -8,7 +8,12 @@
       "root": "backend/",
       "framework": "express",
       "entrypoint": "src/index.ts",
-      "buildCommand": "echo skip-backend-tsc"
+      "buildCommand": "echo skip-backend-tsc",
+      "functions": {
+        "src/index.ts": {
+          "includeFiles": "{node_modules/.prisma/client/*.wasm,backend/node_modules/.prisma/client/*.wasm}"
+        }
+      }
     }
   },
   "headers": [
