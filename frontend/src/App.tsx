@@ -10,6 +10,7 @@ import { M2CambiosPage } from "./pages/m2/M2CambiosPage";
 import { M3ComunicacionesPage } from "./pages/m3/M3ComunicacionesPage";
 import { M6MantenimientoPage } from "./pages/m6/M6MantenimientoPage";
 import { M7TalleresPage } from "./pages/m7/M7TalleresPage";
+import { DocumentacionPage } from "./pages/documentacion/DocumentacionPage";
 import { SugerenciasPage } from "./pages/SugerenciasPage";
 
 function HomeRedirect() {
@@ -75,6 +76,14 @@ export default function App() {
               element={
                 <SugerenciasOnlyGate>
                   <M6MantenimientoPage />
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
+              path="/documentacion"
+              element={
+                <SugerenciasOnlyGate>
+                  <DocumentacionPage />
                 </SugerenciasOnlyGate>
               }
             />

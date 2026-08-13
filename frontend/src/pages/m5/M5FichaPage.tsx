@@ -774,7 +774,6 @@ export function M5FichaPage() {
     { id: "empresas", label: "Empresas" },
     { id: "usuarios", label: "Usuarios" },
     { id: "tiposServicio", label: "Tipos de servicio" },
-    { id: "talleres", label: "Talleres proveedores" },
   ];
 
   const camionetasFiltradas = useMemo(

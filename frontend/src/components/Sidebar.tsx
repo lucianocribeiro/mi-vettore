@@ -7,6 +7,7 @@ import {
   AlertCircle,
   CreditCard,
   FileText,
+  Folder,
   MessageSquare,
   Search,
   Wrench,
@@ -23,9 +24,39 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   {
+    to: "/documentacion",
+    label: "Documentación",
+    sub: "DNI / VTV / seguros",
+    icon: Folder,
+    roles: [
+      "CHOFER",
+      "PABLO",
+      "SILVINA",
+      "FACU",
+      "PATRICIO",
+      "JULIETA",
+      "CARLA",
+    ],
+  },
+  {
     to: "/m7",
-    label: "Talleres / OT",
-    sub: "Circuito OT",
+    label: "Talleres y OT",
+    sub: "Circuito + proveedores",
+    icon: Wrench,
+    roles: [
+      "CHOFER",
+      "PABLO",
+      "SILVINA",
+      "FACU",
+      "PATRICIO",
+      "JULIETA",
+      "CARLA",
+    ],
+  },
+  {
+    to: "/m6",
+    label: "Mantenimiento",
+    sub: "Km / historial",
     icon: Wrench,
     roles: [
       "CHOFER",
@@ -54,7 +85,7 @@ const NAV: NavItem[] = [
   {
     to: "/m5",
     label: "Ficha integral (ABM)",
-    sub: "M5",
+    sub: "Flota",
     icon: CreditCard,
     roles: [
       "PABLO",
@@ -85,21 +116,6 @@ const NAV: NavItem[] = [
     sub: "M4",
     icon: AlertCircle,
     roles: [
-      "PABLO",
-      "SILVINA",
-      "FACU",
-      "PATRICIO",
-      "JULIETA",
-      "CARLA",
-    ],
-  },
-  {
-    to: "/m6",
-    label: "Mantenimiento",
-    sub: "Km / aceite",
-    icon: Wrench,
-    roles: [
-      "CHOFER",
       "PABLO",
       "SILVINA",
       "FACU",
