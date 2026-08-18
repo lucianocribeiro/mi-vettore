@@ -6,8 +6,8 @@ import {
   ESTADO_CHOFER_STYLE,
 } from "../../components/Badge";
 import { DocumentUpload } from "../../components/DocumentUpload";
-import { Pencil, X } from "../../components/icons";
-import { apiFetch, ApiError } from "../../lib/api";
+import { Pencil, X, Download } from "../../components/icons";
+import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import {
   currentAsignacion,
   formatDate,
@@ -46,6 +46,7 @@ export function FichaDrawer({
   const [empresaId, setEmpresaId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [exportando, setExportando] = useState(false);
 
   const item = open.item;
   const isCamioneta = open.tipo === "camioneta";
@@ -132,7 +133,35 @@ export function FichaDrawer({
               {isCamioneta ? cam!.patente : ch!.nombre}
             </h3>
           </div>
-          <button
+          <div className="flex shrink-0 items-center gap-1">
+            {cam && (
+              <button
+                type="button"
+                disabled={exportando || !token}
+                onClick={() => {
+                  setExportando(true);
+                  void apiDownload(
+                    `/api/camionetas/${cam.id}/planilla`,
+                    token,
+                    `planilla_${cam.patente}.xlsx`
+                  )
+                    .catch((err) =>
+                      alert(
+                        err instanceof ApiError
+                          ? err.message
+                          : "No se pudo exportar la planilla"
+                      )
+                    )
+                    .finally(() => setExportando(false));
+                }}
+                className="inline-flex h-9 items-center gap-1 rounded-lg px-2 text-xs font-medium text-[var(--vl-text)] hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label="Descargar planilla Excel"
+              >
+                <Download size={16} />
+                {exportando ? "…" : "Excel"}
+              </button>
+            )}
+            <button
             type="button"
             onClick={onClose}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--vl-text-muted)] hover:bg-slate-100 hover:text-[var(--vl-heading)] dark:hover:bg-slate-800"
@@ -140,6 +169,7 @@ export function FichaDrawer({
           >
             <X size={18} />
           </button>
+          </div>
         </div>
 
         <div className="flex gap-2 border-b border-[var(--vl-card-border)] px-5">

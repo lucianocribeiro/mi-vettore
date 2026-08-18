@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
 import { Bell } from "./icons";
@@ -14,6 +15,7 @@ type Aviso = {
 
 export function AvisosBell() {
   const { token, user } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [avisos, setAvisos] = useState<Aviso[]>([]);
   const [noLeidos, setNoLeidos] = useState(0);
@@ -113,6 +115,10 @@ export function AvisosBell() {
                   className="w-full text-left"
                   onClick={() => {
                     if (!a.leido) void marcarUno(a.id);
+                    if (a.ot) {
+                      setOpen(false);
+                      navigate("/m7");
+                    }
                   }}
                 >
                   <div className="text-xs font-semibold text-[var(--vl-heading)]">

@@ -382,12 +382,18 @@ export function M7TalleresPage() {
                       <div className="mt-4 space-y-3">
                         <div className="grid grid-cols-2 gap-2">
                           <div className="rounded-lg border border-[var(--vl-card-border)] p-3">
-                            <div className="text-[11px] text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
-                            <div className="font-bold">{money(totP)}</div>
+                            <div className="text-[11px] text-[var(--vl-text-muted)]">Presupuesto</div>
+                            <div className="font-bold">
+                              {totP > 0
+                                ? money(totP)
+                                : ot.sinPresupuesto
+                                  ? "Sin presupuesto"
+                                  : "—"}
+                            </div>
                           </div>
                           <div className="rounded-lg border border-[var(--vl-card-border)] p-3">
                             <div className="text-[11px] text-[var(--vl-text-muted)]">Gasto real</div>
-                            <div className="font-bold">{money(totF)}</div>
+                            <div className="font-bold">{totF > 0 ? money(totF) : "—"}</div>
                           </div>
                         </div>
                         <div>
@@ -544,12 +550,18 @@ export function M7TalleresPage() {
 
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-xl border p-3">
-                      <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
-                      <div className="font-bold">{money(totP)}</div>
+                      <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto</div>
+                      <div className="font-bold">
+                        {totP > 0
+                          ? money(totP)
+                          : ot.sinPresupuesto
+                            ? "Sin presupuesto"
+                            : "—"}
+                      </div>
                     </div>
                     <div className="rounded-xl border p-3">
                       <div className="text-xs text-[var(--vl-text-muted)]">Facturado / gasto</div>
-                      <div className="font-bold">{money(totF)}</div>
+                      <div className="font-bold">{totF > 0 ? money(totF) : "—"}</div>
                     </div>
                   </div>
 

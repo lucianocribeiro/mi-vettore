@@ -39,6 +39,7 @@ import {
   parseOverrideComentario,
 } from "../lib/ot-override.js";
 import { applyKmUpdate } from "../lib/km.js";
+import { avisarChoferReparacion } from "../lib/aviso-chofer.js";
 import {
   hayIncrementoSobrePresupuesto,
   totalFacturado,
@@ -240,11 +241,10 @@ function sanitizeOtForViewer<T extends OtLoaded>(ot: T, rol: Role) {
     solicitud: ot.solicitud,
     diagnosticos: ot.diagnosticos,
     totales,
+    sinPresupuesto: ot.sinPresupuesto,
     resumenChofer: {
       presupuestoTotal: totales.presupuesto,
-      gastoReal: ot.cerradaAt
-        ? totales.facturado || totales.presupuesto
-        : totales.facturado,
+      gastoReal: totales.facturado,
     },
     items: [] as T["items"],
     facturas: [] as T["facturas"],
@@ -795,6 +795,17 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
       }
     }
 
+    if (rol !== "CHOFER") {
+      await avisarChoferReparacion({
+        choferId,
+        otId: ot.id,
+        titulo: `OT ${ot.numeroOT}: reparación en tu unidad`,
+        mensaje: fuera
+          ? `Se registró una reparación para ${patente} (${falla}). La unidad no puede circular.`
+          : `Se registró una reparación para ${patente} (${falla}). La unidad puede circular.`,
+      });
+    }
+
     res.status(201).json(sanitizeOtForViewer(ot, rol));
   } catch (err) {
     console.error(err);
@@ -970,6 +981,18 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       data,
       include: includeOTFor(req.user!.id),
     });
+
+    if (data.tallerAsignado || data.tallerProveedorId) {
+      const patente = ot.solicitud.camioneta.patente;
+      const taller = String(updated.tallerAsignado || "taller asignado");
+      await avisarChoferReparacion({
+        choferId: ot.solicitud.choferId,
+        otId: ot.id,
+        titulo: `OT ${ot.numeroOT}: taller asignado`,
+        mensaje: `Tu unidad ${patente} fue derivada a ${taller}. Seguimos el estado en la app.`,
+      });
+    }
+
     res.json(sanitizeOtForViewer(updated, rol));
   } catch (err) {
     console.error(err);
@@ -1318,14 +1341,12 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
 
     if (isGastoStep(ot.currentStep)) {
       const tot = otTotales(ot);
-      const aprobado = tot.presupuesto || ot.valorAprobado || ot.montoAutorizado || 0;
-      const facturado = tot.facturado || aprobado;
-      extra.valorAprobado = aprobado || tot.presupuesto || ot.valorAprobado || ot.montoAutorizado;
-      extra.valorFinal = facturado;
-      extra.montoAutorizado = extra.valorAprobado || facturado;
-      extra.sinPresupuesto =
-        ot.sinPresupuesto ||
-        (tot.presupuesto <= 0 && (ot.presupuestos?.length ?? 0) === 0);
+      const aprobado = tot.presupuesto;
+      const facturado = tot.facturado;
+      extra.valorAprobado = aprobado || ot.valorAprobado || ot.montoAutorizado || null;
+      extra.valorFinal = facturado || ot.valorFinal || null;
+      extra.montoAutorizado = aprobado || ot.montoAutorizado || null;
+      extra.sinPresupuesto = ot.sinPresupuesto || aprobado <= 0;
       if (req.body?.incrementoJustificacion) {
         extra.incrementoJustificacion = String(req.body.incrementoJustificacion).trim();
       }
@@ -1490,6 +1511,15 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         text: mensaje,
       });
     }
+
+    await avisarChoferReparacion({
+      choferId: ot.solicitud.choferId,
+      otId: ot.id,
+      titulo: `OT ${ot.numeroOT}: reparación lista`,
+      mensaje: `La unidad ${patente} ya puede circular. Taller: ${
+        ot.tallerAsignado ?? "—"
+      }.`,
+    });
 
     res.json(sanitizeOtForViewer(updated, rol));
   } catch (err) {

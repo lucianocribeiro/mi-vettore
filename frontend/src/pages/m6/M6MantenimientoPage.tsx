@@ -442,6 +442,33 @@ export function M6MantenimientoPage() {
               >
                 {saving ? "Guardando…" : "Guardar en ficha"}
               </button>
+              {isInternalOps(user?.rol) || esDueno || user?.rol === "CHOFER" ? (
+                <button
+                  type="button"
+                  disabled={exportando}
+                  onClick={() => {
+                    if (!token) return;
+                    setExportando(true);
+                    void apiDownload(
+                      `/api/camionetas/${selected.id}/planilla`,
+                      token,
+                      `planilla_${selected.patente}.xlsx`
+                    )
+                      .catch((err) =>
+                        alert(
+                          err instanceof ApiError
+                            ? err.message
+                            : "No se pudo exportar la planilla"
+                        )
+                      )
+                      .finally(() => setExportando(false));
+                  }}
+                  className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--vl-card-border)] px-3 text-sm font-medium sm:w-auto sm:px-8"
+                >
+                  <Download size={14} />
+                  {exportando ? "Exportando…" : "Planilla Excel de esta unidad"}
+                </button>
+              ) : null}
             </form>
             <HistorialReparaciones camionetaId={selected.id} token={token} />
             </>

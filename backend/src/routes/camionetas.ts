@@ -242,6 +242,157 @@ router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
+function isoDay(d: Date | null | undefined): string {
+  if (!d) return "";
+  return d.toISOString().slice(0, 10);
+}
+
+/** Planilla Excel de un móvil (reunión 12/08: "enviar planillas"). */
+router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const item = await prisma.camioneta.findUnique({
+      where: { id: req.params.id },
+      include: {
+        tipoServicio: true,
+        asignaciones: {
+          orderBy: { periodoDesde: "desc" },
+          include: { chofer: true, empresa: true },
+        },
+        kmRegistros: { orderBy: { createdAt: "desc" }, take: 200 },
+        solicitudes: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            chofer: true,
+            ordenTrabajo: {
+              include: {
+                items: { orderBy: { createdAt: "asc" } },
+                tallerProveedor: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!item) {
+      res.status(404).json({ error: "Camioneta no encontrada" });
+      return;
+    }
+    const ops = isInternalOpsRole(req.user!.rol);
+    if (!ops) {
+      const ok = await choferPuedeEditarCamioneta(req.user!.id, item.id);
+      if (!ok) {
+        res.status(403).json({ error: "Sin permiso para exportar esta unidad" });
+        return;
+      }
+    }
+
+    const activa = item.asignaciones.find((a) => !a.periodoHasta) ?? item.asignaciones[0];
+    const workbook = new ExcelJS.Workbook();
+
+    const ficha = workbook.addWorksheet("Ficha");
+    ficha.columns = [
+      { header: "Campo", key: "campo", width: 28 },
+      { header: "Valor", key: "valor", width: 40 },
+    ];
+    ficha.getRow(1).font = { bold: true };
+    const fichaRows: Array<[string, string | number]> = [
+      ["Patente", item.patente],
+      ["Marca", item.marca ?? ""],
+      ["Modelo", item.modelo ?? ""],
+      ["Año", item.anio ?? ""],
+      ["Equipo de frío", item.equipoFrio ?? ""],
+      [
+        "Capacidad",
+        formatCapacidad(item.capacidadValor, item.capacidadUnidad, item.capacidad),
+      ],
+      ["Tipo servicio", item.tipoServicio?.nombre ?? item.tipoTransporte ?? ""],
+      ["Estado", item.estado],
+      ["Km actuales", item.km],
+      ["Km actualizado", isoDay(item.kmActualizadoAt)],
+      ["Aceite", isoDay(item.fechaUltimoAceite)],
+      ["Correa", isoDay(item.fechaCambioCorrea)],
+      ["Neumáticos", isoDay(item.fechaCambioNeumaticos)],
+      ["Batería", isoDay(item.fechaCambioBateria)],
+      ["Seguro", item.seguroCompania ?? ""],
+      ["Seguro vence", isoDay(item.seguroVencimiento)],
+      ["VTV vence", isoDay(item.vtbVencimiento)],
+      ["Chofer", activa?.chofer?.nombre ?? ""],
+      ["Empresa", activa?.empresa?.nombre ?? ""],
+    ];
+    for (const [campo, valor] of fichaRows) ficha.addRow({ campo, valor });
+
+    const kmSheet = workbook.addWorksheet("Kilometraje");
+    kmSheet.columns = [
+      { header: "Fecha", key: "fecha", width: 14 },
+      { header: "Km anterior", key: "antes", width: 14 },
+      { header: "Km nuevo", key: "nuevo", width: 14 },
+      { header: "Delta", key: "delta", width: 10 },
+      { header: "Anomalía", key: "anomalia", width: 12 },
+    ];
+    kmSheet.getRow(1).font = { bold: true };
+    for (const r of item.kmRegistros) {
+      kmSheet.addRow({
+        fecha: isoDay(r.createdAt),
+        antes: r.kmAnterior,
+        nuevo: r.kmNuevo,
+        delta: r.delta,
+        anomalia: r.anomalia ? "Sí" : "",
+      });
+    }
+
+    const otSheet = workbook.addWorksheet("Reparaciones");
+    otSheet.columns = [
+      { header: "OT", key: "ot", width: 12 },
+      { header: "Fecha", key: "fecha", width: 14 },
+      { header: "Falla", key: "falla", width: 28 },
+      { header: "Taller", key: "taller", width: 22 },
+      { header: "Km al momento", key: "km", width: 14 },
+      { header: "Estado", key: "estado", width: 12 },
+      { header: "Presupuesto", key: "presupuesto", width: 14 },
+      { header: "Facturado", key: "facturado", width: 14 },
+    ];
+    otSheet.getRow(1).font = { bold: true };
+    for (const sol of item.solicitudes) {
+      const ot = sol.ordenTrabajo;
+      if (!ot) continue;
+      const tot = {
+        presupuesto: ot.items
+          .filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado)
+          .reduce((a, i) => a + i.importe, 0),
+        allPres: ot.items
+          .filter((i) => i.tipo === "PRESUPUESTO")
+          .reduce((a, i) => a + i.importe, 0),
+        facturado: ot.items
+          .filter((i) => i.tipo === "FACTURA" || i.tipo === "RENDICION")
+          .reduce((a, i) => a + i.importe, 0),
+      };
+      otSheet.addRow({
+        ot: ot.numeroOT,
+        fecha: isoDay(sol.createdAt),
+        falla: sol.falla,
+        taller: ot.tallerAsignado ?? ot.tallerProveedor?.razonSocial ?? "",
+        km: ot.kmAlMomento ?? "",
+        estado: ot.cerradaAt ? "Cerrada" : "Abierta",
+        presupuesto: tot.presupuesto || tot.allPres || "",
+        facturado: tot.facturado || "",
+      });
+    }
+
+    const safePatente = item.patente.replace(/[^\w.-]+/g, "_");
+    const filename = `planilla_${safePatente}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al exportar planilla de la unidad" });
+  }
+});
+
 router.post("/", ...write, async (req, res) => {
   try {
     const patente = String(req.body?.patente ?? "")
