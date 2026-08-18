@@ -12,20 +12,17 @@ import {
   currentAsignacion,
   formatDate,
   isInternalOps,
+  toInputDate,
   type Camioneta,
 } from "../../types";
 import { Download } from "../../components/icons";
 
-function toInputDate(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 10);
-}
-
 function daysUntil(iso: string | null | undefined): number | null {
   if (!iso) return null;
-  const d = new Date(iso);
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso));
+  const d = m
+    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    : new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -134,7 +131,7 @@ export function M6MantenimientoPage() {
     setBateria(toInputDate(selected.fechaCambioBateria));
     setOkMsg(null);
     setError(null);
-  }, [selected?.id]);
+  }, [selected?.id, selected?.km, selected?.fechaUltimoAceite, selected?.fechaCambioCorrea, selected?.fechaCambioNeumaticos, selected?.fechaCambioBateria]);
 
   async function guardar(e: FormEvent) {
     e.preventDefault();
@@ -366,6 +363,10 @@ export function M6MantenimientoPage() {
                         ?.replace(/_/g, " ")
                         .toLowerCase() ||
                       "—"}
+                  </p>
+                  <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                    Precargado el último registro (km y fechas). Confirmá o
+                    corregí.
                   </p>
                 </div>
                 <button

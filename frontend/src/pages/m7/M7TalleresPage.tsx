@@ -71,6 +71,14 @@ function roleActionHint(rol?: Role | null): string {
   }
 }
 
+type ClasificacionGasto = "MANO_OBRA" | "MATERIALES" | "OTRO";
+
+const CLASIFICACION_LABEL: Record<ClasificacionGasto, string> = {
+  MANO_OBRA: "Mano de obra",
+  MATERIALES: "Materiales / repuestos",
+  OTRO: "Otro (especificar)",
+};
+
 type OtItem = {
   id: string;
   tipo: "PRESUPUESTO" | "FACTURA" | "RENDICION";
@@ -80,6 +88,9 @@ type OtItem = {
   importe: number;
   observacion: string | null;
   archivo: string | null;
+  aprobado?: boolean;
+  clasificacion?: ClasificacionGasto | null;
+  clasificacionOtro?: string | null;
 };
 
 type OtFactura = {
@@ -338,7 +349,7 @@ export function M7TalleresPage() {
                     {ot.solicitud.camioneta.patente}
                     {ot.solicitud.chofer ? ` · ${ot.solicitud.chofer.nombre}` : ""}
                     {ot.kmAlMomento != null ? ` · ${ot.kmAlMomento.toLocaleString("es-AR")} km` : ""}
-                    {ot.urgente ? " · no puede circular" : ""}
+                    {ot.urgente ? " · urgente" : ""}
                   </div>
                   <h3 className="text-xl font-bold text-[var(--vl-heading)]">{ot.numeroOT}</h3>
                   <p className="text-sm text-[var(--vl-text)]">{ot.solicitud.falla}</p>
@@ -371,7 +382,7 @@ export function M7TalleresPage() {
                       <div className="mt-4 space-y-3">
                         <div className="grid grid-cols-2 gap-2">
                           <div className="rounded-lg border border-[var(--vl-card-border)] p-3">
-                            <div className="text-[11px] text-[var(--vl-text-muted)]">Presupuesto</div>
+                            <div className="text-[11px] text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
                             <div className="font-bold">{money(totP)}</div>
                           </div>
                           <div className="rounded-lg border border-[var(--vl-card-border)] p-3">
@@ -460,9 +471,31 @@ export function M7TalleresPage() {
                         )}
 
                         {isGastoStep(ot.currentStep) && (
-                          <button type="button" className="text-xs underline" onClick={() => void call(`/api/talleres/${ot.id}/sin-presupuesto`, { method: "POST", body: JSON.stringify({ sinPresupuesto: true }) })}>
-                            Continuar sin presupuesto
-                          </button>
+                          <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
+                            <p className="text-xs text-[var(--vl-text-muted)]">
+                              El presupuesto es optativo. Podés cargar uno o más
+                              y marcar cuál quedó aprobado (el resto queda en
+                              historial), o seguir sin presupuesto.
+                            </p>
+                            {ot.sinPresupuesto ? (
+                              <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                OT marcada sin presupuesto.
+                              </p>
+                            ) : (
+                              <button
+                                type="button"
+                                className="mt-2 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-medium"
+                                onClick={() =>
+                                  void call(`/api/talleres/${ot.id}/sin-presupuesto`, {
+                                    method: "POST",
+                                    body: JSON.stringify({ sinPresupuesto: true }),
+                                  })
+                                }
+                              >
+                                Continuar sin presupuesto
+                              </button>
+                            )}
+                          </div>
                         )}
 
                         {isGastoStep(ot.currentStep) && (
@@ -511,7 +544,7 @@ export function M7TalleresPage() {
 
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-xl border p-3">
-                      <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto</div>
+                      <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
                       <div className="font-bold">{money(totP)}</div>
                     </div>
                     <div className="rounded-xl border p-3">
@@ -575,10 +608,13 @@ function ItemsEditor({
   busy: boolean;
   onSaved: (ot: OrdenTrabajo) => void;
 }) {
+  const [clasificacion, setClasificacion] = useState<ClasificacionGasto | "">("");
+  const [clasificacionOtro, setClasificacionOtro] = useState("");
   const items = (ot.items ?? []).filter((i) =>
     tipo === "PRESUPUESTO" ? i.tipo === "PRESUPUESTO" : i.tipo !== "PRESUPUESTO"
   );
   const total = items.reduce((a, i) => a + i.importe, 0);
+  const gastoRequiereClasif = tipo === "FACTURA";
 
   async function add() {
     const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items`, {
@@ -589,10 +625,13 @@ function ItemsEditor({
         importe: Number(imp),
         observacion: obs,
         tallerProveedorId: tallerId || undefined,
+        clasificacion: clasificacion || undefined,
+        clasificacionOtro: clasificacion === "OTRO" ? clasificacionOtro : undefined,
       }),
     }, token);
     onSaved(updated);
     setDesc(""); setImp(""); setObs("");
+    setClasificacion(""); setClasificacionOtro("");
   }
 
   async function remove(id: string) {
@@ -600,17 +639,57 @@ function ItemsEditor({
     onSaved(updated);
   }
 
+  async function setAprobado(id: string, aprobado: boolean) {
+    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ aprobado }),
+    }, token);
+    onSaved(updated);
+  }
+
+  function clasifLabel(i: OtItem) {
+    if (!i.clasificacion) return "—";
+    if (i.clasificacion === "OTRO") return i.clasificacionOtro || "Otro";
+    return CLASIFICACION_LABEL[i.clasificacion];
+  }
+
+  const puedeSumar =
+    !!desc &&
+    !!imp &&
+    (!gastoRequiereClasif ||
+      (clasificacion && (clasificacion !== "OTRO" || clasificacionOtro.trim().length >= 2)));
+
   return (
     <div>
       <div className="mb-2 text-xs font-semibold">Ítems ({tipo.toLowerCase()}) — total {money(total)}</div>
       <table className="mb-2 w-full text-left text-xs">
-        <thead><tr className="text-[var(--vl-text-muted)]"><th>Concepto</th><th>Importe</th><th>Obs.</th><th /></tr></thead>
+        <thead>
+          <tr className="text-[var(--vl-text-muted)]">
+            <th>Concepto</th>
+            <th>Clasif.</th>
+            <th>Importe</th>
+            {tipo === "PRESUPUESTO" && <th>Aprobado</th>}
+            <th />
+          </tr>
+        </thead>
         <tbody>
           {items.map((i) => (
             <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
               <td className="py-1">{i.descripcion}<div className="text-[10px] text-[var(--vl-text-muted)]">{i.tallerNombre}</div></td>
+              <td>{clasifLabel(i)}</td>
               <td>{money(i.importe)}</td>
-              <td>{i.observacion}</td>
+              {tipo === "PRESUPUESTO" && (
+                <td>
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={!!i.aprobado}
+                      onChange={(e) => void setAprobado(i.id, e.target.checked)}
+                    />
+                    <span className="sr-only">Presupuesto aprobado</span>
+                  </label>
+                </td>
+              )}
               <td><button type="button" className="underline" onClick={() => void remove(i.id)}>Quitar</button></td>
             </tr>
           ))}
@@ -618,8 +697,8 @@ function ItemsEditor({
       </table>
       <div className="grid gap-2 sm:grid-cols-2">
         <select className="rounded-md border p-2 text-sm" value={tipo} onChange={(e) => setTipo(e.target.value as "PRESUPUESTO" | "FACTURA")}>
-          <option value="PRESUPUESTO">Presupuesto</option>
-          <option value="FACTURA">Factura</option>
+          <option value="PRESUPUESTO">Presupuesto (optativo)</option>
+          <option value="FACTURA">Factura / gasto</option>
         </select>
         <select className="rounded-md border p-2 text-sm" value={tallerId} onChange={(e) => setTallerId(e.target.value)}>
           <option value="">Proveedor…</option>
@@ -627,9 +706,27 @@ function ItemsEditor({
         </select>
         <input className="rounded-md border p-2 text-sm" placeholder="Descripción" value={desc} onChange={(e) => setDesc(e.target.value)} />
         <input className="rounded-md border p-2 text-sm" placeholder="Importe" type="number" value={imp} onChange={(e) => setImp(e.target.value)} />
+        <select
+          className="rounded-md border p-2 text-sm"
+          value={clasificacion}
+          onChange={(e) => setClasificacion(e.target.value as ClasificacionGasto | "")}
+        >
+          <option value="">{gastoRequiereClasif ? "Clasificación (obligatoria)" : "Clasificación (opcional)"}</option>
+          {(Object.keys(CLASIFICACION_LABEL) as ClasificacionGasto[]).map((k) => (
+            <option key={k} value={k}>{CLASIFICACION_LABEL[k]}</option>
+          ))}
+        </select>
+        {clasificacion === "OTRO" && (
+          <input
+            className="rounded-md border p-2 text-sm"
+            placeholder="Especificar (excepción)"
+            value={clasificacionOtro}
+            onChange={(e) => setClasificacionOtro(e.target.value)}
+          />
+        )}
         <input className="sm:col-span-2 rounded-md border p-2 text-sm" placeholder="Observación (proveedor / n° factura)" value={obs} onChange={(e) => setObs(e.target.value)} />
       </div>
-      <button type="button" disabled={busy || !desc || !imp} className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900" onClick={() => void add()}>
+      <button type="button" disabled={busy || !puedeSumar} className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900" onClick={() => void add()}>
         Sumar ítem
       </button>
     </div>
@@ -644,6 +741,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
   const [detalle, setDetalle] = useState("");
   const [kmDraft, setKmDraft] = useState("");
   const [habilitadaCircular, setHabilitadaCircular] = useState(true);
+  const [esUrgente, setEsUrgente] = useState<boolean | null>(null);
   const [sugerencia, setSugerencia] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -682,6 +780,10 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
       setErr(`El km no puede ser menor al registrado (${selected.km})`);
       return;
     }
+    if (habilitadaCircular && esUrgente === null) {
+      setErr("Indicá si la reparación es urgente");
+      return;
+    }
     setSaving(true);
     setErr(null);
     try {
@@ -693,6 +795,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
           detalle: detalle.trim(),
           km,
           habilitadaCircular,
+          urgente: !habilitadaCircular || esUrgente === true,
           solicitante: esChofer ? "CHOFER" : "ADMINISTRATIVO",
           sugerenciaChofer: sugerencia.trim() || undefined,
         }),
@@ -710,7 +813,8 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
     !!(esChofer ? detalle.trim() : falla === "Otros" ? detalle.trim() : falla) &&
     Number.isFinite(Number(kmDraft)) &&
     Number(kmDraft) >= 0 &&
-    (!selected || Number(kmDraft) >= selected.km);
+    (!selected || Number(kmDraft) >= selected.km) &&
+    (!habilitadaCircular || esUrgente !== null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
@@ -777,10 +881,53 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
         <fieldset className="mb-3">
           <legend className="text-xs text-[var(--vl-text-muted)]">¿La unidad puede circular?</legend>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setHabilitadaCircular(true)} className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${habilitadaCircular ? "border-emerald-700 bg-emerald-600 text-white dark:border-emerald-400 dark:bg-emerald-700" : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"}`}>Sí</button>
-            <button type="button" onClick={() => setHabilitadaCircular(false)} className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${!habilitadaCircular ? "border-red-700 bg-red-600 text-white dark:border-red-400 dark:bg-red-700" : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"}`}>No (urgente)</button>
+            <button
+              type="button"
+              onClick={() => {
+                setHabilitadaCircular(true);
+                setEsUrgente(null);
+              }}
+              className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${habilitadaCircular ? "border-emerald-700 bg-emerald-600 text-white dark:border-emerald-400 dark:bg-emerald-700" : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"}`}
+            >
+              Sí
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setHabilitadaCircular(false);
+                setEsUrgente(true);
+              }}
+              className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${!habilitadaCircular ? "border-red-700 bg-red-600 text-white dark:border-red-400 dark:bg-red-700" : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"}`}
+            >
+              No
+            </button>
           </div>
         </fieldset>
+        {habilitadaCircular ? (
+          <fieldset className="mb-3">
+            <legend className="text-xs text-[var(--vl-text-muted)]">¿Es urgente?</legend>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setEsUrgente(true)}
+                className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${esUrgente === true ? "border-amber-700 bg-amber-600 text-white" : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"}`}
+              >
+                Sí, urgente
+              </button>
+              <button
+                type="button"
+                onClick={() => setEsUrgente(false)}
+                className={`min-h-12 rounded-xl border-2 text-sm font-semibold ${esUrgente === false ? "border-slate-800 bg-slate-800 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900" : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"}`}
+              >
+                No
+              </button>
+            </div>
+          </fieldset>
+        ) : (
+          <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+            Urgencia máxima: la unidad no puede circular.
+          </p>
+        )}
         <textarea rows={2} className="mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" placeholder="Sugerencia de taller (opcional)" value={sugerencia} onChange={(e) => setSugerencia(e.target.value)} />
         {err && <p className="mb-2 text-sm text-red-600">{err}</p>}
         <button type="button" disabled={saving || !puedeEnviar} onClick={() => void submit()} className="min-h-11 w-full rounded-md bg-slate-900 text-sm font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900">

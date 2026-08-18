@@ -176,8 +176,9 @@ export function DocumentacionPage() {
         Documentación
       </h1>
       <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-        DNI, licencia, VTV, seguros y habilitaciones de unidad, chofer y cliente.
-        Podés subir foto desde el celular.
+        {ops
+          ? "Chofer: DNI y licencia. Unidad: VTV, SENASA, seguro y habilitación. La documentación de empleados de empresas tercerizadas la carga administración (Pablo/Silvina)."
+          : "Podés cargar tu DNI y licencia, y los documentos de tu unidad. La ficha de otros choferes la carga Vettore."}
       </p>
 
       <div className="mt-4 flex gap-2">
@@ -201,7 +202,7 @@ export function DocumentacionPage() {
               : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
           }`}
         >
-          Choferes
+          {ops ? "Choferes" : "Mi DNI / licencia"}
         </button>
       </div>
 
@@ -446,7 +447,8 @@ export function DocumentacionPage() {
               })
             )}
           </div>
-          {selectedChofer && (
+          {selectedChofer &&
+            (ops || selectedChofer === user?.choferId) && (
             <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
               <DocumentUpload choferId={selectedChofer} />
             </div>

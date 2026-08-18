@@ -458,6 +458,12 @@ enum TipoOtItem {
   RENDICION
 }
 
+enum ClasificacionGasto {
+  MANO_OBRA
+  MATERIALES
+  OTRO
+}
+
 enum EstadoTallerMovimiento {
   PENDIENTE
   PAGADO
@@ -465,17 +471,20 @@ enum EstadoTallerMovimiento {
 
 /// Ítems de presupuesto/factura de una OT (varios proveedores en la misma orden).
 model OtItem {
-  id                String     @id @default(cuid())
+  id                String              @id @default(cuid())
   otId              String
   tipo              TipoOtItem
   tallerProveedorId String?
-  tallerNombre      String     @default("")
+  tallerNombre      String              @default("")
   descripcion       String
   importe           Float
   observacion       String?
   archivo           String?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  aprobado          Boolean             @default(false)
+  clasificacion     ClasificacionGasto?
+  clasificacionOtro String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   ot              OrdenTrabajo     @relation(fields: [otId], references: [id], onDelete: Cascade)
   tallerProveedor TallerProveedor? @relation(fields: [tallerProveedorId], references: [id])

@@ -34,6 +34,27 @@ function getTransporter(): Transporter | null {
 }
 
 /**
+ * Email de OT: campanita (avisoInterno) siempre corre.
+ * El envío SMTP queda pausado hasta que Patricio entregue las casillas
+ * y se setee OT_EMAIL_ENABLED=true (más SMTP_*).
+ */
+export function isOtEmailEnabled(): boolean {
+  return process.env.OT_EMAIL_ENABLED === "true" && isSmtpConfigured();
+}
+
+export async function sendOtMail(
+  payload: MailPayload
+): Promise<{ ok: true; simulated: boolean } | { ok: false; error: string }> {
+  if (!isOtEmailEnabled()) {
+    console.log(
+      `[mail:ot-pausado] Esperando OT_EMAIL_ENABLED + SMTP. Destino previsto: ${payload.to} | ${payload.subject}`
+    );
+    return { ok: true, simulated: true };
+  }
+  return sendMail(payload);
+}
+
+/**
  * Envía email real si hay SMTP; si no, simula (útil en local / demo).
  */
 export async function sendMail(

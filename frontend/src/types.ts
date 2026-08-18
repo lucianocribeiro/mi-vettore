@@ -128,6 +128,19 @@ export const TIPOS_DOCUMENTO_CON_VENCIMIENTO: TipoDocumento[] = [
   "SEGURO",
 ];
 
+export const TIPOS_DOCUMENTO_CHOFER: TipoDocumento[] = [
+  "DNI_FRENTE",
+  "DNI_DORSO",
+  "LICENCIA",
+];
+
+export const TIPOS_DOCUMENTO_UNIDAD: TipoDocumento[] = [
+  "VTV",
+  "SENASA",
+  "SEGURO",
+  "HABILITACION_MANIPULACION",
+];
+
 export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
   DNI_FRENTE: "DNI frente",
   DNI_DORSO: "DNI dorso",
@@ -313,7 +326,30 @@ export function currentChoferAsignacion(chofer: Chofer): AsignacionFlota | null 
 
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.\d+)?Z)?$/.exec(
+    String(iso)
+  );
+  if (dateOnly) {
+    return new Date(
+      Number(dateOnly[1]),
+      Number(dateOnly[2]) - 1,
+      Number(dateOnly[3])
+    ).toLocaleDateString("es-AR");
+  }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("es-AR");
+}
+
+/** Valor para <input type="date"> sin corrimiento UTC. */
+export function toInputDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso));
+  if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]}`;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }

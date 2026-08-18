@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendExcel } from "../lib/excel-export.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
+import { parseDateOnly } from "../lib/date-only.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -19,9 +20,7 @@ const includeAsignaciones = {
 };
 
 function parseDate(value: unknown): Date | null {
-  if (!value) return null;
-  const d = new Date(String(value));
-  return Number.isNaN(d.getTime()) ? null : d;
+  return parseDateOnly(value);
 }
 
 router.get("/", authenticate, async (req, res) => {

@@ -10,13 +10,14 @@ import {
   Prisma,
   SolicitanteTaller,
   TipoPedido,
+  type ClasificacionGasto,
   type EstadoTallerMovimiento,
   type Role,
   type TipoOtItem,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { choferPuedeEditarCamioneta } from "../lib/flota.js";
-import { sendMail } from "../lib/mailer.js";
+import { sendOtMail } from "../lib/mailer.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
 import { ensureUploadDirs } from "../lib/uploads.js";
 import { isInternalOpsRole } from "../lib/roles.js";
@@ -37,6 +38,7 @@ import {
   canActOnStepAsOps,
   parseOverrideComentario,
 } from "../lib/ot-override.js";
+import { applyKmUpdate } from "../lib/km.js";
 import {
   hayIncrementoSobrePresupuesto,
   totalFacturado,
@@ -50,6 +52,55 @@ const TIPOS_OT_ITEM = new Set<TipoOtItem>([
   "FACTURA",
   "RENDICION",
 ]);
+
+const CLASIFICACIONES = new Set<ClasificacionGasto>([
+  "MANO_OBRA",
+  "MATERIALES",
+  "OTRO",
+]);
+
+function parseClasificacion(body: unknown): {
+  clasificacion: ClasificacionGasto | null;
+  clasificacionOtro: string | null;
+  error?: string;
+} {
+  const raw = String(
+    (body as { clasificacion?: unknown } | null)?.clasificacion ?? ""
+  )
+    .trim()
+    .toUpperCase();
+  if (!raw) return { clasificacion: null, clasificacionOtro: null };
+  if (!CLASIFICACIONES.has(raw as ClasificacionGasto)) {
+    return {
+      clasificacion: null,
+      clasificacionOtro: null,
+      error: "Clasificación inválida",
+    };
+  }
+  const clasificacion = raw as ClasificacionGasto;
+  const otro = String(
+    (body as { clasificacionOtro?: unknown } | null)?.clasificacionOtro ?? ""
+  ).trim();
+  if (clasificacion === "OTRO" && otro.length < 2) {
+    return {
+      clasificacion: null,
+      clasificacionOtro: null,
+      error: "Especificá la clasificación (excepción)",
+    };
+  }
+  return {
+    clasificacion,
+    clasificacionOtro: clasificacion === "OTRO" ? otro : null,
+  };
+}
+
+function otNotifyEmails(userEmails: string[]): string[] {
+  const extra = String(process.env.OT_NOTIFY_EMAILS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [...new Set([...userEmails, ...extra])];
+}
 
 const uploadsRoot = ensureUploadDirs("presupuestos", "facturas");
 const presupuestosDir = path.join(uploadsRoot, "presupuestos");
@@ -152,7 +203,7 @@ type OtLoaded = Prisma.OrdenTrabajoGetPayload<{
 }>;
 
 function otTotales(ot: {
-  items?: { tipo: TipoOtItem; importe: number }[];
+  items?: { tipo: TipoOtItem; importe: number; aprobado?: boolean }[];
   presupuestos?: { monto: number }[];
   valorAprobado?: number | null;
   montoAutorizado?: number | null;
@@ -349,7 +400,8 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       { header: "Taller", key: "taller", width: 22 },
       { header: "Chofer", key: "chofer", width: 22 },
       { header: "Empresa", key: "empresa", width: 24 },
-      { header: "Valor aprobado", key: "valor", width: 14 },
+      { header: "Presupuesto", key: "presupuesto", width: 14 },
+      { header: "Facturado", key: "facturado", width: 14 },
       { header: "Creada", key: "creada", width: 12 },
       { header: "Cerrada", key: "cerrada", width: 12 },
     ];
@@ -359,6 +411,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       const cam = ot.solicitud.camioneta;
       const asig = cam.asignaciones?.[0];
       const stepLabel = OT_STEPS[ot.currentStep]?.label ?? String(ot.currentStep);
+      const tot = otTotales(ot);
       sheet.addRow({
         ot: ot.numeroOT,
         patente: cam.patente,
@@ -370,7 +423,8 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
         taller: ot.tallerAsignado ?? "",
         chofer: ot.solicitud.chofer?.nombre ?? asig?.chofer?.nombre ?? "",
         empresa: asig?.empresa?.nombre ?? "",
-        valor: ot.valorFinal ?? ot.valorAprobado ?? ot.montoAutorizado ?? "",
+        presupuesto: tot.presupuesto || "",
+        facturado: tot.facturado || "",
         creada: ot.createdAt.toISOString().slice(0, 10),
         cerrada: ot.cerradaAt ? ot.cerradaAt.toISOString().slice(0, 10) : "",
       });
@@ -428,21 +482,8 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
           tipo: i.tipo,
         })
       );
-      const sumFacturaItems = facturaItems.reduce((a, i) => a + i.importe, 0);
-      const sumFacturasAdj = ot.facturas.reduce(
-        (a, f) => a + (f.monto ?? 0),
-        0
-      );
-      const sumMovs = ot.movimientos.reduce((a, m) => a + m.montoFacturado, 0);
-      const facturado =
-        ot.valorFinal ??
-        (sumFacturaItems > 0
-          ? sumFacturaItems
-          : sumFacturasAdj > 0
-            ? sumFacturasAdj
-            : sumMovs > 0
-              ? sumMovs
-              : ot.valorAprobado ?? ot.montoAutorizado ?? null);
+      const tot = otTotales(ot);
+      const facturado = tot.facturado > 0 ? tot.facturado : null;
 
       const talleres = [
         ot.tallerProveedor?.razonSocial,
@@ -565,6 +606,19 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
     }
     const kmReportado = Math.floor(kmRaw);
 
+    if (
+      habilitadaCircular &&
+      req.body?.urgente === undefined &&
+      req.body?.esUrgente === undefined
+    ) {
+      res.status(400).json({
+        error: "Si la unidad puede circular, indicá si la reparación es urgente",
+      });
+      return;
+    }
+    const urgente =
+      !habilitadaCircular || Boolean(req.body?.urgente ?? req.body?.esUrgente);
+
     const camioneta = await prisma.camioneta.findUnique({
       where: { id: camionetaId },
       include: {
@@ -635,9 +689,16 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
       }
 
       if (kmReportado > camioneta.km) {
+        await applyKmUpdate(tx, {
+          camionetaId,
+          existingKm: camioneta.km,
+          nextKm: kmReportado,
+          userId: req.user!.id,
+          allowDecrease: false,
+        });
         await tx.camioneta.update({
           where: { id: camionetaId },
-          data: { km: kmReportado },
+          data: { km: kmReportado, kmActualizadoAt: new Date() },
         });
       }
 
@@ -645,7 +706,7 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
         data: {
           solicitudTallerId: solicitud.id,
           numeroOT,
-          urgente: !habilitadaCircular,
+          urgente,
           kmAlMomento: kmReportado,
           sugerenciaChofer: req.body?.sugerenciaChofer
             ? String(req.body.sugerenciaChofer).trim() || null
@@ -664,7 +725,9 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
       : `Nueva OT ${ot.numeroOT}`;
     const mensaje = fuera
       ? `Unidad ${patente} no puede circular — ${falla}. Camino urgente (rendición 24hs).`
-      : `Solicitud nueva: ${patente} — ${falla}. Puede circular. Facu asigna taller.`;
+      : urgente
+        ? `Solicitud urgente: ${patente} — ${falla}. Puede circular. Facu asigna taller.`
+        : `Solicitud nueva: ${patente} — ${falla}. Puede circular. Facu asigna taller.`;
     await prisma.avisoInterno.createMany({
       data: NOTIF_OPS_ROLES.map((rolDestino) => ({
         rolDestino,
@@ -676,9 +739,9 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
     const ops = await prisma.usuario.findMany({
       where: { rol: { in: NOTIF_OPS_ROLES }, estado: "ACTIVO" },
     });
-    for (const u of ops) {
-      await sendMail({
-        to: u.email,
+    for (const to of otNotifyEmails(ops.map((u) => u.email))) {
+      await sendOtMail({
+        to,
         subject: `[Vettore] ${titulo}`,
         text: `${mensaje}\nOT: ${ot.numeroOT}.\nRevisá la app.`,
       });
@@ -723,7 +786,7 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
               otId: ot.id,
             },
           });
-          await sendMail({
+          await sendOtMail({
             to: u.email,
             subject: `[Vettore] ${ot.numeroOT} — unidad a taller`,
             text: `${circulacionMsg}\nFalla: ${falla}\nOT: ${ot.numeroOT}.`,
@@ -1420,9 +1483,9 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
     const cierreUsuarios = await prisma.usuario.findMany({
       where: { rol: { in: CIERRE_AVISO_ROLES }, estado: "ACTIVO" },
     });
-    for (const u of cierreUsuarios) {
-      await sendMail({
-        to: u.email,
+    for (const to of otNotifyEmails(cierreUsuarios.map((u) => u.email))) {
+      await sendOtMail({
+        to,
         subject: `[Vettore] ${ot.numeroOT} — pago listo para procesar`,
         text: mensaje,
       });
@@ -1541,6 +1604,20 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "Descripción e importe son obligatorios" });
       return;
     }
+    const clasif = parseClasificacion(req.body);
+    if (clasif.error) {
+      res.status(400).json({ error: clasif.error });
+      return;
+    }
+    if (
+      (tipoRaw === "FACTURA" || tipoRaw === "RENDICION") &&
+      !clasif.clasificacion
+    ) {
+      res.status(400).json({
+        error: "Clasificá el gasto (mano de obra, materiales u otro)",
+      });
+      return;
+    }
     const tallerProveedorId = req.body?.tallerProveedorId
       ? String(req.body.tallerProveedorId)
       : null;
@@ -1560,6 +1637,8 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
         descripcion,
         importe,
         observacion: String(req.body?.observacion ?? "").trim() || null,
+        clasificacion: clasif.clasificacion,
+        clasificacionOtro: clasif.clasificacionOtro,
       },
     });
     res.json(await reloadOt(ot.id, req.user!.id, rol));
@@ -1607,6 +1686,42 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
     }
     if (req.body?.observacion !== undefined) {
       data.observacion = String(req.body.observacion).trim() || null;
+    }
+    if (req.body?.clasificacion !== undefined) {
+      const clasif = parseClasificacion(req.body);
+      if (clasif.error) {
+        res.status(400).json({ error: clasif.error });
+        return;
+      }
+      data.clasificacion = clasif.clasificacion;
+      data.clasificacionOtro = clasif.clasificacionOtro;
+    }
+    if (req.body?.aprobado !== undefined) {
+      const item = await prisma.otItem.findFirst({
+        where: { id: req.params.itemId, otId: ot.id },
+      });
+      if (!item) {
+        res.status(404).json({ error: "Ítem no encontrado" });
+        return;
+      }
+      if (item.tipo !== "PRESUPUESTO") {
+        res.status(400).json({
+          error: "Solo se marca como aprobado un ítem de presupuesto",
+        });
+        return;
+      }
+      const aprobado = Boolean(req.body.aprobado);
+      if (aprobado) {
+        await prisma.otItem.updateMany({
+          where: { otId: ot.id, tipo: "PRESUPUESTO" },
+          data: { aprobado: false },
+        });
+      }
+      data.aprobado = aprobado;
+    }
+    if (Object.keys(data).length === 0) {
+      res.status(400).json({ error: "Nada para actualizar" });
+      return;
     }
     await prisma.otItem.update({
       where: { id: req.params.itemId },

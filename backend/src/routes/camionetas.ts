@@ -14,59 +14,12 @@ import {
   kmAnomaliaMaxDelta,
   parseCapacidadValor,
 } from "../lib/camioneta-fields.js";
-import {
-  canAdminCorregir,
-  registrarCorreccionAdmin,
-} from "../lib/correccion-admin.js";
+import { canAdminCorregir } from "../lib/correccion-admin.js";
+import { parseDateOnly } from "../lib/date-only.js";
+import { applyKmUpdate } from "../lib/km.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
-
-async function applyKmUpdate(opts: {
-  camionetaId: string;
-  existingKm: number;
-  nextKm: number;
-  userId: string | null;
-  allowDecrease: boolean;
-  motivo?: string | null;
-}): Promise<
-  | { ok: true; anomalia: boolean; delta: number }
-  | { ok: false; status: number; error: string }
-> {
-  const next = opts.nextKm;
-  if (next < opts.existingKm && !opts.allowDecrease) {
-    return {
-      ok: false,
-      status: 400,
-      error: `El kilometraje no puede ser menor al actual (${opts.existingKm} km)`,
-    };
-  }
-  if (next < opts.existingKm && opts.allowDecrease) {
-    const reg = await registrarCorreccionAdmin({
-      userId: opts.userId!,
-      entidad: "Camioneta",
-      entidadId: opts.camionetaId,
-      campo: "km",
-      valorAnterior: String(opts.existingKm),
-      valorNuevo: String(next),
-      motivo: opts.motivo,
-    });
-    if (!reg.ok) return reg;
-  }
-  const delta = next - opts.existingKm;
-  const anomalia = delta > kmAnomaliaMaxDelta();
-  await prisma.kmRegistro.create({
-    data: {
-      camionetaId: opts.camionetaId,
-      kmAnterior: opts.existingKm,
-      kmNuevo: next,
-      delta,
-      anomalia,
-      userId: opts.userId,
-    },
-  });
-  return { ok: true, anomalia, delta };
-}
 
 const includeAsignaciones = {
   tipoServicio: true,
@@ -80,9 +33,7 @@ const includeAsignaciones = {
 };
 
 function parseDate(value: unknown): Date | null {
-  if (!value) return null;
-  const d = new Date(String(value));
-  return Number.isNaN(d.getTime()) ? null : d;
+  return parseDateOnly(value);
 }
 
 function parseTipoTransporte(raw: unknown): TipoTransporte | null | undefined {
@@ -475,7 +426,7 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
       }
       const next = Math.floor(km);
       const allowDecrease = canAdminCorregir(req.user?.rol);
-      const applied = await applyKmUpdate({
+      const applied = await applyKmUpdate(prisma, {
         camionetaId: existing.id,
         existingKm: existing.km,
         nextKm: next,
@@ -586,7 +537,7 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
       }
       const next = Math.floor(km);
       const allowDecrease = canAdminCorregir(req.user!.rol);
-      const applied = await applyKmUpdate({
+      const applied = await applyKmUpdate(prisma, {
         camionetaId,
         existingKm: existing.km,
         nextKm: next,

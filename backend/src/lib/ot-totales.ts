@@ -7,27 +7,47 @@ export const INCREMENTO_MARGEN_ABS = 1000;
 const TIPOS_PRESUPUESTO: TipoOtItem[] = ["PRESUPUESTO"];
 const TIPOS_FACTURADO: TipoOtItem[] = ["FACTURA", "RENDICION"];
 
+export function roundMoney(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100) / 100;
+}
+
 export function sumItems(
   items: Pick<OtItem, "tipo" | "importe">[],
   tipos: TipoOtItem[]
 ): number {
-  return items
-    .filter((i) => tipos.includes(i.tipo))
-    .reduce((acc, i) => acc + (Number.isFinite(i.importe) ? i.importe : 0), 0);
+  return roundMoney(
+    items
+      .filter((i) => tipos.includes(i.tipo))
+      .reduce((acc, i) => acc + (Number.isFinite(i.importe) ? i.importe : 0), 0)
+  );
 }
 
+type ItemTotales = Pick<OtItem, "tipo" | "importe"> & { aprobado?: boolean };
+
 export function totalPresupuesto(opts: {
-  items: Pick<OtItem, "tipo" | "importe">[];
+  items: ItemTotales[];
   presupuestos?: Pick<PresupuestoOt, "monto">[];
   valorAprobado?: number | null;
   montoAutorizado?: number | null;
 }): number {
-  const fromItems = sumItems(opts.items, TIPOS_PRESUPUESTO);
+  const items = opts.items ?? [];
+  const approved = items.filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado);
+  if (approved.length > 0) {
+    return roundMoney(
+      approved.reduce(
+        (acc, i) => acc + (Number.isFinite(i.importe) ? i.importe : 0),
+        0
+      )
+    );
+  }
+  const fromItems = sumItems(items, TIPOS_PRESUPUESTO);
   if (fromItems > 0) return fromItems;
-  const fromPres =
-    opts.presupuestos?.reduce((a, p) => a + (p.monto || 0), 0) ?? 0;
+  const fromPres = roundMoney(
+    opts.presupuestos?.reduce((a, p) => a + (p.monto || 0), 0) ?? 0
+  );
   if (fromPres > 0) return fromPres;
-  return opts.valorAprobado ?? opts.montoAutorizado ?? 0;
+  return roundMoney(opts.valorAprobado ?? opts.montoAutorizado ?? 0);
 }
 
 export function totalFacturado(opts: {
@@ -36,7 +56,7 @@ export function totalFacturado(opts: {
 }): number {
   const fromItems = sumItems(opts.items, TIPOS_FACTURADO);
   if (fromItems > 0) return fromItems;
-  return opts.valorFinal ?? 0;
+  return roundMoney(opts.valorFinal ?? 0);
 }
 
 export function hayIncrementoSobrePresupuesto(

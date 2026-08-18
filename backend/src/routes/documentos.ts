@@ -18,6 +18,7 @@ import {
   canAdminCorregir,
   registrarCorreccionAdmin,
 } from "../lib/correccion-admin.js";
+import { parseDateOnly } from "../lib/date-only.js";
 
 const router = Router();
 const upload = multer({
@@ -40,6 +41,19 @@ const CON_VENCIMIENTO = new Set<TipoDocumento>([
   TipoDocumento.SEGURO,
 ]);
 
+const TIPOS_CHOFER = new Set<TipoDocumento>([
+  TipoDocumento.DNI_FRENTE,
+  TipoDocumento.DNI_DORSO,
+  TipoDocumento.LICENCIA,
+]);
+
+const TIPOS_UNIDAD = new Set<TipoDocumento>([
+  TipoDocumento.VTV,
+  TipoDocumento.SENASA,
+  TipoDocumento.SEGURO,
+  TipoDocumento.HABILITACION_MANIPULACION,
+]);
+
 function parseTipo(raw: unknown): TipoDocumento | null {
   const s = String(raw ?? "").toUpperCase();
   if (!(s in TipoDocumento)) return null;
@@ -49,6 +63,8 @@ function parseTipo(raw: unknown): TipoDocumento | null {
 router.get("/meta", authenticate, (_req, res) => {
   res.json({
     tipos: Object.values(TipoDocumento),
+    tiposChofer: [...TIPOS_CHOFER],
+    tiposUnidad: [...TIPOS_UNIDAD],
     conVencimiento: [...CON_VENCIMIENTO],
     storageConfigured: isSupabaseStorageConfigured(),
   });
@@ -145,6 +161,19 @@ router.post(
           .json({ error: "Un documento es de chofer o de unidad, no ambos" });
         return;
       }
+      if (choferId && !TIPOS_CHOFER.has(tipo)) {
+        res.status(400).json({
+          error: "En chofer solo se carga DNI (frente/dorso) o licencia",
+        });
+        return;
+      }
+      if (camionetaId && !TIPOS_UNIDAD.has(tipo)) {
+        res.status(400).json({
+          error:
+            "En unidad solo se carga VTV, SENASA, seguro o habilitación/manipulación",
+        });
+        return;
+      }
 
       const rol = req.user!.rol;
       const isMaster = MASTER_WRITE_ROLES.includes(
@@ -184,8 +213,8 @@ router.post(
           res.status(400).json({ error: "Vencimiento obligatorio para este tipo" });
           return;
         }
-        vencimiento = new Date(String(req.body.vencimiento));
-        if (Number.isNaN(vencimiento.getTime())) {
+        vencimiento = parseDateOnly(req.body.vencimiento);
+        if (!vencimiento) {
           res.status(400).json({ error: "Vencimiento inválido" });
           return;
         }

@@ -3,7 +3,9 @@ import { useAuth } from "../auth/AuthContext";
 import { apiFetch, ApiError } from "../lib/api";
 import {
   formatDate,
+  TIPOS_DOCUMENTO_CHOFER,
   TIPOS_DOCUMENTO_CON_VENCIMIENTO,
+  TIPOS_DOCUMENTO_UNIDAD,
   TIPO_DOCUMENTO_LABEL,
   type DocumentoEntidad,
   type EstadoValidacionDoc,
@@ -14,8 +16,6 @@ type Props = {
   choferId?: string;
   camionetaId?: string;
 };
-
-const ALL_TIPOS = Object.keys(TIPO_DOCUMENTO_LABEL) as TipoDocumento[];
 
 async function compressImageIfNeeded(file: File): Promise<File | Blob> {
   if (!file.type.startsWith("image/")) return file;
@@ -48,7 +48,12 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [tipo, setTipo] = useState<TipoDocumento>("VTV");
+  const [tipo, setTipo] = useState<TipoDocumento>(
+    choferId ? "DNI_FRENTE" : "VTV"
+  );
+  const [tipos, setTipos] = useState<TipoDocumento[]>(
+    choferId ? TIPOS_DOCUMENTO_CHOFER : TIPOS_DOCUMENTO_UNIDAD
+  );
   const [vencimiento, setVencimiento] = useState("");
   const [conVencimiento, setConVencimiento] = useState<TipoDocumento[]>(
     TIPOS_DOCUMENTO_CON_VENCIMIENTO
@@ -66,13 +71,26 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
         : `camionetaId=${encodeURIComponent(camionetaId!)}`;
       const [items, meta] = await Promise.all([
         apiFetch<DocumentoEntidad[]>(`/api/documentos?${qs}`, {}, token),
-        apiFetch<{ tipos: TipoDocumento[]; conVencimiento: TipoDocumento[] }>(
+        apiFetch<{
+          tiposChofer?: TipoDocumento[];
+          tiposUnidad?: TipoDocumento[];
+          conVencimiento: TipoDocumento[];
+        }>(
           "/api/documentos/meta",
           {},
           token
         ).catch(() => null),
       ]);
       setDocs(items);
+      const nextTipos = choferId
+        ? meta?.tiposChofer?.length
+          ? meta.tiposChofer
+          : TIPOS_DOCUMENTO_CHOFER
+        : meta?.tiposUnidad?.length
+          ? meta.tiposUnidad
+          : TIPOS_DOCUMENTO_UNIDAD;
+      setTipos(nextTipos);
+      setTipo((prev) => (nextTipos.includes(prev) ? prev : nextTipos[0]));
       if (meta?.conVencimiento?.length) setConVencimiento(meta.conVencimiento);
     } catch (err) {
       setError(
@@ -161,8 +179,13 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
   return (
     <div className="space-y-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
-        Documentación
+        {choferId ? "Documentos del chofer" : "Documentos de la unidad"}
       </div>
+      <p className="text-[11px] text-[var(--vl-text-muted)]">
+        {choferId
+          ? "Solo DNI (frente/dorso) y licencia de conducir."
+          : "Solo VTV, SENASA, seguro y habilitación / manipulación."}
+      </p>
 
       <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
         <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
@@ -172,7 +195,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
             onChange={(e) => setTipo(e.target.value as TipoDocumento)}
             className="mt-1 min-h-10 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-sm text-[var(--vl-text)]"
           >
-            {ALL_TIPOS.map((t) => (
+            {tipos.map((t) => (
               <option key={t} value={t}>
                 {TIPO_DOCUMENTO_LABEL[t]}
               </option>
