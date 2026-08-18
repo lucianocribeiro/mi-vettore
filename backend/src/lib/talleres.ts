@@ -1,4 +1,5 @@
 import { Role } from "@prisma/client";
+import { isInternalOpsRole } from "./roles.js";
 
 /** Fecha de aplicación del formulario de cambios M2: hoy+1; viernes → lunes. */
 export function fechaAplicacionCambio(from = new Date()): Date {
@@ -53,7 +54,14 @@ export const OT_STEPS = [
   {
     key: 4,
     label: "Incremento",
-    ownerRoles: [Role.PATRICIO],
+    ownerRoles: [
+      Role.PABLO,
+      Role.SILVINA,
+      Role.FACU,
+      Role.PATRICIO,
+      Role.JULIETA,
+      Role.CARLA,
+    ],
   },
   {
     key: 5,
@@ -92,7 +100,7 @@ export function canAdvanceFromStep(rol: Role, currentStep: number): boolean {
   if (currentStep === 0) return canCreateSolicitud(rol);
   if (currentStep === 1) return rol === Role.FACU;
   if (currentStep === 2 || currentStep === 3) return rol === Role.SILVINA;
-  if (currentStep === 4) return rol === Role.PATRICIO;
+  if (currentStep === 4) return isInternalOpsRole(rol);
   if (currentStep === 5) return false;
   return false;
 }

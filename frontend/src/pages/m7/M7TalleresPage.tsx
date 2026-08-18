@@ -34,8 +34,8 @@ const OT_STEPS = [
   { label: "Solicitud", owner: null as string | null, detail: "El chofer reporta patente, problema y si puede circular." },
   { label: "Asignación", owner: "Facu", detail: "Facu evalúa la falla, asigna taller y decide si inhabilitar." },
   { label: "Presupuesto", owner: "Silvina", detail: "Cargá ítems de presupuesto (optativo). Después se factura en el paso siguiente." },
-  { label: "Facturación", owner: "Silvina", detail: "Marcá qué ítems del presupuesto se facturan y adjuntá la factura. Si hay incremento, pasa a Patricio." },
-  { label: "Incremento", owner: "Patricio", detail: "Solo si el taller facturó por encima del presupuesto." },
+  { label: "Facturación", owner: "Silvina", detail: "Marcá en el checklist qué ítems del presupuesto se facturan. El PDF es optativo." },
+  { label: "Incremento", owner: "Ops", detail: "Solo si el gasto supera el presupuesto. Cualquier usuario interno puede confirmar y seguir." },
   { label: "Cierre / pago", owner: "Silvina / Carla", detail: "Cierre, reporte de salida y cuenta corriente del proveedor." },
 ] as const;
 
@@ -58,11 +58,11 @@ function roleActionHint(rol?: Role | null): string {
     case "FACU":
       return "Tu rol: asignar taller e inhabilitar si hace falta.";
     case "SILVINA":
-      return "Tu rol: primero presupuesto, después facturación. En factura marcás qué ítems se cobran.";
+      return "Tu rol: primero presupuesto, después facturación con el checklist. El incremento lo puede confirmar cualquiera de ops.";
     case "PATRICIO":
-      return "Tu rol: aprobar solo el incremento sobre presupuesto.";
+      return "Tu rol: seguimiento de dirección. El incremento lo puede confirmar cualquier usuario interno.";
     case "JULIETA":
-      return "Tu rol: seguimiento de dirección. El incremento lo aprueba Patricio.";
+      return "Tu rol: seguimiento de dirección. El incremento lo puede confirmar cualquier usuario interno.";
     case "PABLO":
       return "Tu rol: quedás notificado al crear la OT (unidad fuera de circulación).";
     case "CARLA":
@@ -147,7 +147,7 @@ function canAdvanceFromStep(rol: Role | undefined, step: number) {
   if (step === 0) return canCreateSolicitud(rol);
   if (step === 1) return rol === "FACU";
   if (step === 2 || step === 3) return rol === "SILVINA";
-  if (step === 4) return rol === "PATRICIO";
+  if (step === 4) return isInternalOps(rol);
   return false;
 }
 
@@ -513,8 +513,11 @@ export function M7TalleresPage() {
 
                         {isFacturaStep(ot.currentStep) && (
                           <div>
+                            <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
+                              Con el checklist ya queda facturado. El PDF es optativo.
+                            </p>
                             <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed text-sm">
-                              <Upload size={16} /> {facturaFile ? facturaFile.name : "Adjuntar factura (PDF o foto)"}
+                              <Upload size={16} /> {facturaFile ? facturaFile.name : "Adjuntar PDF (optativo)"}
                               <input type="file" accept="application/pdf,image/*" className="sr-only" onChange={(e) => setFacturaFile(e.target.files?.[0] ?? null)} />
                             </label>
                             <button type="button" disabled={!facturaFile || busy} className="mt-2 rounded-md bg-[#1e4080] px-3 py-1.5 text-xs text-white" onClick={() => {
@@ -523,20 +526,20 @@ export function M7TalleresPage() {
                               if (itemTallerId) fd.append("tallerProveedorId", itemTallerId);
                               void call(`/api/talleres/${ot.id}/factura`, { method: "POST", body: fd });
                               setFacturaFile(null);
-                            }}>Subir factura</button>
+                            }}>Subir archivo</button>
                             {(ot.facturas ?? []).map((f) => (
                               <div key={f.id} className="mt-1 text-xs">{f.tallerNombre || "Factura"} · {f.archivo}</div>
                             ))}
-                            <textarea className="mt-2 w-full rounded-md border p-2 text-sm" rows={2} placeholder="Justificación si el taller cobró de más" value={justif} onChange={(e) => setJustif(e.target.value)} />
+                            <textarea className="mt-2 w-full rounded-md border p-2 text-sm" rows={2} placeholder="Nota si el taller cobró de más (optativo)" value={justif} onChange={(e) => setJustif(e.target.value)} />
                           </div>
                         )}
 
                         {ot.currentStep === 4 && (
                           <div>
                             <p className="text-sm">Presupuesto {money(totP)} vs facturado {money(totF)}</p>
-                            <p className="mt-1 text-xs">{ot.incrementoJustificacion || "Sin justificación cargada"}</p>
+                            <p className="mt-1 text-xs">{ot.incrementoJustificacion || "Sin nota extra"}</p>
                             <button type="button" disabled={busy} className="mt-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs text-white" onClick={() => void call(`/api/talleres/${ot.id}`, { method: "PATCH", body: JSON.stringify({ incrementoAprobado: true }) })}>
-                              Aprobar incremento
+                              Confirmar incremento
                             </button>
                           </div>
                         )}

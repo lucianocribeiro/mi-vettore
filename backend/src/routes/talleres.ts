@@ -956,12 +956,12 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
 
     if (req.body?.incrementoAprobado === true || req.body?.incrementoAprobado === "true") {
       if (ot.currentStep !== 4) {
-        res.status(400).json({ error: "Patricio aprueba el incremento en esa etapa" });
+        res.status(400).json({ error: "El incremento se confirma en esa etapa" });
         return;
       }
       const gate = await gateOrOverride({
         rol,
-        allowed: rol === "PATRICIO",
+        allowed: isInternalOpsRole(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Aprobar incremento",
@@ -1359,31 +1359,10 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       if (req.body?.incrementoJustificacion) {
         extra.incrementoJustificacion = String(req.body.incrementoJustificacion).trim();
       }
-      if (hayIncrementoSobrePresupuesto(aprobado, facturado)) {
-        const justif = String(
-          extra.incrementoJustificacion ?? ot.incrementoJustificacion ?? ""
-        ).trim();
-        if (!justif) {
-          res.status(400).json({
-            error:
-              "El taller facturó por encima del presupuesto: hace falta una justificación por escrito del incremento.",
-          });
-          return;
-        }
-        extra.incrementoJustificacion = justif;
-        nextStep = 4;
-      } else {
-        nextStep = 5;
-      }
+      nextStep = hayIncrementoSobrePresupuesto(aprobado, facturado) ? 4 : 5;
     }
 
     if (ot.currentStep === 4) {
-      if (!ot.incrementoAprobadoAt && rol !== "PATRICIO") {
-        res.status(400).json({
-          error: "Patricio tiene que aprobar el incremento antes de cerrar",
-        });
-        return;
-      }
       extra.incrementoAprobadoAt = ot.incrementoAprobadoAt ?? new Date();
       nextStep = 5;
     }
@@ -1435,16 +1414,6 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
 
-    if (!ot.facturaPDF && ot.facturas.length === 0) {
-      const rendicion = (ot.items ?? []).some(
-        (i) => i.tipo === "RENDICION" || i.tipo === "FACTURA"
-      );
-      if (!rendicion && !ot.urgente) {
-        res.status(400).json({ error: "Falta al menos una factura o comprobante" });
-        return;
-      }
-    }
-
     const tot = otTotales(ot);
     const patente = ot.solicitud.camioneta.patente;
     const titulo = `${ot.numeroOT}: proceder con el pago`;
@@ -1468,9 +1437,14 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       });
 
       const porProveedor = new Map<string, { id: string | null; nombre: string; monto: number }>();
-      for (const it of ot.items.filter(
+      const itemsFactura = ot.items.filter(
         (i) => i.tipo === "FACTURA" || i.tipo === "RENDICION"
-      )) {
+      );
+      const itemsCc =
+        itemsFactura.length > 0
+          ? itemsFactura
+          : ot.items.filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado);
+      for (const it of itemsCc) {
         const key = it.tallerProveedorId || it.tallerNombre || "sin-proveedor";
         const prev = porProveedor.get(key);
         porProveedor.set(key, {

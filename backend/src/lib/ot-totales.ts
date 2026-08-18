@@ -51,11 +51,23 @@ export function totalPresupuesto(opts: {
 }
 
 export function totalFacturado(opts: {
-  items: Pick<OtItem, "tipo" | "importe">[];
+  items: ItemTotales[];
   valorFinal?: number | null;
 }): number {
-  const fromItems = sumItems(opts.items, TIPOS_FACTURADO);
+  const items = opts.items ?? [];
+  const fromItems = sumItems(items, TIPOS_FACTURADO);
   if (fromItems > 0) return fromItems;
+  const fromChecklist = items.filter(
+    (i) => i.tipo === "PRESUPUESTO" && i.aprobado
+  );
+  if (fromChecklist.length > 0) {
+    return roundMoney(
+      fromChecklist.reduce(
+        (acc, i) => acc + (Number.isFinite(i.importe) ? i.importe : 0),
+        0
+      )
+    );
+  }
   return roundMoney(opts.valorFinal ?? 0);
 }
 
