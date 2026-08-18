@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { DocumentUpload } from "../../components/DocumentUpload";
@@ -368,8 +368,7 @@ export function DocumentacionPage() {
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       {tab === "unidades" && (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[280px_1fr]">
-          <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1">
+        <div className="mt-4 space-y-2">
             {filteredCams.length === 0 ? (
               <p className="rounded-xl border border-[var(--vl-card-border)] p-3 text-sm text-[var(--vl-text-muted)]">
                 No hay unidades con ese filtro
@@ -377,44 +376,42 @@ export function DocumentacionPage() {
             ) : (
               filteredCams.map((c) => {
                 const asg = currentAsignacion(c);
+                const active = selectedCam === c.id;
                 return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setSelectedCam(c.id)}
-                    className={`w-full rounded-xl border p-3 text-left text-sm ${
-                      selectedCam === c.id
-                        ? "border-slate-900 dark:border-slate-100"
-                        : "border-[var(--vl-card-border)]"
-                    }`}
-                  >
-                    <div className="font-semibold text-[var(--vl-heading)]">
-                      {c.patente}
-                    </div>
-                    <div className="text-[11px] text-[var(--vl-text-muted)]">
-                      {asg?.chofer?.nombre ?? "Sin chofer"}
-                    </div>
-                    {asg?.empresa?.nombre && (
-                      <div className="truncate text-[10px] text-[var(--vl-text-muted)]">
-                        {asg.empresa.nombre}
+                  <Fragment key={c.id}>
+                    {active && (
+                      <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
+                        <DocumentUpload camionetaId={c.id} />
                       </div>
                     )}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedCam((prev) => (prev === c.id ? null : c.id))
+                      }
+                      className={`w-full rounded-xl border p-3 text-left text-sm ${
+                        active
+                          ? "border-slate-900 dark:border-slate-100"
+                          : "border-[var(--vl-card-border)]"
+                      }`}
+                    >
+                      <div className="text-[11px] text-[var(--vl-text-muted)]">
+                        {asg?.chofer?.nombre ?? "Sin chofer"}
+                        {asg?.empresa?.nombre ? ` · ${asg.empresa.nombre}` : ""}
+                      </div>
+                      <div className="mt-1 font-semibold text-[var(--vl-heading)]">
+                        {c.patente}
+                      </div>
+                    </button>
+                  </Fragment>
                 );
               })
             )}
-          </div>
-          {selectedCam && (
-            <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
-              <DocumentUpload camionetaId={selectedCam} />
-            </div>
-          )}
         </div>
       )}
 
       {tab === "choferes" && (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[280px_1fr]">
-          <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1">
+        <div className="mt-4 space-y-2">
             {filteredChoferes.length === 0 ? (
               <p className="rounded-xl border border-[var(--vl-card-border)] p-3 text-sm text-[var(--vl-text-muted)]">
                 No hay choferes con ese filtro
@@ -422,37 +419,40 @@ export function DocumentacionPage() {
             ) : (
               filteredChoferes.map((c) => {
                 const asg = currentChoferAsignacion(c);
+                const active = selectedChofer === c.id;
+                const canUpload = ops || c.id === user?.choferId;
                 return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setSelectedChofer(c.id)}
-                    className={`w-full rounded-xl border p-3 text-left text-sm ${
-                      selectedChofer === c.id
-                        ? "border-slate-900 dark:border-slate-100"
-                        : "border-[var(--vl-card-border)]"
-                    }`}
-                  >
-                    <div className="font-semibold text-[var(--vl-heading)]">
-                      {c.nombre}
-                    </div>
-                    <div className="text-[11px] text-[var(--vl-text-muted)]">
-                      {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
-                      {asg?.camioneta?.patente
-                        ? ` · ${asg.camioneta.patente}`
-                        : ""}
-                    </div>
-                  </button>
+                  <Fragment key={c.id}>
+                    {active && canUpload && (
+                      <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
+                        <DocumentUpload choferId={c.id} />
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedChofer((prev) => (prev === c.id ? null : c.id))
+                      }
+                      className={`w-full rounded-xl border p-3 text-left text-sm ${
+                        active
+                          ? "border-slate-900 dark:border-slate-100"
+                          : "border-[var(--vl-card-border)]"
+                      }`}
+                    >
+                      <div className="text-[11px] text-[var(--vl-text-muted)]">
+                        {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
+                        {asg?.camioneta?.patente
+                          ? ` · ${asg.camioneta.patente}`
+                          : ""}
+                      </div>
+                      <div className="mt-1 font-semibold text-[var(--vl-heading)]">
+                        {c.nombre}
+                      </div>
+                    </button>
+                  </Fragment>
                 );
               })
             )}
-          </div>
-          {selectedChofer &&
-            (ops || selectedChofer === user?.choferId) && (
-            <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
-              <DocumentUpload choferId={selectedChofer} />
-            </div>
-          )}
         </div>
       )}
     </div>

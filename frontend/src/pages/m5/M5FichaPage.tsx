@@ -900,13 +900,13 @@ export function M5FichaPage() {
                     onClick={() => setDrawer({ tipo: "camioneta", item: c })}
                     className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4 text-left transition hover:border-slate-400 hover:shadow-sm dark:hover:border-slate-500"
                   >
-                    <div className="font-semibold text-[var(--vl-heading)]">
-                      {c.patente}
-                    </div>
-                    <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
+                    <div className="text-xs text-[var(--vl-text-muted)]">
                       {a?.empresa?.nombre ?? "Sin empresa"} ·{" "}
                       {a?.chofer?.nombre ?? "Sin chofer"} ·{" "}
                       {c.km.toLocaleString("es-AR")} km
+                    </div>
+                    <div className="mt-2 font-semibold text-[var(--vl-heading)]">
+                      {c.patente}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>

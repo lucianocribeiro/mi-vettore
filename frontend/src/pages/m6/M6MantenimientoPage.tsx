@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge, ESTADO_CAMIONETA_STYLE } from "../../components/Badge";
 import {
@@ -262,216 +262,216 @@ export function M6MantenimientoPage() {
                 const level = alertLevelFor(c);
                 const active = c.id === selectedId;
                 return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() =>
-                      setSelectedId((prev) => (prev === c.id ? null : c.id))
-                    }
-                    className={`rounded-2xl border-2 p-4 text-left transition ${CARD_RING[level]} ${CARD_TINT[level]} ${
-                      active
-                        ? "ring-2 ring-slate-900 ring-offset-2 dark:ring-slate-100 dark:ring-offset-[var(--vl-main)]"
-                        : "hover:shadow-md"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="truncate text-lg font-bold text-[var(--vl-heading)]">
-                          {c.patente}
-                        </div>
-                        <div className="mt-0.5 text-xs text-[var(--vl-text-muted)]">
-                          {c.tipoTransporte
-                            ?.replace(/_/g, " ")
-                            .toLowerCase() ||
-                            c.datosTecnicos ||
-                            "Sin clasificación"}
-                        </div>
-                      </div>
-                      <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
-                        {c.estado.replace(/_/g, " ").toLowerCase()}
-                      </Badge>
-                    </div>
+                  <Fragment key={c.id}>
+                    {active && selected && (
+                      <div className="col-span-full space-y-4">
+                        <form
+                          onSubmit={(e) => void guardar(e)}
+                          className="rounded-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 shadow-sm"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <h2 className="text-base font-bold text-[var(--vl-heading)]">
+                                Actualizar {selected.patente}
+                              </h2>
+                              <p className="mt-0.5 text-sm text-[var(--vl-text-muted)]">
+                                {[selected.marca, selected.modelo, selected.equipoFrio]
+                                  .filter(Boolean)
+                                  .join(" · ") ||
+                                  selected.datosTecnicos ||
+                                  selected.tipoTransporte
+                                    ?.replace(/_/g, " ")
+                                    .toLowerCase() ||
+                                  "—"}
+                              </p>
+                              <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                                Precargado el último registro (km y fechas). Confirmá o
+                                corregí.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedId(null)}
+                              className="text-xs font-medium text-[var(--vl-text-muted)] underline-offset-2 hover:underline"
+                            >
+                              Cerrar
+                            </button>
+                          </div>
 
-                    <div className="mt-3 text-sm font-medium text-[var(--vl-heading)]">
-                      {c.km.toLocaleString("es-AR")} km
-                    </div>
-                    <div className="mt-1 space-y-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                      <div>
-                        Aceite: {formatDate(c.fechaUltimoAceite) || "sin dato"}
-                      </div>
-                      <div>
-                        Correa: {formatDate(c.fechaCambioCorrea) || "sin dato"}
-                      </div>
-                      <div>
-                        Neumáticos:{" "}
-                        {formatDate(c.fechaCambioNeumaticos) || "sin dato"}
-                      </div>
-                      <div>
-                        Batería: {formatDate(c.fechaCambioBateria) || "sin dato"}
-                      </div>
-                      <div>
-                        Seguro: {formatDate(c.seguroVencimiento) || "—"}
-                        {daysUntil(c.seguroVencimiento) !== null &&
-                        daysUntil(c.seguroVencimiento)! < 0
-                          ? " · vencido"
-                          : ""}
-                      </div>
-                      <div>
-                        VTV: {formatDate(c.vtbVencimiento) || "—"}
-                        {daysUntil(c.vtbVencimiento) !== null &&
-                        daysUntil(c.vtbVencimiento)! < 0
-                          ? " · vencido"
-                          : ""}
-                      </div>
-                    </div>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                              Kilometraje
+                              <input
+                                type="number"
+                                min={0}
+                                value={km}
+                                onChange={(e) => setKm(e.target.value)}
+                                className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                                required
+                              />
+                            </label>
+                            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                              Último cambio de aceite
+                              <input
+                                type="date"
+                                value={aceite}
+                                onChange={(e) => setAceite(e.target.value)}
+                                className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                              />
+                            </label>
+                            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                              Último cambio de correa
+                              <input
+                                type="date"
+                                value={correa}
+                                onChange={(e) => setCorrea(e.target.value)}
+                                className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                              />
+                            </label>
+                            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                              Último cambio de neumáticos
+                              <input
+                                type="date"
+                                value={neumaticos}
+                                onChange={(e) => setNeumaticos(e.target.value)}
+                                className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                              />
+                            </label>
+                            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                              Último cambio de batería
+                              <input
+                                type="date"
+                                value={bateria}
+                                onChange={(e) => setBateria(e.target.value)}
+                                className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                              />
+                            </label>
+                          </div>
 
-                    <div className="mt-3 border-t border-[var(--vl-card-border)] pt-2 text-[11px] leading-snug text-[var(--vl-text-muted)]">
-                      {[
-                        a?.chofer?.nombre
-                          ? `Chofer: ${a.chofer.nombre}`
-                          : null,
-                        a?.empresa?.nombre
-                          ? `Empresa: ${a.empresa.nombre}`
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") || "Sin asignación"}
-                    </div>
-                  </button>
+                          <p className="mt-3 text-[11px] text-[var(--vl-text-muted)]">
+                            Seguro: {selected.seguroCompania || "—"} · vence:{" "}
+                            {formatDate(selected.seguroVencimiento)}
+                            {" · "}
+                            VTV vence: {formatDate(selected.vtbVencimiento)}
+                          </p>
+
+                          <button
+                            type="submit"
+                            disabled={saving}
+                            className="mt-4 min-h-11 w-full rounded-md bg-slate-900 py-2.5 text-sm font-medium text-white disabled:opacity-50 sm:w-auto sm:px-8 dark:bg-slate-100 dark:text-slate-900"
+                          >
+                            {saving ? "Guardando…" : "Guardar en ficha"}
+                          </button>
+                          {(isInternalOps(user?.rol) || esDueno || user?.rol === "CHOFER") && (
+                            <button
+                              type="button"
+                              disabled={exportando}
+                              onClick={() => {
+                                if (!token) return;
+                                setExportando(true);
+                                void apiDownload(
+                                  `/api/camionetas/${selected.id}/planilla`,
+                                  token,
+                                  `planilla_${selected.patente}.xlsx`
+                                )
+                                  .catch((err) =>
+                                    alert(
+                                      err instanceof ApiError
+                                        ? err.message
+                                        : "No se pudo exportar la planilla"
+                                    )
+                                  )
+                                  .finally(() => setExportando(false));
+                              }}
+                              className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--vl-card-border)] px-3 text-sm font-medium sm:w-auto sm:px-8"
+                            >
+                              <Download size={14} />
+                              {exportando ? "Exportando…" : "Planilla Excel de esta unidad"}
+                            </button>
+                          )}
+                        </form>
+                        <HistorialReparaciones camionetaId={selected.id} token={token} />
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedId((prev) => (prev === c.id ? null : c.id))
+                      }
+                      className={`rounded-2xl border-2 p-4 text-left transition ${CARD_RING[level]} ${CARD_TINT[level]} ${
+                        active
+                          ? "ring-2 ring-slate-900 ring-offset-2 dark:ring-slate-100 dark:ring-offset-[var(--vl-main)]"
+                          : "hover:shadow-md"
+                      }`}
+                    >
+                      <div className="text-sm font-medium text-[var(--vl-heading)]">
+                        {c.km.toLocaleString("es-AR")} km
+                      </div>
+                      <div className="mt-1 space-y-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                        <div>
+                          Aceite: {formatDate(c.fechaUltimoAceite) || "sin dato"}
+                        </div>
+                        <div>
+                          Correa: {formatDate(c.fechaCambioCorrea) || "sin dato"}
+                        </div>
+                        <div>
+                          Neumáticos:{" "}
+                          {formatDate(c.fechaCambioNeumaticos) || "sin dato"}
+                        </div>
+                        <div>
+                          Batería: {formatDate(c.fechaCambioBateria) || "sin dato"}
+                        </div>
+                        <div>
+                          Seguro: {formatDate(c.seguroVencimiento) || "—"}
+                          {daysUntil(c.seguroVencimiento) !== null &&
+                          daysUntil(c.seguroVencimiento)! < 0
+                            ? " · vencido"
+                            : ""}
+                        </div>
+                        <div>
+                          VTV: {formatDate(c.vtbVencimiento) || "—"}
+                          {daysUntil(c.vtbVencimiento) !== null &&
+                          daysUntil(c.vtbVencimiento)! < 0
+                            ? " · vencido"
+                            : ""}
+                        </div>
+                      </div>
+                      <div className="mt-2 text-[11px] leading-snug text-[var(--vl-text-muted)]">
+                        {[
+                          a?.chofer?.nombre
+                            ? `Chofer: ${a.chofer.nombre}`
+                            : null,
+                          a?.empresa?.nombre
+                            ? `Empresa: ${a.empresa.nombre}`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "Sin asignación"}
+                      </div>
+
+                      <div className="mt-3 flex items-start justify-between gap-2 border-t border-[var(--vl-card-border)] pt-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-lg font-bold text-[var(--vl-heading)]">
+                            {c.patente}
+                          </div>
+                          <div className="mt-0.5 text-xs text-[var(--vl-text-muted)]">
+                            {c.equipoFrio ||
+                              c.tipoTransporte
+                                ?.replace(/_/g, " ")
+                                .toLowerCase() ||
+                              c.datosTecnicos ||
+                              "Sin clasificación"}
+                          </div>
+                        </div>
+                        <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
+                          {c.estado.replace(/_/g, " ").toLowerCase()}
+                        </Badge>
+                      </div>
+                    </button>
+                  </Fragment>
                 );
               })}
             </div>
-          )}
-
-          {selected && (
-            <>
-            <form
-              onSubmit={(e) => void guardar(e)}
-              className="mt-5 rounded-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 shadow-sm"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h2 className="text-base font-bold text-[var(--vl-heading)]">
-                    Actualizar {selected.patente}
-                  </h2>
-                  <p className="mt-0.5 text-sm text-[var(--vl-text-muted)]">
-                    {[selected.marca, selected.modelo, selected.equipoFrio]
-                      .filter(Boolean)
-                      .join(" · ") ||
-                      selected.datosTecnicos ||
-                      selected.tipoTransporte
-                        ?.replace(/_/g, " ")
-                        .toLowerCase() ||
-                      "—"}
-                  </p>
-                  <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                    Precargado el último registro (km y fechas). Confirmá o
-                    corregí.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(null)}
-                  className="text-xs font-medium text-[var(--vl-text-muted)] underline-offset-2 hover:underline"
-                >
-                  Cerrar
-                </button>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                  Kilometraje
-                  <input
-                    type="number"
-                    min={0}
-                    value={km}
-                    onChange={(e) => setKm(e.target.value)}
-                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                    required
-                  />
-                </label>
-                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                  Último cambio de aceite
-                  <input
-                    type="date"
-                    value={aceite}
-                    onChange={(e) => setAceite(e.target.value)}
-                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                  />
-                </label>
-                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                  Último cambio de correa
-                  <input
-                    type="date"
-                    value={correa}
-                    onChange={(e) => setCorrea(e.target.value)}
-                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                  />
-                </label>
-                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                  Último cambio de neumáticos
-                  <input
-                    type="date"
-                    value={neumaticos}
-                    onChange={(e) => setNeumaticos(e.target.value)}
-                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                  />
-                </label>
-                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                  Último cambio de batería
-                  <input
-                    type="date"
-                    value={bateria}
-                    onChange={(e) => setBateria(e.target.value)}
-                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                  />
-                </label>
-              </div>
-
-              <p className="mt-3 text-[11px] text-[var(--vl-text-muted)]">
-                Seguro: {selected.seguroCompania || "—"} · vence:{" "}
-                {formatDate(selected.seguroVencimiento)}
-                {" · "}
-                VTV vence: {formatDate(selected.vtbVencimiento)}
-              </p>
-
-              <button
-                type="submit"
-                disabled={saving}
-                className="mt-4 min-h-11 w-full rounded-md bg-slate-900 py-2.5 text-sm font-medium text-white disabled:opacity-50 sm:w-auto sm:px-8 dark:bg-slate-100 dark:text-slate-900"
-              >
-                {saving ? "Guardando…" : "Guardar en ficha"}
-              </button>
-              {isInternalOps(user?.rol) || esDueno || user?.rol === "CHOFER" ? (
-                <button
-                  type="button"
-                  disabled={exportando}
-                  onClick={() => {
-                    if (!token) return;
-                    setExportando(true);
-                    void apiDownload(
-                      `/api/camionetas/${selected.id}/planilla`,
-                      token,
-                      `planilla_${selected.patente}.xlsx`
-                    )
-                      .catch((err) =>
-                        alert(
-                          err instanceof ApiError
-                            ? err.message
-                            : "No se pudo exportar la planilla"
-                        )
-                      )
-                      .finally(() => setExportando(false));
-                  }}
-                  className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--vl-card-border)] px-3 text-sm font-medium sm:w-auto sm:px-8"
-                >
-                  <Download size={14} />
-                  {exportando ? "Exportando…" : "Planilla Excel de esta unidad"}
-                </button>
-              ) : null}
-            </form>
-            <HistorialReparaciones camionetaId={selected.id} token={token} />
-            </>
           )}
         </>
       )}

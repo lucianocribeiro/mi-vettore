@@ -26,9 +26,8 @@ export const FALLAS_COMUNES = [
 
 /**
  * Circuito OT.
- * 0 se completa al crear (notif automática). Urgente salta a presupuesto/factura (2).
- * Los índices 2 y 3 son el mismo paso unificado (presupuesto + factura); 3 queda
- * por OTs viejas que ya estaban en “Facturación”.
+ * 0 se completa al crear (notif automática). Urgente salta a presupuesto (2).
+ * 2 Presupuesto (optativo) → 3 Facturación → 4 Incremento si hay desvío → 5 Cierre.
  */
 export const OT_STEPS = [
   {
@@ -43,12 +42,12 @@ export const OT_STEPS = [
   },
   {
     key: 2,
-    label: "Presupuesto y factura",
+    label: "Presupuesto",
     ownerRoles: [Role.SILVINA],
   },
   {
     key: 3,
-    label: "Presupuesto y factura",
+    label: "Facturación",
     ownerRoles: [Role.SILVINA],
   },
   {
@@ -65,8 +64,16 @@ export const OT_STEPS = [
 
 export const OT_STEP_LAST = OT_STEPS.length - 1;
 
-/** Presupuesto y facturación son un solo paso (2, o 3 en OT viejas). */
-export function isGastoStep(step: number): boolean {
+export function isPresupuestoStep(step: number): boolean {
+  return step === 2;
+}
+
+export function isFacturaStep(step: number): boolean {
+  return step === 3;
+}
+
+/** Presupuesto (2) o facturación (3). */
+export function isGastoStep(step: number) {
   return step === 2 || step === 3;
 }
 

@@ -33,17 +33,18 @@ const FALLAS_COMUNES = [
 const OT_STEPS = [
   { label: "Solicitud", owner: null as string | null, detail: "El chofer reporta patente, problema y si puede circular." },
   { label: "Asignación", owner: "Facu", detail: "Facu evalúa la falla, asigna taller y decide si inhabilitar." },
-  { label: "Presupuesto y factura", owner: "Silvina", detail: "Cargá presupuesto (opcional) e ítems de factura en el mismo paso. Si hay incremento, pasa a Patricio." },
+  { label: "Presupuesto", owner: "Silvina", detail: "Cargá ítems de presupuesto (optativo). Después se factura en el paso siguiente." },
+  { label: "Facturación", owner: "Silvina", detail: "Marcá qué ítems del presupuesto se facturan y cargá la factura. Si hay incremento, pasa a Patricio." },
   { label: "Incremento", owner: "Patricio", detail: "Solo si el taller facturó por encima del presupuesto." },
   { label: "Cierre / pago", owner: "Silvina / Carla", detail: "Cierre, reporte de salida y cuenta corriente del proveedor." },
 ] as const;
 
-/** El circuito viejo tenía Presupuestos (2) y Facturación (3) separados. */
-function displayStep(step: number): number {
-  if (step <= 2) return step;
-  if (step === 3) return 2;
-  if (step === 4) return 3;
-  return 4;
+function isPresupuestoStep(step: number) {
+  return step === 2;
+}
+
+function isFacturaStep(step: number) {
+  return step === 3;
 }
 
 function isGastoStep(step: number) {
@@ -57,7 +58,7 @@ function roleActionHint(rol?: Role | null): string {
     case "FACU":
       return "Tu rol: asignar taller e inhabilitar si hace falta.";
     case "SILVINA":
-      return "Tu rol: presupuesto y facturas en el mismo paso. Autoaprobás el gasto habitual.";
+      return "Tu rol: primero presupuesto, después facturación. En factura marcás qué ítems se cobran.";
     case "PATRICIO":
       return "Tu rol: aprobar solo el incremento sobre presupuesto.";
     case "JULIETA":
@@ -184,7 +185,6 @@ export function M7TalleresPage() {
   const [itemDesc, setItemDesc] = useState("");
   const [itemImp, setItemImp] = useState("");
   const [itemObs, setItemObs] = useState("");
-  const [itemTipo, setItemTipo] = useState<"PRESUPUESTO" | "FACTURA">("PRESUPUESTO");
   const [itemTallerId, setItemTallerId] = useState("");
   const [justif, setJustif] = useState("");
   const [facturaFile, setFacturaFile] = useState<File | null>(null);
@@ -224,7 +224,6 @@ export function M7TalleresPage() {
     if (!ot) return;
     setTallerId(ot.tallerProveedorId ?? "");
     setJustif(ot.incrementoJustificacion ?? "");
-    setItemTipo("PRESUPUESTO");
   }, [ot?.id]);
 
   function needsMyAction(o: OrdenTrabajo) {
@@ -335,7 +334,7 @@ export function M7TalleresPage() {
                     </div>
                     <div className="mt-1 text-xs text-[var(--vl-text-muted)]">{o.solicitud.falla}</div>
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                      <span>{o.cerradaAt ? "Cerrada" : OT_STEPS[displayStep(o.currentStep)]?.label}</span>
+                      <span>{o.cerradaAt ? "Cerrada" : OT_STEPS[o.currentStep]?.label}</span>
                       {o.urgente && <span className="rounded bg-red-100 px-1.5 text-red-800 dark:bg-red-950 dark:text-red-200">Urgente</span>}
                       {needsMyAction(o) && <span className="rounded bg-amber-100 px-1.5 text-amber-800">Tu turno</span>}
                     </div>
@@ -357,9 +356,8 @@ export function M7TalleresPage() {
 
                   <div className="my-5 flex items-center">
                     {OT_STEPS.map((s, i) => {
-                      const d = displayStep(ot.currentStep);
-                      const done = ot.cerradaAt || i < d;
-                      const active = !ot.cerradaAt && i === d;
+                      const done = ot.cerradaAt || i < ot.currentStep;
+                      const active = !ot.cerradaAt && i === ot.currentStep;
                       return (
                       <div key={s.label} className="flex flex-1 items-center last:flex-none">
                         <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${done ? "bg-emerald-500 text-white" : active ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`} title={s.label}>
@@ -372,10 +370,10 @@ export function M7TalleresPage() {
                   </div>
 
                   <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900/40">
-                    <div className="text-sm font-semibold">{OT_STEPS[displayStep(ot.currentStep)]?.label}</div>
-                    <p className="mt-1 text-sm text-[var(--vl-text-muted)]">{OT_STEPS[displayStep(ot.currentStep)]?.detail}</p>
-                    {OT_STEPS[displayStep(ot.currentStep)]?.owner && (
-                      <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">Habitual: {OT_STEPS[displayStep(ot.currentStep)].owner}</p>
+                    <div className="text-sm font-semibold">{OT_STEPS[ot.currentStep]?.label}</div>
+                    <p className="mt-1 text-sm text-[var(--vl-text-muted)]">{OT_STEPS[ot.currentStep]?.detail}</p>
+                    {OT_STEPS[ot.currentStep]?.owner && (
+                      <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">Habitual: {OT_STEPS[ot.currentStep].owner}</p>
                     )}
 
                     {esChofer ? (
@@ -456,13 +454,14 @@ export function M7TalleresPage() {
                           </div>
                         )}
 
-                        {isGastoStep(ot.currentStep) && (
+                        {isPresupuestoStep(ot.currentStep) && (
                           <ItemsEditor
                             ot={ot}
                             token={token!}
                             talleres={talleres}
-                            tipo={itemTipo}
-                            setTipo={setItemTipo}
+                            tipo="PRESUPUESTO"
+                            lockTipo
+                            showAprobado={false}
                             desc={itemDesc}
                             setDesc={setItemDesc}
                             imp={itemImp}
@@ -476,12 +475,12 @@ export function M7TalleresPage() {
                           />
                         )}
 
-                        {isGastoStep(ot.currentStep) && (
+                        {isPresupuestoStep(ot.currentStep) && (
                           <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
                             <p className="text-xs text-[var(--vl-text-muted)]">
                               El presupuesto es optativo. Podés cargar uno o más
-                              y marcar cuál quedó aprobado (el resto queda en
-                              historial), o seguir sin presupuesto.
+                              ítems y seguir. En el paso de facturación marcás
+                              cuáles se facturan.
                             </p>
                             {ot.sinPresupuesto ? (
                               <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
@@ -504,7 +503,36 @@ export function M7TalleresPage() {
                           </div>
                         )}
 
-                        {isGastoStep(ot.currentStep) && (
+                        {isFacturaStep(ot.currentStep) && (
+                          <PresupuestoChecklist
+                            ot={ot}
+                            token={token!}
+                            onSaved={replaceOt}
+                          />
+                        )}
+
+                        {isFacturaStep(ot.currentStep) && (
+                          <ItemsEditor
+                            ot={ot}
+                            token={token!}
+                            talleres={talleres}
+                            tipo="FACTURA"
+                            lockTipo
+                            showAprobado={false}
+                            desc={itemDesc}
+                            setDesc={setItemDesc}
+                            imp={itemImp}
+                            setImp={setItemImp}
+                            obs={itemObs}
+                            setObs={setItemObs}
+                            tallerId={itemTallerId}
+                            setTallerId={setItemTallerId}
+                            busy={busy}
+                            onSaved={replaceOt}
+                          />
+                        )}
+
+                        {isFacturaStep(ot.currentStep) && (
                           <div>
                             <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed text-sm">
                               <Upload size={16} /> {facturaFile ? facturaFile.name : "Adjuntar factura (PDF o foto)"}
@@ -605,14 +633,86 @@ export function M7TalleresPage() {
   );
 }
 
+function PresupuestoChecklist({
+  ot, token, onSaved,
+}: {
+  ot: OrdenTrabajo;
+  token: string;
+  onSaved: (ot: OrdenTrabajo) => void;
+}) {
+  const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
+  const marcados = items.filter((i) => i.aprobado);
+  const total = marcados.reduce((a, i) => a + i.importe, 0);
+
+  async function setAFacturar(id: string, aprobado: boolean) {
+    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ aprobado }),
+    }, token);
+    onSaved(updated);
+  }
+
+  if (items.length === 0) {
+    return (
+      <p className="text-xs text-[var(--vl-text-muted)]">
+        No hay ítems de presupuesto. Podés cargar la factura igual.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold">
+        Presupuesto a facturar — {marcados.length}/{items.length} marcados
+        {marcados.length > 0 ? ` · ${money(total)}` : ""}
+      </div>
+      <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
+        Marcá los ítems del presupuesto que entran en esta factura.
+      </p>
+      <table className="mb-2 w-full text-left text-xs">
+        <thead>
+          <tr className="text-[var(--vl-text-muted)]">
+            <th className="w-8">Factura</th>
+            <th>Concepto</th>
+            <th>Importe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((i) => (
+            <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
+              <td className="py-1">
+                <label className="inline-flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={!!i.aprobado}
+                    onChange={(e) => void setAFacturar(i.id, e.target.checked)}
+                  />
+                  <span className="sr-only">Se factura</span>
+                </label>
+              </td>
+              <td className="py-1">
+                {i.descripcion}
+                <div className="text-[10px] text-[var(--vl-text-muted)]">{i.tallerNombre}</div>
+              </td>
+              <td>{money(i.importe)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ItemsEditor({
-  ot, token, talleres, tipo, setTipo, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
+  ot, token, talleres, tipo, setTipo, lockTipo, showAprobado, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
 }: {
   ot: OrdenTrabajo;
   token: string;
   talleres: TallerProveedor[];
   tipo: "PRESUPUESTO" | "FACTURA";
-  setTipo: (t: "PRESUPUESTO" | "FACTURA") => void;
+  setTipo?: (t: "PRESUPUESTO" | "FACTURA") => void;
+  lockTipo?: boolean;
+  showAprobado?: boolean;
   desc: string; setDesc: (s: string) => void;
   imp: string; setImp: (s: string) => void;
   obs: string; setObs: (s: string) => void;
@@ -651,14 +751,6 @@ function ItemsEditor({
     onSaved(updated);
   }
 
-  async function setAprobado(id: string, aprobado: boolean) {
-    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ aprobado }),
-    }, token);
-    onSaved(updated);
-  }
-
   function clasifLabel(i: OtItem) {
     if (!i.clasificacion) return "—";
     if (i.clasificacion === "OTRO") return i.clasificacionOtro || "Otro";
@@ -680,7 +772,7 @@ function ItemsEditor({
             <th>Concepto</th>
             <th>Clasif.</th>
             <th>Importe</th>
-            {tipo === "PRESUPUESTO" && <th>Aprobado</th>}
+            {showAprobado && <th>Aprobado</th>}
             <th />
           </tr>
         </thead>
@@ -690,29 +782,19 @@ function ItemsEditor({
               <td className="py-1">{i.descripcion}<div className="text-[10px] text-[var(--vl-text-muted)]">{i.tallerNombre}</div></td>
               <td>{clasifLabel(i)}</td>
               <td>{money(i.importe)}</td>
-              {tipo === "PRESUPUESTO" && (
-                <td>
-                  <label className="inline-flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={!!i.aprobado}
-                      onChange={(e) => void setAprobado(i.id, e.target.checked)}
-                    />
-                    <span className="sr-only">Presupuesto aprobado</span>
-                  </label>
-                </td>
-              )}
               <td><button type="button" className="underline" onClick={() => void remove(i.id)}>Quitar</button></td>
             </tr>
           ))}
         </tbody>
       </table>
       <div className="grid gap-2 sm:grid-cols-2">
-        <select className="rounded-md border p-2 text-sm" value={tipo} onChange={(e) => setTipo(e.target.value as "PRESUPUESTO" | "FACTURA")}>
-          <option value="PRESUPUESTO">Presupuesto (optativo)</option>
-          <option value="FACTURA">Factura / gasto</option>
-        </select>
-        <select className="rounded-md border p-2 text-sm" value={tallerId} onChange={(e) => setTallerId(e.target.value)}>
+        {!lockTipo && setTipo && (
+          <select className="rounded-md border p-2 text-sm" value={tipo} onChange={(e) => setTipo(e.target.value as "PRESUPUESTO" | "FACTURA")}>
+            <option value="PRESUPUESTO">Presupuesto (optativo)</option>
+            <option value="FACTURA">Factura / gasto</option>
+          </select>
+        )}
+        <select className={`rounded-md border p-2 text-sm ${lockTipo ? "sm:col-span-2" : ""}`} value={tallerId} onChange={(e) => setTallerId(e.target.value)}>
           <option value="">Proveedor…</option>
           {talleres.map((t) => <option key={t.id} value={t.id}>{t.razonSocial}</option>)}
         </select>
