@@ -34,7 +34,7 @@ const OT_STEPS = [
   { label: "Solicitud", owner: null as string | null, detail: "El chofer reporta patente, problema y si puede circular." },
   { label: "Asignación", owner: "Facu", detail: "Facu evalúa la falla, asigna taller y decide si inhabilitar." },
   { label: "Presupuesto", owner: "Silvina", detail: "Cargá ítems de presupuesto (optativo). Después se factura en el paso siguiente." },
-  { label: "Facturación", owner: "Silvina", detail: "Marcá qué ítems del presupuesto se facturan y cargá la factura. Si hay incremento, pasa a Patricio." },
+  { label: "Facturación", owner: "Silvina", detail: "Marcá qué ítems del presupuesto se facturan y adjuntá la factura. Si hay incremento, pasa a Patricio." },
   { label: "Incremento", owner: "Patricio", detail: "Solo si el taller facturó por encima del presupuesto." },
   { label: "Cierre / pago", owner: "Silvina / Carla", detail: "Cierre, reporte de salida y cuenta corriente del proveedor." },
 ] as const;
@@ -507,27 +507,6 @@ export function M7TalleresPage() {
                           <PresupuestoChecklist
                             ot={ot}
                             token={token!}
-                            onSaved={replaceOt}
-                          />
-                        )}
-
-                        {isFacturaStep(ot.currentStep) && (
-                          <ItemsEditor
-                            ot={ot}
-                            token={token!}
-                            talleres={talleres}
-                            tipo="FACTURA"
-                            lockTipo
-                            showAprobado={false}
-                            desc={itemDesc}
-                            setDesc={setItemDesc}
-                            imp={itemImp}
-                            setImp={setItemImp}
-                            obs={itemObs}
-                            setObs={setItemObs}
-                            tallerId={itemTallerId}
-                            setTallerId={setItemTallerId}
-                            busy={busy}
                             onSaved={replaceOt}
                           />
                         )}

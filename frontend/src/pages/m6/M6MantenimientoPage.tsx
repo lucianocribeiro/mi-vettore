@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge, ESTADO_CAMIONETA_STYLE } from "../../components/Badge";
 import {
@@ -15,7 +15,7 @@ import {
   toInputDate,
   type Camioneta,
 } from "../../types";
-import { Download } from "../../components/icons";
+import { Download, X } from "../../components/icons";
 
 function daysUntil(iso: string | null | undefined): number | null {
   if (!iso) return null;
@@ -133,6 +133,20 @@ export function M6MantenimientoPage() {
     setError(null);
   }, [selected?.id, selected?.km, selected?.fechaUltimoAceite, selected?.fechaCambioCorrea, selected?.fechaCambioNeumaticos, selected?.fechaCambioBateria]);
 
+  useEffect(() => {
+    if (!selected) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [selected?.id]);
+
   async function guardar(e: FormEvent) {
     e.preventDefault();
     if (!token || !selected) return;
@@ -233,8 +247,9 @@ export function M6MantenimientoPage() {
       {loading && (
         <p className="text-sm text-[var(--vl-text-muted)]">Cargando…</p>
       )}
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-      {okMsg && <p className="mb-3 text-sm text-emerald-700">{okMsg}</p>}
+      {error && !selected && (
+        <p className="mb-3 text-sm text-red-600">{error}</p>
+      )}
 
       {!loading && camionetas.length === 0 && (
         <p className="text-sm text-[var(--vl-text-muted)]">
@@ -262,138 +277,8 @@ export function M6MantenimientoPage() {
                 const level = alertLevelFor(c);
                 const active = c.id === selectedId;
                 return (
-                  <Fragment key={c.id}>
-                    {active && selected && (
-                      <div className="col-span-full space-y-4">
-                        <form
-                          onSubmit={(e) => void guardar(e)}
-                          className="rounded-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 shadow-sm"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div>
-                              <h2 className="text-base font-bold text-[var(--vl-heading)]">
-                                Actualizar {selected.patente}
-                              </h2>
-                              <p className="mt-0.5 text-sm text-[var(--vl-text-muted)]">
-                                {[selected.marca, selected.modelo, selected.equipoFrio]
-                                  .filter(Boolean)
-                                  .join(" · ") ||
-                                  selected.datosTecnicos ||
-                                  selected.tipoTransporte
-                                    ?.replace(/_/g, " ")
-                                    .toLowerCase() ||
-                                  "—"}
-                              </p>
-                              <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                                Precargado el último registro (km y fechas). Confirmá o
-                                corregí.
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedId(null)}
-                              className="text-xs font-medium text-[var(--vl-text-muted)] underline-offset-2 hover:underline"
-                            >
-                              Cerrar
-                            </button>
-                          </div>
-
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                              Kilometraje
-                              <input
-                                type="number"
-                                min={0}
-                                value={km}
-                                onChange={(e) => setKm(e.target.value)}
-                                className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                                required
-                              />
-                            </label>
-                            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                              Último cambio de aceite
-                              <input
-                                type="date"
-                                value={aceite}
-                                onChange={(e) => setAceite(e.target.value)}
-                                className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                              />
-                            </label>
-                            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                              Último cambio de correa
-                              <input
-                                type="date"
-                                value={correa}
-                                onChange={(e) => setCorrea(e.target.value)}
-                                className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                              />
-                            </label>
-                            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                              Último cambio de neumáticos
-                              <input
-                                type="date"
-                                value={neumaticos}
-                                onChange={(e) => setNeumaticos(e.target.value)}
-                                className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                              />
-                            </label>
-                            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                              Último cambio de batería
-                              <input
-                                type="date"
-                                value={bateria}
-                                onChange={(e) => setBateria(e.target.value)}
-                                className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                              />
-                            </label>
-                          </div>
-
-                          <p className="mt-3 text-[11px] text-[var(--vl-text-muted)]">
-                            Seguro: {selected.seguroCompania || "—"} · vence:{" "}
-                            {formatDate(selected.seguroVencimiento)}
-                            {" · "}
-                            VTV vence: {formatDate(selected.vtbVencimiento)}
-                          </p>
-
-                          <button
-                            type="submit"
-                            disabled={saving}
-                            className="mt-4 min-h-11 w-full rounded-md bg-slate-900 py-2.5 text-sm font-medium text-white disabled:opacity-50 sm:w-auto sm:px-8 dark:bg-slate-100 dark:text-slate-900"
-                          >
-                            {saving ? "Guardando…" : "Guardar en ficha"}
-                          </button>
-                          {(isInternalOps(user?.rol) || esDueno || user?.rol === "CHOFER") && (
-                            <button
-                              type="button"
-                              disabled={exportando}
-                              onClick={() => {
-                                if (!token) return;
-                                setExportando(true);
-                                void apiDownload(
-                                  `/api/camionetas/${selected.id}/planilla`,
-                                  token,
-                                  `planilla_${selected.patente}.xlsx`
-                                )
-                                  .catch((err) =>
-                                    alert(
-                                      err instanceof ApiError
-                                        ? err.message
-                                        : "No se pudo exportar la planilla"
-                                    )
-                                  )
-                                  .finally(() => setExportando(false));
-                              }}
-                              className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--vl-card-border)] px-3 text-sm font-medium sm:w-auto sm:px-8"
-                            >
-                              <Download size={14} />
-                              {exportando ? "Exportando…" : "Planilla Excel de esta unidad"}
-                            </button>
-                          )}
-                        </form>
-                        <HistorialReparaciones camionetaId={selected.id} token={token} />
-                      </div>
-                    )}
                     <button
+                      key={c.id}
                       type="button"
                       onClick={() =>
                         setSelectedId((prev) => (prev === c.id ? null : c.id))
@@ -468,12 +353,159 @@ export function M6MantenimientoPage() {
                         </Badge>
                       </div>
                     </button>
-                  </Fragment>
                 );
               })}
             </div>
           )}
         </>
+      )}
+
+      {selected && (
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-black/50"
+          onClick={() => setSelectedId(null)}
+        >
+          <div
+            className="flex h-full w-full max-w-md flex-col bg-[var(--vl-card)] text-[var(--vl-text)] shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-[var(--vl-card-border)] p-5">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="truncate text-lg font-bold text-[var(--vl-heading)]">
+                    Actualizar {selected.patente}
+                  </h2>
+                  <Badge className={ESTADO_CAMIONETA_STYLE[selected.estado]}>
+                    {selected.estado.replace(/_/g, " ").toLowerCase()}
+                  </Badge>
+                </div>
+                <p className="mt-0.5 text-sm text-[var(--vl-text-muted)]">
+                  {[selected.marca, selected.modelo, selected.equipoFrio]
+                    .filter(Boolean)
+                    .join(" · ") ||
+                    selected.datosTecnicos ||
+                    selected.tipoTransporte?.replace(/_/g, " ").toLowerCase() ||
+                    "—"}
+                </p>
+                <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                  Precargado el último registro (km y fechas). Confirmá o corregí.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedId(null)}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--vl-text-muted)] hover:bg-slate-100 hover:text-[var(--vl-heading)] dark:hover:bg-slate-800"
+                aria-label="Cerrar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+              {okMsg && (
+                <p className="mb-3 text-sm text-emerald-700">{okMsg}</p>
+              )}
+              <form onSubmit={(e) => void guardar(e)} className="space-y-3">
+                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                  Kilometraje
+                  <input
+                    type="number"
+                    min={0}
+                    value={km}
+                    onChange={(e) => setKm(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                    required
+                  />
+                </label>
+                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                  Último cambio de aceite
+                  <input
+                    type="date"
+                    value={aceite}
+                    onChange={(e) => setAceite(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                  Último cambio de correa
+                  <input
+                    type="date"
+                    value={correa}
+                    onChange={(e) => setCorrea(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                  Último cambio de neumáticos
+                  <input
+                    type="date"
+                    value={neumaticos}
+                    onChange={(e) => setNeumaticos(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+                  Último cambio de batería
+                  <input
+                    type="date"
+                    value={bateria}
+                    onChange={(e) => setBateria(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                  />
+                </label>
+
+                <p className="text-[11px] text-[var(--vl-text-muted)]">
+                  Seguro: {selected.seguroCompania || "—"} · vence:{" "}
+                  {formatDate(selected.seguroVencimiento)}
+                  {" · "}
+                  VTV vence: {formatDate(selected.vtbVencimiento)}
+                </p>
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="min-h-11 w-full rounded-md bg-slate-900 py-2.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
+                >
+                  {saving ? "Guardando…" : "Guardar en ficha"}
+                </button>
+                {(isInternalOps(user?.rol) ||
+                  esDueno ||
+                  user?.rol === "CHOFER") && (
+                  <button
+                    type="button"
+                    disabled={exportando}
+                    onClick={() => {
+                      if (!token) return;
+                      setExportando(true);
+                      void apiDownload(
+                        `/api/camionetas/${selected.id}/planilla`,
+                        token,
+                        `planilla_${selected.patente}.xlsx`
+                      )
+                        .catch((err) =>
+                          alert(
+                            err instanceof ApiError
+                              ? err.message
+                              : "No se pudo exportar la planilla"
+                          )
+                        )
+                        .finally(() => setExportando(false));
+                    }}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--vl-card-border)] px-3 text-sm font-medium"
+                  >
+                    <Download size={14} />
+                    {exportando
+                      ? "Exportando…"
+                      : "Planilla Excel de esta unidad"}
+                  </button>
+                )}
+              </form>
+
+              <HistorialReparaciones camionetaId={selected.id} token={token} />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
