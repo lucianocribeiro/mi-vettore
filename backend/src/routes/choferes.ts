@@ -6,7 +6,7 @@ import { sendExcel } from "../lib/excel-export.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 import { parseDateOnly } from "../lib/date-only.js";
 import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
-import { empresaIdsDeDueno } from "../lib/flota.js";
+import { empresaIdsDeDueno, choferPuedeVerChofer } from "../lib/flota.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -125,6 +125,52 @@ router.get("/:id", authenticate, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al obtener chofer" });
+  }
+});
+
+router.patch("/:id/dni", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const dni = String(req.body?.dni ?? "").replace(/\D/g, "");
+    if (dni.length < 7) {
+      res.status(400).json({ error: "Indicá un DNI válido" });
+      return;
+    }
+    const existing = await prisma.chofer.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!existing) {
+      res.status(404).json({ error: "Chofer no encontrado" });
+      return;
+    }
+    const rol = req.user!.rol;
+    if (!isInternalOpsRole(rol)) {
+      const ok = await choferPuedeVerChofer(
+        req.user!.id,
+        req.params.id,
+        contextoAccesoFromReq(req)
+      );
+      if (!ok) {
+        res.status(403).json({ error: "Sin permiso" });
+        return;
+      }
+    }
+    const item = await prisma.chofer.update({
+      where: { id: req.params.id },
+      data: { dni },
+    });
+    res.json(item);
+  } catch (err: unknown) {
+    if (
+      typeof err === "object" &&
+      err &&
+      "code" in err &&
+      (err as { code: string }).code === "P2002"
+    ) {
+      res.status(409).json({ error: "Ya existe un chofer con ese DNI" });
+      return;
+    }
+    console.error(err);
+    res.status(500).json({ error: "Error al guardar DNI" });
   }
 });
 

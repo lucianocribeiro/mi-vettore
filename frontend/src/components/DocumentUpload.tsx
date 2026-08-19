@@ -7,6 +7,7 @@ import {
   TIPOS_DOCUMENTO_CON_VENCIMIENTO,
   TIPOS_DOCUMENTO_UNIDAD,
   TIPO_DOCUMENTO_LABEL,
+  type Chofer,
   type DocumentoEntidad,
   type EstadoValidacionDoc,
   type TipoDocumento,
@@ -59,6 +60,9 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
     TIPOS_DOCUMENTO_CON_VENCIMIENTO
   );
   const canValidate = user?.rol === "SILVINA";
+  const [dniNumero, setDniNumero] = useState("");
+  const [dniGuardado, setDniGuardado] = useState("");
+  const [savingDni, setSavingDni] = useState(false);
 
   const load = useCallback(async () => {
     if (!token || (!choferId && !camionetaId)) return;
@@ -68,15 +72,22 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
       const qs = choferId
         ? `choferId=${encodeURIComponent(choferId)}`
         : `camionetaId=${encodeURIComponent(camionetaId!)}`;
-      const [items, meta] = await Promise.all([
+      const [items, meta, chofer] = await Promise.all([
         apiFetch<DocumentoEntidad[]>(`/api/documentos?${qs}`, {}, token),
         apiFetch<{
           tiposChofer?: TipoDocumento[];
           tiposUnidad?: TipoDocumento[];
           conVencimiento: TipoDocumento[];
         }>("/api/documentos/meta", {}, token).catch(() => null),
+        choferId
+          ? apiFetch<Chofer>(`/api/choferes/${choferId}`, {}, token).catch(() => null)
+          : Promise.resolve(null),
       ]);
       setDocs(items);
+      if (chofer?.dni) {
+        setDniNumero(chofer.dni);
+        setDniGuardado(chofer.dni);
+      }
       const nextTipos = choferId
         ? meta?.tiposChofer?.length
           ? meta.tiposChofer
@@ -139,6 +150,30 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
     }
   }
 
+  async function guardarDni() {
+    if (!token || !choferId) return;
+    const dni = dniNumero.replace(/\D/g, "");
+    if (dni.length < 7) {
+      setError("Indicá un DNI válido");
+      return;
+    }
+    setSavingDni(true);
+    setError(null);
+    try {
+      const updated = await apiFetch<Chofer>(
+        `/api/choferes/${choferId}/dni`,
+        { method: "PATCH", body: JSON.stringify({ dni }) },
+        token
+      );
+      setDniNumero(updated.dni);
+      setDniGuardado(updated.dni);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar el DNI");
+    } finally {
+      setSavingDni(false);
+    }
+  }
+
   async function validar(id: string, estado: EstadoValidacionDoc) {
     if (!token) return;
     let motivoRechazo: string | undefined;
@@ -188,6 +223,37 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
       </p>
 
       <div className="space-y-2">
+        {choferId && (
+          <div className="flex flex-col gap-2 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-[var(--vl-heading)]">
+                Número de DNI
+              </div>
+              <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                {dniGuardado ? `Cargado: ${dniGuardado}` : "Completá el número"}
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="Ej. 30123456"
+                value={dniNumero}
+                onChange={(e) => setDniNumero(e.target.value)}
+                className="min-h-10 w-[9.5rem] rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-xs text-[var(--vl-text)]"
+              />
+              <button
+                type="button"
+                disabled={savingDni || dniNumero.replace(/\D/g, "") === dniGuardado.replace(/\D/g, "")}
+                onClick={() => void guardarDni()}
+                className="min-h-10 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+              >
+                {savingDni ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+          </div>
+        )}
         {tipos.map((t) => {
           const latest = docs.find((d) => d.tipo === t);
           const needs = conVencimiento.includes(t);
