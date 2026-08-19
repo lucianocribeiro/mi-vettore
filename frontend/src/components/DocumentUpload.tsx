@@ -183,8 +183,8 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
       </div>
       <p className="text-[11px] text-[var(--vl-text-muted)]">
         {choferId
-          ? "Solo DNI (frente/dorso) y licencia de conducir."
-          : "Solo VTV, SENASA, seguro y habilitación / manipulación."}
+          ? "DNI, licencia y habilitación de manipulación de alimentos."
+          : "VTV, SENASA y seguro."}
       </p>
 
       <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">

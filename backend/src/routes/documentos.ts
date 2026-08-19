@@ -46,12 +46,12 @@ const TIPOS_CHOFER = new Set<TipoDocumento>([
   TipoDocumento.DNI_FRENTE,
   TipoDocumento.DNI_DORSO,
   TipoDocumento.LICENCIA,
-  TipoDocumento.SENASA,
   TipoDocumento.HABILITACION_MANIPULACION,
 ]);
 
 const TIPOS_UNIDAD = new Set<TipoDocumento>([
   TipoDocumento.VTV,
+  TipoDocumento.SENASA,
   TipoDocumento.SEGURO,
 ]);
 
@@ -169,14 +169,14 @@ router.post(
       }
       if (choferId && !TIPOS_CHOFER.has(tipo)) {
         res.status(400).json({
-          error: "En chofer solo se carga DNI (frente/dorso) o licencia",
+          error: "En chofer solo se carga DNI, licencia o habilitación de alimentos",
         });
         return;
       }
       if (camionetaId && !TIPOS_UNIDAD.has(tipo)) {
         res.status(400).json({
           error:
-            "En unidad solo se carga VTV, SENASA, seguro o habilitación/manipulación",
+            "En unidad solo se carga VTV, SENASA o seguro",
         });
         return;
       }

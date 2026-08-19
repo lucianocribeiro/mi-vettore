@@ -137,12 +137,12 @@ export const TIPOS_DOCUMENTO_CHOFER: TipoDocumento[] = [
   "DNI_FRENTE",
   "DNI_DORSO",
   "LICENCIA",
-  "SENASA",
   "HABILITACION_MANIPULACION",
 ];
 
 export const TIPOS_DOCUMENTO_UNIDAD: TipoDocumento[] = [
   "VTV",
+  "SENASA",
   "SEGURO",
 ];
 
