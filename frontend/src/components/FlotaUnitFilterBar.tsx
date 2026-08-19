@@ -113,6 +113,8 @@ type Props = {
   shown: number;
   placeholder?: string;
   hideEstado?: boolean;
+  /** Oculta clasificación, modelo y capacidad (chóferes / mantenimiento). */
+  hideDetalleUnidad?: boolean;
   empresas?: { id: string; nombre: string }[];
   unidades?: Camioneta[];
 };
@@ -124,6 +126,7 @@ export function FlotaUnitFilterBar({
   shown,
   placeholder = "Buscar patente o empresa…",
   hideEstado,
+  hideDetalleUnidad,
   empresas = [],
   unidades = [],
 }: Props) {
@@ -181,6 +184,7 @@ export function FlotaUnitFilterBar({
         placeholder={placeholder}
         className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
       />
+      {(!hideEstado || !hideDetalleUnidad) && (
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {!hideEstado && (
         <div
@@ -212,6 +216,8 @@ export function FlotaUnitFilterBar({
           </div>
         </div>
         )}
+        {!hideDetalleUnidad && (
+        <>
         <div
           className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2"
           aria-label="Filtrar por clasificación"
@@ -269,7 +275,10 @@ export function FlotaUnitFilterBar({
           aria-label="Filtrar por capacidad"
           className="min-h-11 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
         />
+        </>
+        )}
       </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--vl-text-muted)]">
         <span>
           Mostrando {shown} de {total} unidades

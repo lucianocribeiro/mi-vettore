@@ -266,6 +266,7 @@ export function M6MantenimientoPage() {
             total={camionetas.length}
             shown={filtradas.length}
             hideEstado={!isInternalOps(user?.rol)}
+            hideDetalleUnidad
             empresas={[
               ...new Map(
                 camionetas

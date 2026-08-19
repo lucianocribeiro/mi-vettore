@@ -892,6 +892,7 @@ export function M5FichaPage() {
             onChange={setUnitFilters}
             total={camionetas.length}
             shown={camionetasFiltradas.length}
+            hideDetalleUnidad
             empresas={empresas.map((e) => ({ id: e.id, nombre: e.nombre }))}
             unidades={camionetas}
           />
