@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import type { ContextoAcceso } from "./contexto-acceso.js";
 
 const includeAsignaciones = {
   tipoServicio: true,
@@ -12,14 +13,15 @@ const includeAsignaciones = {
 };
 
 /**
- * Unidades visibles para un usuario chofer / empresa unipersonal (esDuenoFlota):
- * - Dueño de flota: todas las patentes de su/s empresa/s (puede rotar entre ellas).
- * - Chofer común: solo las unidades donde está asignado.
- * Chofer y patente están al mismo nivel bajo Empresa (AsignacionFlota); no hay vínculo fijo.
- *
- * TODO (miércoles): historial al cambiar empresa de una unidad — no migrar/borrar aún.
+ * Unidades visibles para un usuario chofer / empresa de transporte:
+ * - Modo EMPRESA (dueño de flota): todas las patentes de su/s empresa/s.
+ * - Modo CHOFER: solo las unidades donde está asignado.
+ * Un dueño unipersonal puede usar el mismo usuario en ambos contextos.
  */
-export async function camionetasParaUsuarioChofer(userId: string) {
+export async function camionetasParaUsuarioChofer(
+  userId: string,
+  contexto: ContextoAcceso = "CHOFER"
+) {
   const me = await prisma.usuario.findUnique({
     where: { id: userId },
     include: { chofer: true },
@@ -32,8 +34,7 @@ export async function camionetasParaUsuarioChofer(userId: string) {
   });
   if (misAsig.length === 0) return [];
 
-  // Titular: ve toda la flota de sus empresas
-  if (me.chofer.esDuenoFlota) {
+  if (me.chofer.esDuenoFlota && contexto === "EMPRESA") {
     const empresaIds = [...new Set(misAsig.map((a) => a.empresaId))];
     return prisma.camioneta.findMany({
       where: {
@@ -49,7 +50,6 @@ export async function camionetasParaUsuarioChofer(userId: string) {
     });
   }
 
-  // Chofer: solo sus unidades asignadas
   const camionetaIds = [...new Set(misAsig.map((a) => a.camionetaId))];
   return prisma.camioneta.findMany({
     where: { id: { in: camionetaIds } },
@@ -58,10 +58,49 @@ export async function camionetasParaUsuarioChofer(userId: string) {
   });
 }
 
+export async function empresaIdsDeDueno(userId: string): Promise<string[]> {
+  const me = await prisma.usuario.findUnique({
+    where: { id: userId },
+    include: { chofer: true },
+  });
+  if (!me?.choferId || !me.chofer?.esDuenoFlota) return [];
+  const misAsig = await prisma.asignacionFlota.findMany({
+    where: { choferId: me.choferId, periodoHasta: null },
+    select: { empresaId: true },
+  });
+  return [...new Set(misAsig.map((a) => a.empresaId))];
+}
+
+export async function choferPuedeVerChofer(
+  userId: string,
+  choferId: string,
+  contexto: ContextoAcceso
+): Promise<boolean> {
+  const me = await prisma.usuario.findUnique({
+    where: { id: userId },
+    include: { chofer: true },
+  });
+  if (!me?.choferId) return false;
+  if (me.choferId === choferId) return true;
+  if (!me.chofer?.esDuenoFlota || contexto !== "EMPRESA") return false;
+  const empresas = await empresaIdsDeDueno(userId);
+  if (empresas.length === 0) return false;
+  const hit = await prisma.asignacionFlota.findFirst({
+    where: {
+      choferId,
+      empresaId: { in: empresas },
+      periodoHasta: null,
+    },
+    select: { id: true },
+  });
+  return !!hit;
+}
+
 export async function choferPuedeEditarCamioneta(
   userId: string,
-  camionetaId: string
+  camionetaId: string,
+  contexto: ContextoAcceso = "CHOFER"
 ): Promise<boolean> {
-  const visibles = await camionetasParaUsuarioChofer(userId);
+  const visibles = await camionetasParaUsuarioChofer(userId, contexto);
   return visibles.some((c) => c.id === camionetaId);
 }

@@ -155,6 +155,9 @@ model Chofer {
   email               String?
   /// Empresa unipersonal / titular: misma UI de chofer; ve y rota patentes de su empresa.
   esDuenoFlota        Boolean          @default(false)
+  /// Módulos opcionales (Documentación es siempre obligatorio).
+  verMantenimiento    Boolean          @default(true)
+  verTaller           Boolean          @default(true)
   estado              EstadoChofer     @default(ACTIVO)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
@@ -214,6 +217,7 @@ model Camioneta {
   tipoServicio           TipoServicio?    @relation(fields: [tipoServicioId], references: [id])
   documentos             DocumentoEntidad[]
   kmRegistros            KmRegistro[]
+  registrosMantenimiento RegistroMantenimiento[]
 }
 
 model EmpresaTransporte {
@@ -469,6 +473,12 @@ enum EstadoTallerMovimiento {
   PAGADO
 }
 
+enum MetodoPagoTaller {
+  TRANSFERENCIA
+  CHEQUE
+  EFECTIVO
+}
+
 /// Ítems de presupuesto/factura de una OT (varios proveedores en la misma orden).
 model OtItem {
   id                String              @id @default(cuid())
@@ -519,6 +529,7 @@ model TallerMovimiento {
   montoFacturado  Float
   fechaFactura    DateTime               @default(now())
   fechaPago       DateTime?
+  metodoPago      MetodoPagoTaller?
   estado          EstadoTallerMovimiento @default(PENDIENTE)
   createdAt       DateTime               @default(now())
 
@@ -649,4 +660,22 @@ model CorreccionAdmin {
 
   @@index([entidad, entidadId])
   @@index([createdAt])
+}
+
+/// Línea de base de mantenimiento (import 2026 / OT cerradas). No es carga libre del chofer.
+model RegistroMantenimiento {
+  id           String    @id @default(cuid())
+  camionetaId  String
+  fecha        DateTime
+  km           Int?
+  tipo         String
+  detalle      String?
+  tallerNombre String?
+  otId         String?
+  fuente       String    @default("IMPORT_2026")
+  createdAt    DateTime  @default(now())
+
+  camioneta Camioneta @relation(fields: [camionetaId], references: [id], onDelete: Cascade)
+
+  @@index([camionetaId, fecha])
 }

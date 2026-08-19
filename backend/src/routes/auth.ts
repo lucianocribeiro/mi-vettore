@@ -34,7 +34,11 @@ function publicUser(
     clienteId?: string | null;
     choferId?: string | null;
   },
-  chofer?: { esDuenoFlota: boolean } | null,
+  chofer?: {
+    esDuenoFlota: boolean;
+    verMantenimiento?: boolean;
+    verTaller?: boolean;
+  } | null,
   empresaNombre?: string | null
 ) {
   return {
@@ -46,6 +50,8 @@ function publicUser(
     clienteId: user.clienteId ?? null,
     choferId: user.choferId ?? null,
     esDuenoFlota: chofer?.esDuenoFlota ?? false,
+    verMantenimiento: chofer?.verMantenimiento ?? true,
+    verTaller: chofer?.verTaller ?? true,
     empresaNombre: empresaNombre ?? null,
   };
 }

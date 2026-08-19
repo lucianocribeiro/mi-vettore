@@ -106,23 +106,67 @@ export async function runRecordatorioKm10Dias() {
         errorMensaje: mail.ok ? null : mail.error,
       },
     });
-    if (ch.esDuenoFlota) {
-      await prisma.avisoInterno.create({
-        data: {
-          titulo: asunto,
-          mensaje: cuerpo,
-          usuarioId: (
-            await prisma.usuario.findFirst({
-              where: { choferId: ch.id },
-              select: { id: true },
-            })
-          )?.id,
-        },
+      const usuario = await prisma.usuario.findFirst({
+        where: { choferId: ch.id },
+        select: { id: true },
       });
-    }
+      if (usuario?.id) {
+        await prisma.avisoInterno.create({
+          data: {
+            titulo: asunto,
+            mensaje: cuerpo,
+            usuarioId: usuario.id,
+          },
+        });
+      }
     enviados++;
   }
   return { loteId, enviados };
+}
+
+/** Alerta si el km actual superó ~10.000 desde la última OT cerrada. */
+export async function runAlertaServicioKm() {
+  const umbral = 10000;
+  const unidades = await prisma.camioneta.findMany({
+    where: { estado: { not: "FUERA_SERVICIO" } },
+    include: {
+      asignaciones: {
+        where: { periodoHasta: null },
+        include: { chofer: true },
+        take: 1,
+      },
+      solicitudes: {
+        where: { ordenTrabajo: { cerradaAt: { not: null } } },
+        include: { ordenTrabajo: true },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+  let n = 0;
+  for (const u of unidades) {
+    const lastKm = u.solicitudes[0]?.ordenTrabajo?.kmAlMomento;
+    if (lastKm == null) continue;
+    const delta = u.km - lastKm;
+    if (delta < umbral) continue;
+    const ch = u.asignaciones[0]?.chofer;
+    const usuario = ch
+      ? await prisma.usuario.findFirst({
+          where: { choferId: ch.id },
+          select: { id: true },
+        })
+      : null;
+    await prisma.avisoInterno.create({
+      data: {
+        titulo: `Servicio próximo — ${u.patente}`,
+        mensaje: `${u.patente} recorrió ${delta.toLocaleString("es-AR")} km desde la última reparación (${lastKm.toLocaleString("es-AR")} km). Revisá mantenimiento.`,
+        usuarioId: usuario?.id,
+        rolDestino: usuario?.id ? undefined : "SILVINA",
+      },
+    });
+    n++;
+  }
+  return { avisos: n };
 }
 
 /** Alertas de documentación con vencimiento → dueño/empresa (no al chofer común). SENASA en standby. */

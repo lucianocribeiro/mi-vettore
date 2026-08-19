@@ -18,7 +18,7 @@ function HomeRedirect() {
   const { user } = useAuth();
   if (user?.rol === "SUGERENCIAS") return <Navigate to="/sugerencias" replace />;
   if (user?.rol === "CLIENTE") return <Navigate to="/m2" replace />;
-  if (user?.rol === "CHOFER") return <Navigate to="/m7" replace />;
+  if (user?.rol === "CHOFER") return <Navigate to={user.esDuenoFlota ? "/documentacion" : "/m7"} replace />;
   return <Navigate to="/m7" replace />;
 }
 

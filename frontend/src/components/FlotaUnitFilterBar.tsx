@@ -4,6 +4,8 @@ export type TipoFiltroTransporte = TipoTransporte | "SIN_TIPO";
 
 export type FlotaUnitFilters = {
   query: string;
+  empresaId: string;
+  patenteId: string;
   estado: EstadoCamioneta[];
   tipo: TipoFiltroTransporte[];
   modelo: string;
@@ -12,6 +14,8 @@ export type FlotaUnitFilters = {
 
 export const EMPTY_FLOTA_FILTERS: FlotaUnitFilters = {
   query: "",
+  empresaId: "",
+  patenteId: "",
   estado: [],
   tipo: [],
   modelo: "",
@@ -70,8 +74,12 @@ export function filterCamionetas(
         .toLowerCase();
       if (!capLabel.includes(capacidadQ)) return false;
     }
-    if (!q) return true;
     const a = currentAsignacion(c);
+    if (f.empresaId && a?.empresaId !== f.empresaId && a?.empresa?.id !== f.empresaId) {
+      return false;
+    }
+    if (f.patenteId && c.id !== f.patenteId) return false;
+    if (!q) return true;
     const hay = [
       c.patente,
       c.marca,
@@ -84,7 +92,6 @@ export function filterCamionetas(
       c.tipoTransporte,
       c.tipoServicio?.nombre,
       c.estado,
-      a?.chofer?.nombre,
       a?.empresa?.nombre,
       String(c.km),
     ]
@@ -105,6 +112,9 @@ type Props = {
   total: number;
   shown: number;
   placeholder?: string;
+  hideEstado?: boolean;
+  empresas?: { id: string; nombre: string }[];
+  unidades?: Camioneta[];
 };
 
 export function FlotaUnitFilterBar({
@@ -112,17 +122,58 @@ export function FlotaUnitFilterBar({
   onChange,
   total,
   shown,
-  placeholder = "Buscar patente, chofer, empresa…",
+  placeholder = "Buscar patente o empresa…",
+  hideEstado,
+  empresas = [],
+  unidades = [],
 }: Props) {
   const active =
     !!value.query.trim() ||
+    !!value.empresaId ||
+    !!value.patenteId ||
     value.estado.length > 0 ||
     value.tipo.length > 0 ||
     !!value.modelo.trim() ||
     !!value.capacidad.trim();
 
+  const patentes = unidades.filter((c) => {
+    if (!value.empresaId) return true;
+    const a = currentAsignacion(c);
+    return a?.empresaId === value.empresaId || a?.empresa?.id === value.empresaId;
+  });
+
   return (
     <div className="mb-4 space-y-2 rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <select
+          value={value.empresaId}
+          onChange={(e) =>
+            onChange({ ...value, empresaId: e.target.value, patenteId: "" })
+          }
+          className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+          aria-label="Empresa de transporte"
+        >
+          <option value="">Empresa de transporte…</option>
+          {empresas.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.nombre}
+            </option>
+          ))}
+        </select>
+        <select
+          value={value.patenteId}
+          onChange={(e) => onChange({ ...value, patenteId: e.target.value })}
+          className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+          aria-label="Patente"
+        >
+          <option value="">Patente…</option>
+          {patentes.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.patente}
+            </option>
+          ))}
+        </select>
+      </div>
       <input
         type="search"
         value={value.query}
@@ -131,6 +182,7 @@ export function FlotaUnitFilterBar({
         className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
       />
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {!hideEstado && (
         <div
           className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2"
           aria-label="Filtrar por estado"
@@ -159,6 +211,7 @@ export function FlotaUnitFilterBar({
             ))}
           </div>
         </div>
+        )}
         <div
           className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2"
           aria-label="Filtrar por clasificación"

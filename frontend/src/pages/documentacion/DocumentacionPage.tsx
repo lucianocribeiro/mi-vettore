@@ -43,6 +43,8 @@ type AdvFilters = {
   estados: EstadoCamioneta[];
   tipos: TipoFiltroTransporte[];
   empresa: string;
+  empresaId: string;
+  patenteId: string;
   sinChofer: boolean;
   sinUnidad: boolean;
 };
@@ -51,6 +53,8 @@ const EMPTY_ADV: AdvFilters = {
   estados: [],
   tipos: [],
   empresa: "",
+  empresaId: "",
+  patenteId: "",
   sinChofer: false,
   sinUnidad: false,
 };
@@ -82,7 +86,7 @@ export function DocumentacionPage() {
       const cams = await apiFetch<Camioneta[]>("/api/camionetas", {}, token);
       setCamionetas(cams);
       if (cams.length === 1) setSelectedCam(cams[0].id);
-      if (ops) {
+      if (ops || user?.esDuenoFlota) {
         const ch = await apiFetch<Chofer[]>("/api/choferes", {}, token);
         setChoferes(ch);
       } else if (user?.choferId) {
@@ -110,6 +114,10 @@ export function DocumentacionPage() {
         if (!matchTipo) return false;
       }
       if (adv.sinChofer && asg?.chofer) return false;
+      if (adv.empresaId && asg?.empresa?.id !== adv.empresaId && asg?.empresaId !== adv.empresaId) {
+        return false;
+      }
+      if (adv.patenteId && c.id !== adv.patenteId) return false;
       if (
         empresaQ &&
         !(asg?.empresa?.nombre ?? "").toLowerCase().includes(empresaQ)
@@ -123,8 +131,6 @@ export function DocumentacionPage() {
           c.modelo,
           c.estado,
           c.tipoTransporte,
-          asg?.chofer?.nombre,
-          asg?.chofer?.dni,
           asg?.empresa?.nombre,
         ],
         query
@@ -202,7 +208,7 @@ export function DocumentacionPage() {
               : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
           }`}
         >
-          {ops ? "Choferes" : "Mi DNI / licencia"}
+          {ops || user?.esDuenoFlota ? "Chóferes" : "Mi documentación"}
         </button>
       </div>
 

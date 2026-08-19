@@ -103,7 +103,7 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
 ];
 
 export function LoginPage() {
-  const { user, loading, login } = useAuth();
+  const { user, loading, login, setContextoAcceso } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -170,10 +170,15 @@ export function LoginPage() {
     return <Navigate to="/" replace />;
   }
 
-  async function doLogin(nextEmail: string, nextPassword: string) {
+  async function doLogin(
+    nextEmail: string,
+    nextPassword: string,
+    contexto?: "CHOFER" | "EMPRESA"
+  ) {
     setError(null);
     setSubmitting(true);
     try {
+      if (contexto) setContextoAcceso(contexto);
       await login(nextEmail.trim(), nextPassword);
     } catch (err) {
       setError(
@@ -207,7 +212,11 @@ export function LoginPage() {
     setEmail(ch.email);
     setPassword(DEMO_PASSWORD);
     setQuickEmail(ch.email);
-    await doLogin(ch.email, DEMO_PASSWORD);
+    await doLogin(
+      ch.email,
+      DEMO_PASSWORD,
+      pickerMode === "dueno" ? "EMPRESA" : "CHOFER"
+    );
   }
 
   const pickerTitle =

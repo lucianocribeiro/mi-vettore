@@ -6,6 +6,7 @@ import {
   camionetasParaUsuarioChofer,
   choferPuedeEditarCamioneta,
 } from "../lib/flota.js";
+import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 import {
@@ -54,7 +55,10 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
     const incluirBajas = String(req.query.incluirBajas ?? "") === "1";
     const me = await prisma.usuario.findUnique({ where: { id: req.user!.id } });
     if (me?.rol === "CHOFER") {
-      let items = await camionetasParaUsuarioChofer(me.id);
+      let items = await camionetasParaUsuarioChofer(
+        me.id,
+        contextoAccesoFromReq(req)
+      );
       if (!incluirBajas) {
         items = items.filter((c) => c.estado !== "FUERA_SERVICIO");
       }
@@ -229,7 +233,7 @@ router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
     if (req.user!.rol === "CHOFER") {
-      const ok = await choferPuedeEditarCamioneta(req.user!.id, item.id);
+      const ok = await choferPuedeEditarCamioneta(req.user!.id, item.id, contextoAccesoFromReq(req));
       if (!ok) {
         res.status(403).json({ error: "Sin acceso a esta unidad" });
         return;
@@ -239,6 +243,72 @@ router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al obtener camioneta" });
+  }
+});
+
+router.get("/:id/reparaciones", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const camionetaId = req.params.id;
+    const existing = await prisma.camioneta.findUnique({
+      where: { id: camionetaId },
+    });
+    if (!existing) {
+      res.status(404).json({ error: "Camioneta no encontrada" });
+      return;
+    }
+    if (req.user!.rol === "CHOFER") {
+      const ok = await choferPuedeEditarCamioneta(
+        req.user!.id,
+        camionetaId,
+        contextoAccesoFromReq(req)
+      );
+      if (!ok) {
+        res.status(403).json({ error: "Sin acceso a esta unidad" });
+        return;
+      }
+    }
+
+    const ots = await prisma.ordenTrabajo.findMany({
+      where: {
+        solicitud: { camionetaId },
+        cerradaAt: { not: null },
+      },
+      include: {
+        solicitud: true,
+        tallerProveedor: true,
+      },
+      orderBy: { cerradaAt: "desc" },
+      take: 5,
+    });
+    const historicos = await prisma.registroMantenimiento.findMany({
+      where: { camionetaId },
+      orderBy: { fecha: "desc" },
+      take: 5,
+    });
+
+    const fromOt = ots.map((ot) => ({
+      fuente: "OT",
+      fecha: ot.cerradaAt,
+      km: ot.kmAlMomento,
+      taller: ot.tallerAsignado || ot.tallerProveedor?.razonSocial || "—",
+      detalle: ot.solicitud.falla,
+      numeroOT: ot.numeroOT,
+    }));
+    const fromHist = historicos.map((h) => ({
+      fuente: h.fuente,
+      fecha: h.fecha,
+      km: h.km,
+      taller: h.tallerNombre || "—",
+      detalle: h.detalle || h.tipo,
+      numeroOT: h.otId,
+    }));
+    const merged = [...fromOt, ...fromHist]
+      .sort((a, b) => new Date(b.fecha ?? 0).getTime() - new Date(a.fecha ?? 0).getTime())
+      .slice(0, 5);
+    res.json(merged);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al listar reparaciones" });
   }
 });
 
@@ -279,7 +349,7 @@ router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
     }
     const ops = isInternalOpsRole(req.user!.rol);
     if (!ops) {
-      const ok = await choferPuedeEditarCamioneta(req.user!.id, item.id);
+      const ok = await choferPuedeEditarCamioneta(req.user!.id, item.id, contextoAccesoFromReq(req));
       if (!ok) {
         res.status(403).json({ error: "Sin permiso para exportar esta unidad" });
         return;
@@ -668,7 +738,7 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
       rol as (typeof MASTER_WRITE_ROLES)[number]
     );
     if (rol === "CHOFER") {
-      const ok = await choferPuedeEditarCamioneta(req.user!.id, camionetaId);
+      const ok = await choferPuedeEditarCamioneta(req.user!.id, camionetaId, contextoAccesoFromReq(req));
       if (!ok) {
         res.status(403).json({ error: "Solo podés actualizar unidades de tu flota" });
         return;
@@ -720,21 +790,26 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
         });
       }
     }
-    if (req.body?.fechaUltimoAceite !== undefined) {
-      data.fechaUltimoAceite = parseDate(req.body.fechaUltimoAceite);
-    }
-    if (req.body?.fechaCambioCorrea !== undefined) {
-      data.fechaCambioCorrea = parseDate(req.body.fechaCambioCorrea);
-    }
-    if (req.body?.fechaCambioNeumaticos !== undefined) {
-      data.fechaCambioNeumaticos = parseDate(req.body.fechaCambioNeumaticos);
-    }
-    if (req.body?.fechaCambioBateria !== undefined) {
-      data.fechaCambioBateria = parseDate(req.body.fechaCambioBateria);
+    if (rol !== "CHOFER") {
+      if (req.body?.fechaUltimoAceite !== undefined) {
+        data.fechaUltimoAceite = parseDate(req.body.fechaUltimoAceite);
+      }
+      if (req.body?.fechaCambioCorrea !== undefined) {
+        data.fechaCambioCorrea = parseDate(req.body.fechaCambioCorrea);
+      }
+      if (req.body?.fechaCambioNeumaticos !== undefined) {
+        data.fechaCambioNeumaticos = parseDate(req.body.fechaCambioNeumaticos);
+      }
+      if (req.body?.fechaCambioBateria !== undefined) {
+        data.fechaCambioBateria = parseDate(req.body.fechaCambioBateria);
+      }
     }
     if (Object.keys(data).length === 0) {
       res.status(400).json({
-        error: "Indicá km y/o fechas de mantenimiento (aceite, correa, neumáticos, batería)",
+        error:
+          rol === "CHOFER"
+            ? "Indicá el kilometraje actual"
+            : "Indicá km y/o fechas de mantenimiento (aceite, correa, neumáticos, batería)",
       });
       return;
     }

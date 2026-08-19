@@ -165,9 +165,11 @@ function money(n: number | null | undefined) {
 }
 
 export function M7TalleresPage() {
-  const { token, user } = useAuth();
+  const { token, user, contextoAcceso } = useAuth();
   const rol = user?.rol;
   const esChofer = rol === "CHOFER";
+  const vistaChofer =
+    esChofer && !(user?.esDuenoFlota && contextoAcceso === "EMPRESA");
 
   const [pageTab, setPageTab] = useState<"ots" | "proveedores">("ots");
   const [ots, setOts] = useState<OrdenTrabajo[]>([]);
@@ -228,7 +230,7 @@ export function M7TalleresPage() {
 
   function needsMyAction(o: OrdenTrabajo) {
     if (o.cerradaAt) return false;
-    if (esChofer) return !!o.urgente && isGastoStep(o.currentStep) && !(o.totales?.facturado);
+    if (vistaChofer) return !!o.urgente && isGastoStep(o.currentStep) && !(o.totales?.facturado);
     return canAdvanceFromStep(rol, o.currentStep) || (o.currentStep === 5 && canCerrarOt(rol));
   }
 
@@ -376,7 +378,7 @@ export function M7TalleresPage() {
                       <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">Habitual: {OT_STEPS[ot.currentStep].owner}</p>
                     )}
 
-                    {esChofer ? (
+                    {vistaChofer ? (
                       <div className="mt-4 space-y-3">
                         <div className="grid grid-cols-2 gap-2">
                           <div className="rounded-lg border border-[var(--vl-card-border)] p-3">
@@ -511,6 +513,26 @@ export function M7TalleresPage() {
                           />
                         )}
 
+                        {isFacturaStep(ot.currentStep) && ot.sinPresupuesto && (
+                          <ItemsEditor
+                            ot={ot}
+                            token={token!}
+                            talleres={talleres}
+                            tipo="PRESUPUESTO"
+                            lockTipo
+                            desc={itemDesc}
+                            setDesc={setItemDesc}
+                            imp={itemImp}
+                            setImp={setItemImp}
+                            obs={itemObs}
+                            setObs={setItemObs}
+                            tallerId={itemTallerId}
+                            setTallerId={setItemTallerId}
+                            busy={busy}
+                            onSaved={replaceOt}
+                          />
+                        )}
+
                         {isFacturaStep(ot.currentStep) && (
                           <div>
                             <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
@@ -544,7 +566,7 @@ export function M7TalleresPage() {
                           </div>
                         )}
 
-                        {!esChofer && (ot.auditorias?.length ?? 0) > 0 && (
+                        {!vistaChofer && (ot.auditorias?.length ?? 0) > 0 && (
                           <details className="text-xs text-[var(--vl-text-muted)]">
                             <summary>Registro de acciones ({ot.auditorias!.length})</summary>
                             <ul className="mt-1 space-y-1">
@@ -575,7 +597,7 @@ export function M7TalleresPage() {
                     </div>
                   </div>
 
-                  {!esChofer && !ot.cerradaAt && (
+                  {!vistaChofer && !ot.cerradaAt && (
                     <div className="mt-5 flex flex-col gap-2 sm:flex-row">
                       {ot.currentStep > 0 && (
                         <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/retroceder`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold">
@@ -615,6 +637,18 @@ export function M7TalleresPage() {
   );
 }
 
+function groupByTaller<T extends { tallerNombre: string; importe: number }>(items: T[]) {
+  const map = new Map<string, { nombre: string; items: T[]; subtotal: number }>();
+  for (const i of items) {
+    const nombre = i.tallerNombre?.trim() || "Sin proveedor";
+    const prev = map.get(nombre) ?? { nombre, items: [], subtotal: 0 };
+    prev.items.push(i);
+    prev.subtotal += i.importe;
+    map.set(nombre, prev);
+  }
+  return [...map.values()];
+}
+
 function PresupuestoChecklist({
   ot, token, onSaved,
 }: {
@@ -651,36 +685,34 @@ function PresupuestoChecklist({
       <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
         Marcá los ítems del presupuesto que entran en esta factura.
       </p>
-      <table className="mb-2 w-full text-left text-xs">
-        <thead>
-          <tr className="text-[var(--vl-text-muted)]">
-            <th className="w-8">Factura</th>
-            <th>Concepto</th>
-            <th>Importe</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((i) => (
-            <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
-              <td className="py-1">
-                <label className="inline-flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={!!i.aprobado}
-                    onChange={(e) => void setAFacturar(i.id, e.target.checked)}
-                  />
-                  <span className="sr-only">Se factura</span>
-                </label>
-              </td>
-              <td className="py-1">
-                {i.descripcion}
-                <div className="text-[10px] text-[var(--vl-text-muted)]">{i.tallerNombre}</div>
-              </td>
-              <td>{money(i.importe)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {groupByTaller(items).map((g) => (
+        <div key={g.nombre} className="mb-3">
+          <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
+            <span>{g.nombre}</span>
+            <span>Subtotal {money(g.subtotal)}</span>
+          </div>
+          <table className="w-full text-left text-xs">
+            <tbody>
+              {g.items.map((i) => (
+                <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
+                  <td className="w-8 py-1">
+                    <label className="inline-flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!i.aprobado}
+                        onChange={(e) => void setAFacturar(i.id, e.target.checked)}
+                      />
+                      <span className="sr-only">Se factura</span>
+                    </label>
+                  </td>
+                  <td className="py-1">{i.descripcion}</td>
+                  <td className="py-1 text-right">{money(i.importe)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
     </div>
   );
 }
@@ -748,27 +780,26 @@ function ItemsEditor({
   return (
     <div>
       <div className="mb-2 text-xs font-semibold">Ítems ({tipo.toLowerCase()}) — total {money(total)}</div>
-      <table className="mb-2 w-full text-left text-xs">
-        <thead>
-          <tr className="text-[var(--vl-text-muted)]">
-            <th>Concepto</th>
-            <th>Clasif.</th>
-            <th>Importe</th>
-            {showAprobado && <th>Aprobado</th>}
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((i) => (
-            <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
-              <td className="py-1">{i.descripcion}<div className="text-[10px] text-[var(--vl-text-muted)]">{i.tallerNombre}</div></td>
-              <td>{clasifLabel(i)}</td>
-              <td>{money(i.importe)}</td>
-              <td><button type="button" className="underline" onClick={() => void remove(i.id)}>Quitar</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {groupByTaller(items).map((g) => (
+        <div key={g.nombre} className="mb-2">
+          <div className="flex items-center justify-between text-[11px] font-semibold">
+            <span>{g.nombre}</span>
+            <span>Subtotal {money(g.subtotal)}</span>
+          </div>
+          <table className="mb-1 w-full text-left text-xs">
+            <tbody>
+              {g.items.map((i) => (
+                <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
+                  <td className="py-1">{i.descripcion}</td>
+                  <td>{clasifLabel(i)}</td>
+                  <td>{money(i.importe)}</td>
+                  <td><button type="button" className="underline" onClick={() => void remove(i.id)}>Quitar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
       <div className="grid gap-2 sm:grid-cols-2">
         {!lockTipo && setTipo && (
           <select className="rounded-md border p-2 text-sm" value={tipo} onChange={(e) => setTipo(e.target.value as "PRESUPUESTO" | "FACTURA")}>

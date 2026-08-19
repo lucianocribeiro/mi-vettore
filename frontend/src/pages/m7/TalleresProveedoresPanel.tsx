@@ -22,6 +22,8 @@ type Saldo = {
     fechaPago: string | null;
     estado: "PENDIENTE" | "PAGADO";
     otId: string | null;
+    ot?: { numeroOT: string; solicitud?: { camioneta?: { patente: string } } } | null;
+    metodoPago?: string | null;
   }[];
 };
 
@@ -112,11 +114,28 @@ export function TalleresProveedoresPanel() {
 
   async function marcarPago(tallerId: string, movId: string) {
     if (!token) return;
+    const fechaPago = window.prompt("Fecha de pago (AAAA-MM-DD)", new Date().toISOString().slice(0, 10));
+    if (!fechaPago) return;
+    const metodoRaw = window.prompt("Método: transferencia, cheque o efectivo", "transferencia");
+    if (!metodoRaw) return;
+    const metodoPago = metodoRaw.trim().toUpperCase();
     await apiFetch(
       `/api/talleres-proveedores/${tallerId}/movimientos/${movId}/pagar`,
+      { method: "POST", body: JSON.stringify({ fechaPago, metodoPago }) },
+      token
+    );
+    await load();
+  }
+
+  async function revertirPago(tallerId: string, movId: string) {
+    if (!token) return;
+    await apiFetch(
+      `/api/talleres-proveedores/${tallerId}/movimientos/${movId}/revertir-pago`,
       { method: "POST", body: "{}" },
       token
     );
+    await load();
+  }
     await load();
   }
 
@@ -216,16 +235,31 @@ export function TalleresProveedoresPanel() {
                 {s.movimientos.slice(0, 8).map((m) => (
                   <li key={m.id} className="flex items-center justify-between gap-2">
                     <span>
-                      {money(m.montoFacturado)} · {m.estado.toLowerCase()} ·{" "}
-                      {new Date(m.fechaFactura).toLocaleDateString("es-AR")}
+                      {money(m.montoFacturado)} · {m.estado.toLowerCase()}
+                      {m.ot?.numeroOT ? ` · ${m.ot.numeroOT}` : ""}
+                      {m.ot?.solicitud?.camioneta?.patente
+                        ? ` · ${m.ot.solicitud.camioneta.patente}`
+                        : ""}
+                      {m.fechaPago
+                        ? ` · pago ${new Date(m.fechaPago).toLocaleDateString("es-AR")}`
+                        : ""}
+                      {m.metodoPago ? ` · ${m.metodoPago.toLowerCase()}` : ""}
                     </span>
-                    {m.estado === "PENDIENTE" && (
+                    {m.estado === "PENDIENTE" ? (
                       <button
                         type="button"
                         className="underline"
                         onClick={() => void marcarPago(s.id, m.id)}
                       >
                         Marcar pagado
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => void revertirPago(s.id, m.id)}
+                      >
+                        Revertir
                       </button>
                     )}
                   </li>

@@ -61,6 +61,7 @@ const CARD_TINT: Record<AlertLevel, string> = {
 export function M6MantenimientoPage() {
   const { token, user } = useAuth();
   const esDueno = !!user?.esDuenoFlota;
+  const esChoferRol = user?.rol === "CHOFER";
 
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -264,6 +265,16 @@ export function M6MantenimientoPage() {
             onChange={setUnitFilters}
             total={camionetas.length}
             shown={filtradas.length}
+            hideEstado={!isInternalOps(user?.rol)}
+            empresas={[
+              ...new Map(
+                camionetas
+                  .map((c) => currentAsignacion(c)?.empresa)
+                  .filter((e): e is NonNullable<typeof e> => !!e)
+                  .map((e) => [e.id, e])
+              ).values(),
+            ]}
+            unidades={camionetas}
           />
 
           {filtradas.length === 0 ? (
@@ -418,6 +429,8 @@ export function M6MantenimientoPage() {
                     required
                   />
                 </label>
+                {!esChoferRol && (
+                  <>
                 <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
                   Último cambio de aceite
                   <input
@@ -454,6 +467,8 @@ export function M6MantenimientoPage() {
                     className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
                   />
                 </label>
+                  </>
+                )}
 
                 <p className="text-[11px] text-[var(--vl-text-muted)]">
                   Seguro: {selected.seguroCompania || "—"} · vence:{" "}
@@ -503,6 +518,7 @@ export function M6MantenimientoPage() {
               </form>
 
               <HistorialReparaciones camionetaId={selected.id} token={token} />
+              <UltimasReparaciones camionetaId={selected.id} token={token} />
             </div>
           </div>
         </div>
@@ -579,6 +595,56 @@ function HistorialReparaciones({
             {r.fecha ? new Date(r.fecha).toLocaleDateString("es-AR") : "—"}
             {" · "}
             {r.categoria.nombre}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function UltimasReparaciones({
+  camionetaId,
+  token,
+}: {
+  camionetaId: string;
+  token: string | null;
+}) {
+  const [rows, setRows] = useState<
+    {
+      fecha: string | null;
+      km: number | null;
+      taller: string;
+      detalle: string;
+      numeroOT: string | null;
+    }[]
+  >([]);
+
+  useEffect(() => {
+    if (!token) return;
+    void apiFetch<typeof rows>(
+      `/api/camionetas/${camionetaId}/reparaciones`,
+      {},
+      token
+    )
+      .then(setRows)
+      .catch(() => setRows([]));
+  }, [token, camionetaId]);
+
+  return (
+    <div className="mt-4 rounded-xl border border-[var(--vl-card-border)] p-3">
+      <h3 className="text-sm font-bold text-[var(--vl-heading)]">
+        Últimas 5 reparaciones
+      </h3>
+      <ul className="mt-2 space-y-1 text-xs">
+        {rows.length === 0 && (
+          <li className="text-[var(--vl-text-muted)]">Sin historial de talleres aún.</li>
+        )}
+        {rows.map((r, i) => (
+          <li key={`${r.numeroOT ?? r.fecha}-${i}`}>
+            {r.fecha ? new Date(r.fecha).toLocaleDateString("es-AR") : "—"}
+            {r.km != null ? ` · ${r.km.toLocaleString("es-AR")} km` : ""}
+            {r.taller ? ` · ${r.taller}` : ""}
+            {r.detalle ? ` · ${r.detalle}` : ""}
           </li>
         ))}
       </ul>

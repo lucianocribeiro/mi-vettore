@@ -28,7 +28,7 @@ const NAV: NavItem[] = [
   {
     to: "/documentacion",
     label: "Documentación",
-    sub: "DNI / VTV / seguros",
+    sub: "Unidades y chóferes",
     icon: Folder,
     roles: [
       "CHOFER",
@@ -148,14 +148,21 @@ type Props = {
 };
 
 export function Sidebar({ open, onClose }: Props) {
-  const { user, logout } = useAuth();
+  const { user, logout, contextoAcceso, setContextoAcceso } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [q, setQ] = useState("");
   const isDev = import.meta.env.DEV;
   const rol = user?.rol;
-  const items = NAV.filter((n) => !n.roles || (rol && n.roles.includes(rol)));
+  const items = NAV.filter((n) => {
+    if (n.roles && !(rol && n.roles.includes(rol))) return false;
+    if (rol === "CHOFER") {
+      if (n.to === "/m6" && user?.verMantenimiento === false) return false;
+      if (n.to === "/m7" && user?.verTaller === false) return false;
+    }
+    return true;
+  });
 
   useEffect(() => {
     if (location.pathname === "/documentacion") {
@@ -183,7 +190,7 @@ export function Sidebar({ open, onClose }: Props) {
             </div>
             {user?.esDuenoFlota && (
               <span className="shrink-0 rounded bg-[#1e4080] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
-                Empresa transp.
+                {contextoAcceso === "EMPRESA" ? "Empresa" : "Conductor"}
               </span>
             )}
           </div>
@@ -274,6 +281,38 @@ export function Sidebar({ open, onClose }: Props) {
       </nav>
 
       <div className="border-t border-[var(--vl-sidebar-border)] px-4 py-3 safe-bottom">
+        {user?.esDuenoFlota && (
+          <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg bg-[#0b182c] p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setContextoAcceso("CHOFER");
+                window.location.reload();
+              }}
+              className={`rounded-md px-2 py-1.5 text-[10px] font-semibold ${
+                contextoAcceso === "CHOFER"
+                  ? "bg-[#1e4080] text-white"
+                  : "text-[#8aabc8]"
+              }`}
+            >
+              Conductor
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setContextoAcceso("EMPRESA");
+                window.location.reload();
+              }}
+              className={`rounded-md px-2 py-1.5 text-[10px] font-semibold ${
+                contextoAcceso === "EMPRESA"
+                  ? "bg-[#1e4080] text-white"
+                  : "text-[#8aabc8]"
+              }`}
+            >
+              Empresa
+            </button>
+          </div>
+        )}
         <div className="text-xs text-[#a8c4dc]">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="min-w-0 truncate font-medium text-[#e8edf5]">

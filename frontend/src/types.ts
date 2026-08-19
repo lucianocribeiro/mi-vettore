@@ -9,6 +9,9 @@ export type Role =
   | "CARLA"
   | "SUGERENCIAS";
 
+export type ContextoAcceso = "CHOFER" | "EMPRESA";
+export const CONTEXTO_ACCESO_KEY = "mi-vettore-contexto";
+
 export type User = {
   id: string;
   email: string;
@@ -19,6 +22,8 @@ export type User = {
   choferId?: string | null;
   /** Solo aplica si rol=CHOFER: ve todas las unidades de su empresa */
   esDuenoFlota?: boolean;
+  verMantenimiento?: boolean;
+  verTaller?: boolean;
   /** Empresa de transporte vigente (asignación actual) */
   empresaNombre?: string | null;
   createdAt?: string;
@@ -132,13 +137,13 @@ export const TIPOS_DOCUMENTO_CHOFER: TipoDocumento[] = [
   "DNI_FRENTE",
   "DNI_DORSO",
   "LICENCIA",
+  "SENASA",
+  "HABILITACION_MANIPULACION",
 ];
 
 export const TIPOS_DOCUMENTO_UNIDAD: TipoDocumento[] = [
   "VTV",
-  "SENASA",
   "SEGURO",
-  "HABILITACION_MANIPULACION",
 ];
 
 export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
@@ -228,6 +233,8 @@ export type Chofer = {
   telefono: string | null;
   email: string | null;
   esDuenoFlota: boolean;
+  verMantenimiento?: boolean;
+  verTaller?: boolean;
   estado: EstadoChofer;
   asignaciones?: AsignacionFlota[];
 };

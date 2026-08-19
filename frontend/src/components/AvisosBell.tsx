@@ -118,6 +118,13 @@ export function AvisosBell() {
                     if (a.ot) {
                       setOpen(false);
                       navigate("/m7");
+                    } else if (
+                      /km|kilometr|servicio próximo|mantenimiento/i.test(
+                        `${a.titulo} ${a.mensaje}`
+                      )
+                    ) {
+                      setOpen(false);
+                      navigate("/m6");
                     }
                   }}
                 >

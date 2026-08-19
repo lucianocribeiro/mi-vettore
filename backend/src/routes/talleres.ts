@@ -16,7 +16,8 @@ import {
   type TipoOtItem,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { choferPuedeEditarCamioneta } from "../lib/flota.js";
+import { choferPuedeEditarCamioneta, empresaIdsDeDueno } from "../lib/flota.js";
+import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
 import { sendOtMail } from "../lib/mailer.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
 import { ensureUploadDirs } from "../lib/uploads.js";
@@ -362,8 +363,26 @@ router.get("/meta", authenticate, (_req, res) => {
 router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
     const scope = await choferScope(req.user!.id);
+    let where = scope ? whereOwnSolicitudes(scope) : undefined;
+    if (scope && contextoAccesoFromReq(req) === "EMPRESA") {
+      const empresas = await empresaIdsDeDueno(req.user!.id);
+      if (empresas.length > 0) {
+        where = {
+          solicitud: {
+            camioneta: {
+              asignaciones: {
+                some: {
+                  empresaId: { in: empresas },
+                  periodoHasta: null,
+                },
+              },
+            },
+          },
+        };
+      }
+    }
     const items = await prisma.ordenTrabajo.findMany({
-      where: scope ? whereOwnSolicitudes(scope) : undefined,
+      where,
       include: includeOTFor(req.user!.id),
       orderBy: { createdAt: "desc" },
     });
@@ -649,7 +668,11 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
         return;
       }
       choferId = me.choferId;
-      const ok = await choferPuedeEditarCamioneta(me.id, camionetaId);
+      const ok = await choferPuedeEditarCamioneta(
+        me.id,
+        camionetaId,
+        contextoAccesoFromReq(req)
+      );
       if (!ok) {
         res.status(403).json({
           error: "Solo podés solicitar taller para unidades de tu empresa",
@@ -827,7 +850,11 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
 
     const scope = await choferScope(req.user!.id);
-    if (scope) {
+    const empresaModo =
+      scope &&
+      contextoAccesoFromReq(req) === "EMPRESA" &&
+      (await empresaIdsDeDueno(req.user!.id)).length > 0;
+    if (scope && !empresaModo) {
       res.status(403).json({ error: "Sin permiso para editar esta OT" });
       return;
     }
@@ -847,7 +874,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       }
       const gate = await gateOrOverride({
         rol,
-        allowed: rol === "FACU",
+        allowed: rol === "FACU" || Boolean(empresaModo),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Asignar taller / inhabilitar unidad",
@@ -1609,7 +1636,7 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "Tipo de ítem inválido" });
       return;
     }
-    if (tipoRaw === "PRESUPUESTO" && !isPresupuestoStep(ot.currentStep)) {
+    if (tipoRaw === "PRESUPUESTO" && !isPresupuestoStep(ot.currentStep) && !(isFacturaStep(ot.currentStep) && ot.sinPresupuesto)) {
       res.status(400).json({ error: "Los presupuestos se cargan en la etapa de presupuesto" });
       return;
     }
@@ -1674,8 +1701,12 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
 router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res) => {
   try {
     const ot = await prisma.ordenTrabajo.findUnique({ where: { id: req.params.id } });
-    if (!ot || ot.cerradaAt) {
+    if (!ot) {
       res.status(400).json({ error: "OT no disponible" });
+      return;
+    }
+    if (ot.cerradaAt && req.body?.aprobado !== undefined) {
+      res.status(400).json({ error: "La OT cerrada no cambia el checklist" });
       return;
     }
     if (await choferScope(req.user!.id)) {

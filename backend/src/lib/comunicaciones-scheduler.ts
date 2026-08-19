@@ -4,6 +4,7 @@ import { runComunicacion } from "./comunicaciones.js";
 import {
   runAlertasDocumentos,
   runAlertasVencimientos,
+  runAlertaServicioKm,
   runRecordatorioKm,
   runRecordatorioKm10Dias,
 } from "./recordatorios.js";
@@ -57,6 +58,9 @@ export function startComunicacionesScheduler(): void {
         );
         void runRecordatorioKm10Dias().catch((err) =>
           console.error("[comunicaciones] error recordatorio km 10d", err)
+        );
+        void runAlertaServicioKm().catch((err) =>
+          console.error("[comunicaciones] error alerta servicio km", err)
         );
       },
       { timezone: tz }

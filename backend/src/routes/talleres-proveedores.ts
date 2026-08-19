@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { TipoTaller } from "@prisma/client";
+import { MetodoPagoTaller, TipoTaller } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
@@ -45,13 +45,23 @@ router.get("/saldos", authenticate, async (req: AuthedRequest, res) => {
     }
     const talleres = await prisma.tallerProveedor.findMany({
       where: { activo: true },
-      orderBy: { razonSocial: "asc" },
       include: {
-        movimientos: { orderBy: { createdAt: "desc" } },
+        movimientos: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            ot: {
+              select: {
+                id: true,
+                numeroOT: true,
+                solicitud: { select: { camioneta: { select: { patente: true } } } },
+              },
+            },
+          },
+        },
       },
     });
-    res.json(
-      talleres.map((t) => {
+    const rows = talleres
+      .map((t) => {
         const pendiente = t.movimientos
           .filter((m) => m.estado === "PENDIENTE")
           .reduce((a, m) => a + m.montoFacturado, 0);
@@ -68,7 +78,9 @@ router.get("/saldos", authenticate, async (req: AuthedRequest, res) => {
           movimientos: t.movimientos,
         };
       })
-    );
+      .filter((t) => t.pendiente !== 0 || t.pagado !== 0)
+      .sort((a, b) => b.pendiente - a.pendiente || a.razonSocial.localeCompare(b.razonSocial));
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al listar cuenta corriente" });
@@ -83,7 +95,15 @@ router.get("/:id/movimientos", authenticate, async (req: AuthedRequest, res) => 
     }
     const items = await prisma.tallerMovimiento.findMany({
       where: { tallerProveedorId: req.params.id },
-      include: { ot: { select: { id: true, numeroOT: true } } },
+      include: {
+        ot: {
+          select: {
+            id: true,
+            numeroOT: true,
+            solicitud: { select: { camioneta: { select: { patente: true } } } },
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
     const pendiente = items
@@ -112,14 +132,105 @@ router.post(
         res.status(404).json({ error: "Movimiento no encontrado" });
         return;
       }
+      const fechaPagoRaw = req.body?.fechaPago
+        ? new Date(String(req.body.fechaPago))
+        : new Date();
+      if (Number.isNaN(fechaPagoRaw.getTime())) {
+        res.status(400).json({ error: "Fecha de pago inválida" });
+        return;
+      }
+      const metodoRaw = String(req.body?.metodoPago ?? "").toUpperCase();
+      if (!(metodoRaw in MetodoPagoTaller)) {
+        res.status(400).json({
+          error: "Indicá método de pago (transferencia, cheque o efectivo)",
+        });
+        return;
+      }
       const updated = await prisma.tallerMovimiento.update({
         where: { id: mov.id },
-        data: { estado: "PAGADO", fechaPago: new Date() },
+        data: {
+          estado: "PAGADO",
+          fechaPago: fechaPagoRaw,
+          metodoPago: metodoRaw as MetodoPagoTaller,
+        },
       });
       res.json(updated);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al marcar pago" });
+    }
+  }
+);
+
+router.post(
+  "/:id/movimientos/:movId/revertir-pago",
+  authenticate,
+  async (req: AuthedRequest, res) => {
+    try {
+      if (!isInternalOpsRole(req.user!.rol)) {
+        res.status(403).json({ error: "Sin permiso" });
+        return;
+      }
+      const mov = await prisma.tallerMovimiento.findFirst({
+        where: { id: req.params.movId, tallerProveedorId: req.params.id },
+      });
+      if (!mov) {
+        res.status(404).json({ error: "Movimiento no encontrado" });
+        return;
+      }
+      const updated = await prisma.tallerMovimiento.update({
+        where: { id: mov.id },
+        data: { estado: "PENDIENTE", fechaPago: null, metodoPago: null },
+      });
+      res.json(updated);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al revertir pago" });
+    }
+  }
+);
+
+router.patch(
+  "/:id/movimientos/:movId",
+  authenticate,
+  async (req: AuthedRequest, res) => {
+    try {
+      if (!isInternalOpsRole(req.user!.rol)) {
+        res.status(403).json({ error: "Sin permiso" });
+        return;
+      }
+      const mov = await prisma.tallerMovimiento.findFirst({
+        where: { id: req.params.movId, tallerProveedorId: req.params.id },
+      });
+      if (!mov) {
+        res.status(404).json({ error: "Movimiento no encontrado" });
+        return;
+      }
+      const data: { fechaPago?: Date; metodoPago?: MetodoPagoTaller } = {};
+      if (req.body?.fechaPago !== undefined) {
+        const d = new Date(String(req.body.fechaPago));
+        if (Number.isNaN(d.getTime())) {
+          res.status(400).json({ error: "Fecha de pago inválida" });
+          return;
+        }
+        data.fechaPago = d;
+      }
+      if (req.body?.metodoPago !== undefined) {
+        const metodoRaw = String(req.body.metodoPago).toUpperCase();
+        if (!(metodoRaw in MetodoPagoTaller)) {
+          res.status(400).json({ error: "Método de pago inválido" });
+          return;
+        }
+        data.metodoPago = metodoRaw as MetodoPagoTaller;
+      }
+      const updated = await prisma.tallerMovimiento.update({
+        where: { id: mov.id },
+        data,
+      });
+      res.json(updated);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al editar pago" });
     }
   }
 );

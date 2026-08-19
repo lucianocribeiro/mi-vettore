@@ -25,6 +25,14 @@ export async function apiFetch<T>(
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
+  try {
+    const ctx = localStorage.getItem("mi-vettore-contexto");
+    if (ctx === "EMPRESA" || ctx === "CHOFER") {
+      headers.set("X-Contexto-Acceso", ctx);
+    }
+  } catch {
+    /* ignore */
+  }
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -57,6 +65,14 @@ export async function apiDownload(
 ): Promise<void> {
   const headers = new Headers();
   if (token) headers.set("Authorization", `Bearer ${token}`);
+  try {
+    const ctx = localStorage.getItem("mi-vettore-contexto");
+    if (ctx === "EMPRESA" || ctx === "CHOFER") {
+      headers.set("X-Contexto-Acceso", ctx);
+    }
+  } catch {
+    /* ignore */
+  }
 
   const res = await fetch(`${API_BASE}${path}`, { headers });
   if (!res.ok) {

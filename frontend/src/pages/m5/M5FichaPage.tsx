@@ -137,6 +137,8 @@ export function M5FichaPage() {
   const [fTelefono, setFTelefono] = useState("");
   const [fEmailChofer, setFEmailChofer] = useState("");
   const [fEsDueno, setFEsDueno] = useState(false);
+  const [fVerMant, setFVerMant] = useState(true);
+  const [fVerTaller, setFVerTaller] = useState(true);
   const [fEstadoChofer, setFEstadoChofer] = useState<"ACTIVO" | "INACTIVO">(
     "ACTIVO"
   );
@@ -255,6 +257,8 @@ export function M5FichaPage() {
     setFTelefono("");
     setFEmailChofer("");
     setFEsDueno(false);
+    setFVerMant(true);
+    setFVerTaller(true);
     setFEstadoChofer("ACTIVO");
     setFTipoEmpresa("PROPIA");
     setFCuit("");
@@ -317,6 +321,8 @@ export function M5FichaPage() {
     setFTelefono(item.telefono ?? "");
     setFEmailChofer(item.email ?? "");
     setFEsDueno(!!item.esDuenoFlota);
+    setFVerMant(item.verMantenimiento !== false);
+    setFVerTaller(item.verTaller !== false);
     setFEstadoChofer(item.estado);
     setForm({ kind: "chofer", item });
   }
@@ -417,6 +423,8 @@ export function M5FichaPage() {
           telefono: fTelefono || null,
           email: fEmailChofer || null,
           esDuenoFlota: fEsDueno,
+          verMantenimiento: fVerMant,
+          verTaller: fVerTaller,
           estado: fEstadoChofer,
         };
         if (form.item) {
@@ -884,6 +892,8 @@ export function M5FichaPage() {
             onChange={setUnitFilters}
             total={camionetas.length}
             shown={camionetasFiltradas.length}
+            empresas={empresas.map((e) => ({ id: e.id, nombre: e.nombre }))}
+            unidades={camionetas}
           />
           {camionetasFiltradas.length === 0 ? (
             <p className="text-sm text-[var(--vl-text-muted)]">
@@ -1305,6 +1315,22 @@ export function M5FichaPage() {
                     onChange={(e) => setFEsDueno(e.target.checked)}
                   />
                   Empresa de transporte (ve todas las unidades)
+                </label>
+                <label className="mt-2 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fVerMant}
+                    onChange={(e) => setFVerMant(e.target.checked)}
+                  />
+                  Módulo Mantenimiento
+                </label>
+                <label className="mt-2 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fVerTaller}
+                    onChange={(e) => setFVerTaller(e.target.checked)}
+                  />
+                  Módulo Taller
                 </label>
               </Field>
               <Field label="Estado">

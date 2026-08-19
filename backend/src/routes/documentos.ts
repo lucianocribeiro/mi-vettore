@@ -8,7 +8,8 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
 import { MASTER_WRITE_ROLES } from "../lib/roles.js";
-import { choferPuedeEditarCamioneta } from "../lib/flota.js";
+import { choferPuedeEditarCamioneta, choferPuedeVerChofer } from "../lib/flota.js";
+import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
 import {
   isSupabaseStorageConfigured,
   signedDocumentoUrl,
@@ -45,13 +46,13 @@ const TIPOS_CHOFER = new Set<TipoDocumento>([
   TipoDocumento.DNI_FRENTE,
   TipoDocumento.DNI_DORSO,
   TipoDocumento.LICENCIA,
+  TipoDocumento.SENASA,
+  TipoDocumento.HABILITACION_MANIPULACION,
 ]);
 
 const TIPOS_UNIDAD = new Set<TipoDocumento>([
   TipoDocumento.VTV,
-  TipoDocumento.SENASA,
   TipoDocumento.SEGURO,
-  TipoDocumento.HABILITACION_MANIPULACION,
 ]);
 
 function parseTipo(raw: unknown): TipoDocumento | null {
@@ -83,15 +84,20 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
     if (req.user!.rol === Role.CHOFER) {
-      const me = await prisma.usuario.findUnique({
-        where: { id: req.user!.id },
-      });
-      if (choferId && choferId !== me?.choferId) {
-        res.status(403).json({ error: "Sin permiso" });
-        return;
+      const ctx = contextoAccesoFromReq(req);
+      if (choferId) {
+        const ok = await choferPuedeVerChofer(req.user!.id, choferId, ctx);
+        if (!ok) {
+          res.status(403).json({ error: "Sin permiso" });
+          return;
+        }
       }
       if (camionetaId) {
-        const ok = await choferPuedeEditarCamioneta(req.user!.id, camionetaId);
+        const ok = await choferPuedeEditarCamioneta(
+          req.user!.id,
+          camionetaId,
+          ctx
+        );
         if (!ok) {
           res.status(403).json({ error: "Sin permiso" });
           return;
@@ -180,17 +186,22 @@ router.post(
         rol as (typeof MASTER_WRITE_ROLES)[number]
       );
       if (rol === Role.CHOFER) {
+        const ctx = contextoAccesoFromReq(req);
         const me = await prisma.usuario.findUnique({
           where: { id: req.user!.id },
         });
-        if (choferId && choferId !== me?.choferId) {
-          res.status(403).json({ error: "Sin permiso" });
-          return;
+        if (choferId) {
+          const ok = await choferPuedeVerChofer(req.user!.id, choferId, ctx);
+          if (!ok) {
+            res.status(403).json({ error: "Sin permiso" });
+            return;
+          }
         }
         if (camionetaId) {
           const ok = await choferPuedeEditarCamioneta(
             req.user!.id,
-            camionetaId
+            camionetaId,
+            ctx
           );
           if (!ok) {
             res.status(403).json({ error: "Sin permiso" });

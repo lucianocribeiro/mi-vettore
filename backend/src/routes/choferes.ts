@@ -5,6 +5,8 @@ import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendExcel } from "../lib/excel-export.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 import { parseDateOnly } from "../lib/date-only.js";
+import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
+import { empresaIdsDeDueno } from "../lib/flota.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -23,11 +25,42 @@ function parseDate(value: unknown): Date | null {
   return parseDateOnly(value);
 }
 
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
     const incluirBajas = String(req.query.incluirBajas ?? "") === "1";
+    const whereBase = incluirBajas ? undefined : { estado: "ACTIVO" as const };
+    if (req.user!.rol === "CHOFER") {
+      const me = await prisma.usuario.findUnique({
+        where: { id: req.user!.id },
+        include: { chofer: true },
+      });
+      const ctx = contextoAccesoFromReq(req);
+      if (me?.chofer?.esDuenoFlota && ctx === "EMPRESA") {
+        const empresas = await empresaIdsDeDueno(req.user!.id);
+        const asig = await prisma.asignacionFlota.findMany({
+          where: { empresaId: { in: empresas }, periodoHasta: null },
+          select: { choferId: true },
+        });
+        const ids = [...new Set(asig.map((a) => a.choferId))];
+        const items = await prisma.chofer.findMany({
+          where: { id: { in: ids }, ...(whereBase ?? {}) },
+          orderBy: { nombre: "asc" },
+          include: includeAsignaciones,
+        });
+        res.json(items);
+        return;
+      }
+      const self = me?.choferId
+        ? await prisma.chofer.findMany({
+            where: { id: me.choferId },
+            include: includeAsignaciones,
+          })
+        : [];
+      res.json(self);
+      return;
+    }
     const items = await prisma.chofer.findMany({
-      where: incluirBajas ? undefined : { estado: "ACTIVO" },
+      where: whereBase,
       orderBy: { nombre: "asc" },
       include: includeAsignaciones,
     });
@@ -120,6 +153,8 @@ router.post("/", ...write, async (req, res) => {
           ? String(req.body.email).trim().toLowerCase()
           : null,
         esDuenoFlota: Boolean(req.body?.esDuenoFlota),
+        verMantenimiento: req.body?.verMantenimiento !== false,
+        verTaller: req.body?.verTaller !== false,
         estado: estadoRaw as EstadoChofer,
       },
       include: includeAsignaciones,
@@ -171,6 +206,12 @@ router.put("/:id", ...write, async (req, res) => {
     }
     if (req.body?.esDuenoFlota !== undefined) {
       data.esDuenoFlota = Boolean(req.body.esDuenoFlota);
+    }
+    if (req.body?.verMantenimiento !== undefined) {
+      data.verMantenimiento = Boolean(req.body.verMantenimiento);
+    }
+    if (req.body?.verTaller !== undefined) {
+      data.verTaller = Boolean(req.body.verTaller);
     }
     if (req.body?.estado !== undefined) {
       const s = String(req.body.estado).toUpperCase();

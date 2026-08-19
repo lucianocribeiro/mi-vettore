@@ -8,7 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { apiFetch, ApiError } from "../lib/api";
-import type { User } from "../types";
+import type { User, ContextoAcceso } from "../types";
+import { CONTEXTO_ACCESO_KEY } from "../types";
 
 const TOKEN_KEY = "mi-vettore-token";
 
@@ -16,7 +17,9 @@ type AuthContextValue = {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  contextoAcceso: ContextoAcceso;
+  setContextoAcceso: (c: ContextoAcceso) => void;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
   refreshMe: () => Promise<void>;
 };
@@ -34,6 +37,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
+  }, []);
+
+  const [contextoAcceso, setContextoAccesoState] = useState<ContextoAcceso>(() => {
+    const saved = localStorage.getItem(CONTEXTO_ACCESO_KEY);
+    return saved === "EMPRESA" ? "EMPRESA" : "CHOFER";
+  });
+
+  const setContextoAcceso = useCallback((c: ContextoAcceso) => {
+    localStorage.setItem(CONTEXTO_ACCESO_KEY, c);
+    setContextoAccesoState(c);
   }, []);
 
   const refreshMe = useCallback(async () => {
@@ -69,11 +82,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(TOKEN_KEY, data.token);
     setToken(data.token);
     setUser(data.user);
+    return data.user;
   }, []);
 
   const value = useMemo(
-    () => ({ user, token, loading, login, logout, refreshMe }),
-    [user, token, loading, login, logout, refreshMe]
+    () => ({
+      user,
+      token,
+      loading,
+      contextoAcceso,
+      setContextoAcceso,
+      login,
+      logout,
+      refreshMe,
+    }),
+    [user, token, loading, contextoAcceso, setContextoAcceso, login, logout, refreshMe]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
