@@ -35,6 +35,7 @@ export function TalleresProveedoresPanel() {
   const { token, user } = useAuth();
   const canEdit = canWriteMaster(user?.rol);
   const [tab, setTab] = useState<"abm" | "cc">("abm");
+  const [ccVista, setCcVista] = useState<"pendiente" | "pagado">("pendiente");
   const [items, setItems] = useState<TallerProveedor[]>([]);
   const [saldos, setSaldos] = useState<Saldo[]>([]);
   const [tipos, setTipos] = useState<TipoTaller[]>([]);
@@ -217,7 +218,44 @@ export function TalleresProveedoresPanel() {
 
       {tab === "cc" && (
         <div className="space-y-3">
-          {saldos.map((s) => (
+          {(() => {
+            const nPend = saldos.filter((s) => s.pendiente > 0).length;
+            const nPag = saldos.filter((s) => s.pagado > 0).length;
+            return (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setCcVista("pendiente")}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                ccVista === "pendiente"
+                  ? "border-amber-600 bg-amber-500/20 text-amber-900 dark:border-amber-400 dark:text-amber-100"
+                  : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+              }`}
+            >
+              Pendientes{nPend ? ` (${nPend})` : ""}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCcVista("pagado")}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                ccVista === "pagado"
+                  ? "border-emerald-600 bg-emerald-500/20 text-emerald-900 dark:border-emerald-400 dark:text-emerald-100"
+                  : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+              }`}
+            >
+              Pagados / historial{nPag ? ` (${nPag})` : ""}
+            </button>
+          </div>
+            );
+          })()}
+          <p className="text-[11px] text-[var(--vl-text-muted)]">
+            {ccVista === "pendiente"
+              ? "Solo se listan deudas abiertas. Lo ya cobrado queda guardado en el historial."
+              : "Historial de pagos. Podés revertir un cobro si se cargó mal."}
+          </p>
+          {saldos
+            .filter((s) => (ccVista === "pendiente" ? s.pendiente > 0 : s.pagado > 0))
+            .map((s) => (
             <div key={s.id} className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -229,16 +267,23 @@ export function TalleresProveedoresPanel() {
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {ccVista === "pendiente" ? (
                   <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:text-amber-200">
                     Pendiente {money(s.pendiente)}
                   </span>
+                  ) : (
                   <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:text-emerald-200">
                     Pagado {money(s.pagado)}
                   </span>
+                  )}
                 </div>
               </div>
               <ul className="mt-3 space-y-2">
-                {s.movimientos.slice(0, 8).map((m) => (
+                {s.movimientos
+                  .filter((m) =>
+                    ccVista === "pendiente" ? m.estado === "PENDIENTE" : m.estado === "PAGADO"
+                  )
+                  .map((m) => (
                   <li
                     key={m.id}
                     className="flex flex-col gap-2 rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
@@ -293,9 +338,13 @@ export function TalleresProveedoresPanel() {
               </ul>
             </div>
           ))}
-          {saldos.length === 0 && (
+          {saldos.filter((s) =>
+            ccVista === "pendiente" ? s.pendiente > 0 : s.pagado > 0
+          ).length === 0 && (
             <p className="text-sm text-[var(--vl-text-muted)]">
-              Todavía no hay movimientos. Se generan al cerrar una OT con factura.
+              {ccVista === "pendiente"
+                ? "No hay deudas pendientes. Lo pagado está en el historial."
+                : "Todavía no hay pagos registrados."}
             </p>
           )}
         </div>
