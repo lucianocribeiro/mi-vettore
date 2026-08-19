@@ -913,6 +913,17 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
   }, [selected?.id]);
 
   useEffect(() => {
+    if (!opsInterno || !empresaId) return;
+    if (choferesOpts.length === 1) {
+      setChoferId(choferesOpts[0].id);
+      return;
+    }
+    if (choferId && !choferesOpts.some((c) => c.id === choferId)) {
+      setChoferId("");
+    }
+  }, [opsInterno, empresaId, choferesOpts, choferId]);
+
+  useEffect(() => {
     if (!opsInterno) return;
     if (unidadesDeChofer.length === 1) {
       setCamionetaId(unidadesDeChofer[0].id);
