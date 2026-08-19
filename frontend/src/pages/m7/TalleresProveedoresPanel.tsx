@@ -136,8 +136,6 @@ export function TalleresProveedoresPanel() {
     );
     await load();
   }
-    await load();
-  }
 
   const input =
     "mt-1 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm";

@@ -718,7 +718,7 @@ function PresupuestoChecklist({
 }
 
 function ItemsEditor({
-  ot, token, talleres, tipo, setTipo, lockTipo, showAprobado, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
+  ot, token, talleres, tipo, setTipo, lockTipo, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
 }: {
   ot: OrdenTrabajo;
   token: string;
