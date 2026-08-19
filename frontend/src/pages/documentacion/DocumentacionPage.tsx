@@ -384,12 +384,10 @@ export function DocumentacionPage() {
                 const asg = currentAsignacion(c);
                 const active = selectedCam === c.id;
                 return (
-                  <Fragment key={c.id}>
-                    {active && (
-                      <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
-                        <DocumentUpload camionetaId={c.id} />
-                      </div>
-                    )}
+                  <div
+                    key={c.id}
+                    className={`grid gap-2 ${active ? "lg:grid-cols-2" : ""}`}
+                  >
                     <button
                       type="button"
                       onClick={() =>
@@ -409,7 +407,12 @@ export function DocumentacionPage() {
                         {c.patente}
                       </div>
                     </button>
-                  </Fragment>
+                    {active && (
+                      <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
+                        <DocumentUpload camionetaId={c.id} />
+                      </div>
+                    )}
+                  </div>
                 );
               })
             )}

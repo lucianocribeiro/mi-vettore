@@ -48,17 +48,16 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [tipo, setTipo] = useState<TipoDocumento>(
-    choferId ? "DNI_FRENTE" : "VTV"
-  );
+  const [tipoUploading, setTipoUploading] = useState<TipoDocumento | null>(null);
   const [tipos, setTipos] = useState<TipoDocumento[]>(
     choferId ? TIPOS_DOCUMENTO_CHOFER : TIPOS_DOCUMENTO_UNIDAD
   );
-  const [vencimiento, setVencimiento] = useState("");
+  const [vencByTipo, setVencByTipo] = useState<Partial<Record<TipoDocumento, string>>>(
+    {}
+  );
   const [conVencimiento, setConVencimiento] = useState<TipoDocumento[]>(
     TIPOS_DOCUMENTO_CON_VENCIMIENTO
   );
-  const needsVenc = conVencimiento.includes(tipo);
   const canValidate = user?.rol === "SILVINA";
 
   const load = useCallback(async () => {
@@ -75,11 +74,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
           tiposChofer?: TipoDocumento[];
           tiposUnidad?: TipoDocumento[];
           conVencimiento: TipoDocumento[];
-        }>(
-          "/api/documentos/meta",
-          {},
-          token
-        ).catch(() => null),
+        }>("/api/documentos/meta", {}, token).catch(() => null),
       ]);
       setDocs(items);
       const nextTipos = choferId
@@ -90,7 +85,6 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
           ? meta.tiposUnidad
           : TIPOS_DOCUMENTO_UNIDAD;
       setTipos(nextTipos);
-      setTipo((prev) => (nextTipos.includes(prev) ? prev : nextTipos[0]));
       if (meta?.conVencimiento?.length) setConVencimiento(meta.conVencimiento);
     } catch (err) {
       setError(
@@ -105,21 +99,29 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
     void load();
   }, [load]);
 
-  async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onFileChange(
+    tipoDoc: TipoDocumento,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !token) return;
+    const needsVenc = conVencimiento.includes(tipoDoc);
+    const vencimiento = vencByTipo[tipoDoc] ?? "";
     if (needsVenc && !vencimiento) {
-      setError("Indicá el vencimiento para este tipo de documento");
+      setError(
+        `Indicá el vencimiento de ${TIPO_DOCUMENTO_LABEL[tipoDoc] ?? tipoDoc}`
+      );
       return;
     }
     setUploading(true);
+    setTipoUploading(tipoDoc);
     setError(null);
     try {
       const compressed = await compressImageIfNeeded(file);
       const fd = new FormData();
       fd.append("archivo", compressed);
-      fd.append("tipo", tipo);
+      fd.append("tipo", tipoDoc);
       if (choferId) fd.append("choferId", choferId);
       if (camionetaId) fd.append("camionetaId", camionetaId);
       if (needsVenc && vencimiento) fd.append("vencimiento", vencimiento);
@@ -129,11 +131,11 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
         token
       );
       setDocs((prev) => [created, ...prev]);
-      setVencimiento("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al subir");
     } finally {
       setUploading(false);
+      setTipoUploading(null);
     }
   }
 
@@ -182,48 +184,91 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
         {choferId ? "Documentos del chofer" : "Documentos de la unidad"}
       </div>
       <p className="text-[11px] text-[var(--vl-text-muted)]">
-        {choferId
-          ? "DNI, licencia y habilitación de manipulación de alimentos."
-          : "VTV, SENASA y seguro."}
+        Completá cada título a la derecha: vencimiento (si aplica) y foto o PDF.
       </p>
 
-      <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
-        <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-          Tipo
-          <select
-            value={tipo}
-            onChange={(e) => setTipo(e.target.value as TipoDocumento)}
-            className="mt-1 min-h-10 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-sm text-[var(--vl-text)]"
-          >
-            {tipos.map((t) => (
-              <option key={t} value={t}>
-                {TIPO_DOCUMENTO_LABEL[t]}
-              </option>
-            ))}
-          </select>
-        </label>
-        {needsVenc && (
-          <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-            Vencimiento
-            <input
-              type="date"
-              value={vencimiento}
-              onChange={(e) => setVencimiento(e.target.value)}
-              className="mt-1 min-h-10 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-sm text-[var(--vl-text)]"
-            />
-          </label>
-        )}
-        <label className="flex min-h-11 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-[#1e4080]/50 bg-[#1e4080]/5 px-3 text-sm font-medium text-[#1e4080] dark:text-sky-300">
-          {uploading ? "Subiendo…" : "Foto / PDF"}
-          <input
-            type="file"
-            accept="image/*,application/pdf"
-            capture="environment"
-            className="sr-only"
-            disabled={uploading}
-            onChange={(e) => void onFileChange(e)}
-          />
-        </label>
+      <div className="space-y-2">
+        {tipos.map((t) => {
+          const latest = docs.find((d) => d.tipo === t);
+          const needs = conVencimiento.includes(t);
+          const venc = vencByTipo[t] ?? "";
+          return (
+            <div
+              key={t}
+              className="flex flex-col gap-2 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-[var(--vl-heading)]">
+                  {TIPO_DOCUMENTO_LABEL[t]}
+                </div>
+                {latest ? (
+                  <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                    {latest.nombreOriginal || "archivo"}
+                    {latest.vencimiento
+                      ? ` · vence ${formatDate(latest.vencimiento)}`
+                      : ""}
+                    {` · ${latest.estadoValidacion.toLowerCase()}`}
+                  </div>
+                ) : (
+                  <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                    Sin archivo
+                  </div>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                {needs && (
+                  <input
+                    type="date"
+                    aria-label={`Vencimiento ${TIPO_DOCUMENTO_LABEL[t]}`}
+                    value={venc}
+                    onChange={(e) =>
+                      setVencByTipo((prev) => ({ ...prev, [t]: e.target.value }))
+                    }
+                    className="min-h-10 w-[9.5rem] rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-xs text-[var(--vl-text)]"
+                  />
+                )}
+                {latest && (
+                  <button
+                    type="button"
+                    onClick={() => void openDoc(latest.id)}
+                    className="min-h-10 rounded-md border border-[var(--vl-card-border)] px-3 text-xs font-medium text-[var(--vl-heading)]"
+                  >
+                    Ver
+                  </button>
+                )}
+                {canValidate && latest?.estadoValidacion === "PENDIENTE" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void validar(latest.id, "VALIDADO")}
+                      className="min-h-10 rounded-md border border-emerald-300 px-2 text-xs text-emerald-700 dark:border-emerald-800 dark:text-emerald-300"
+                    >
+                      Validar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void validar(latest.id, "RECHAZADO")}
+                      className="min-h-10 rounded-md border border-red-300 px-2 text-xs text-red-700 dark:border-red-800 dark:text-red-300"
+                    >
+                      Rechazar
+                    </button>
+                  </>
+                )}
+                <label className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-[#1e4080]/50 bg-[#1e4080]/5 px-3 text-xs font-semibold text-[#1e4080] dark:text-sky-300">
+                  {uploading && tipoUploading === t ? "Subiendo…" : "Foto / PDF"}
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    capture="environment"
+                    className="sr-only"
+                    disabled={uploading}
+                    onChange={(e) => void onFileChange(t, e)}
+                  />
+                </label>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {error && (
@@ -232,67 +277,6 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
       {loading && (
         <p className="text-xs text-[var(--vl-text-muted)]">Cargando docs…</p>
       )}
-
-      {!loading && docs.length === 0 && (
-        <p className="text-xs text-[var(--vl-text-muted)]">Sin documentos.</p>
-      )}
-
-      <ul className="space-y-2">
-        {docs.map((d) => (
-          <li
-            key={d.id}
-            className="rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-2.5 text-sm"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="font-medium text-[var(--vl-heading)]">
-                  {TIPO_DOCUMENTO_LABEL[d.tipo] ?? d.tipo}
-                </div>
-                <div className="text-[11px] text-[var(--vl-text-muted)]">
-                  {d.nombreOriginal || "archivo"}
-                  {d.vencimiento
-                    ? ` · vence ${formatDate(d.vencimiento)}`
-                    : ""}
-                  {" · "}
-                  {d.estadoValidacion.toLowerCase()}
-                </div>
-                {d.motivoRechazo && (
-                  <div className="mt-0.5 text-[11px] text-red-600">
-                    {d.motivoRechazo}
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-1.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => void openDoc(d.id)}
-                  className="rounded border border-[var(--vl-card-border)] px-2 py-1 text-[var(--vl-text)] hover:bg-slate-50 dark:hover:bg-slate-800"
-                >
-                  Ver
-                </button>
-                {canValidate && d.estadoValidacion === "PENDIENTE" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void validar(d.id, "VALIDADO")}
-                      className="rounded border border-emerald-300 px-2 py-1 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300"
-                    >
-                      Validar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void validar(d.id, "RECHAZADO")}
-                      className="rounded border border-red-300 px-2 py-1 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300"
-                    >
-                      Rechazar
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
