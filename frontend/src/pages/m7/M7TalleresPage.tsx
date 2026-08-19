@@ -843,6 +843,8 @@ function ItemsEditor({
 function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCreated: (ot: OrdenTrabajo) => void }) {
   const { token, user } = useAuth();
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);
+  const [empresaId, setEmpresaId] = useState("");
+  const [choferId, setChoferId] = useState("");
   const [camionetaId, setCamionetaId] = useState("");
   const [falla, setFalla] = useState(user?.rol === "CHOFER" ? "" : FALLAS_COMUNES[0]);
   const [detalle, setDetalle] = useState("");
@@ -853,23 +855,73 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const esChofer = user?.rol === "CHOFER";
+  const opsInterno = isInternalOps(user?.rol);
   const selected = camionetas.find((c) => c.id === camionetaId) ?? null;
-  const unaSolaUnidad = camionetas.length === 1;
+  const unaSolaUnidad = !opsInterno && camionetas.length === 1;
+
+  const empresasOpts = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of camionetas) {
+      const a = currentAsignacion(c);
+      const id = a?.empresaId || a?.empresa?.id;
+      const nombre = a?.empresa?.nombre;
+      if (id && nombre) map.set(id, nombre);
+    }
+    return [...map.entries()]
+      .map(([id, nombre]) => ({ id, nombre }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  }, [camionetas]);
+
+  const unidadesDeEmpresa = useMemo(() => {
+    if (!empresaId) return [];
+    return camionetas.filter((c) => {
+      const a = currentAsignacion(c);
+      return a?.empresaId === empresaId || a?.empresa?.id === empresaId;
+    });
+  }, [camionetas, empresaId]);
+
+  const choferesOpts = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of unidadesDeEmpresa) {
+      const a = currentAsignacion(c);
+      if (a?.choferId && a.chofer?.nombre) map.set(a.choferId, a.chofer.nombre);
+    }
+    return [...map.entries()]
+      .map(([id, nombre]) => ({ id, nombre }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  }, [unidadesDeEmpresa]);
+
+  const unidadesDeChofer = useMemo(() => {
+    if (!choferId) return [];
+    return unidadesDeEmpresa.filter((c) => currentAsignacion(c)?.choferId === choferId);
+  }, [unidadesDeEmpresa, choferId]);
 
   useEffect(() => {
     if (!token) return;
     void apiFetch<Camioneta[]>("/api/camionetas", {}, token).then((list) => {
       setCamionetas(list);
+      if (isInternalOps(user?.rol)) return;
       const first = list[0];
       setCamionetaId(first?.id ?? "");
       if (first) setKmDraft(String(first.km ?? ""));
     });
-  }, [token]);
+  }, [token, user?.rol]);
 
   useEffect(() => {
     if (!selected) return;
     setKmDraft(String(selected.km ?? ""));
   }, [selected?.id]);
+
+  useEffect(() => {
+    if (!opsInterno) return;
+    if (unidadesDeChofer.length === 1) {
+      setCamionetaId(unidadesDeChofer[0].id);
+      return;
+    }
+    if (camionetaId && !unidadesDeChofer.some((c) => c.id === camionetaId)) {
+      setCamionetaId("");
+    }
+  }, [opsInterno, choferId, unidadesDeChofer, camionetaId]);
 
   async function submit() {
     if (!token || !camionetaId) return;
@@ -898,6 +950,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
         method: "POST",
         body: JSON.stringify({
           camionetaId,
+          choferId: opsInterno ? choferId || undefined : undefined,
           falla: problema,
           detalle: detalle.trim(),
           km,
@@ -917,6 +970,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
 
   const puedeEnviar =
     !!camionetaId &&
+    (!opsInterno || (!!empresaId && !!choferId)) &&
     !!(esChofer ? detalle.trim() : falla === "Otros" ? detalle.trim() : falla) &&
     Number.isFinite(Number(kmDraft)) &&
     Number(kmDraft) >= 0 &&
@@ -931,7 +985,80 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
           <button type="button" onClick={onClose} aria-label="Cerrar"><X size={18} /></button>
         </div>
 
-        {unaSolaUnidad && selected ? (
+        {opsInterno ? (
+          <>
+            <label className="text-xs text-[var(--vl-text-muted)]">
+              Empresa de transporte
+              <select
+                className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]"
+                value={empresaId}
+                onChange={(e) => {
+                  setEmpresaId(e.target.value);
+                  setChoferId("");
+                  setCamionetaId("");
+                }}
+              >
+                <option value="">Elegí la empresa…</option>
+                {empresasOpts.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-[var(--vl-text-muted)]">
+              Chófer
+              <select
+                className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)] disabled:opacity-50"
+                value={choferId}
+                disabled={!empresaId}
+                onChange={(e) => {
+                  setChoferId(e.target.value);
+                  setCamionetaId("");
+                }}
+              >
+                <option value="">
+                  {empresaId ? "Elegí el chófer…" : "Primero elegí la empresa"}
+                </option>
+                {choferesOpts.map((ch) => (
+                  <option key={ch.id} value={ch.id}>
+                    {ch.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {choferId && unidadesDeChofer.length === 0 && (
+              <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
+                Ese chófer no tiene unidad asignada en esta empresa.
+              </p>
+            )}
+            {choferId && unidadesDeChofer.length === 1 && selected && (
+              <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm font-semibold text-[var(--vl-heading)]">
+                {selected.patente}
+                <div className="mt-0.5 text-xs font-normal text-[var(--vl-text-muted)]">
+                  Unidad asignada
+                </div>
+              </div>
+            )}
+            {unidadesDeChofer.length > 1 && (
+              <label className="text-xs text-[var(--vl-text-muted)]">
+                Unidad
+                <select
+                  className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]"
+                  value={camionetaId}
+                  onChange={(e) => setCamionetaId(e.target.value)}
+                >
+                  <option value="">Elegí la patente…</option>
+                  {unidadesDeChofer.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.patente}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </>
+        ) : unaSolaUnidad && selected ? (
           <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2.5 text-sm font-semibold text-[var(--vl-heading)]">
             {selected.patente}
             <div className="mt-0.5 text-xs font-normal text-[var(--vl-text-muted)]">
