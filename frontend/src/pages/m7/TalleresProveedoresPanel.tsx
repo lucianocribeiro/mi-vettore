@@ -218,35 +218,63 @@ export function TalleresProveedoresPanel() {
       {tab === "cc" && (
         <div className="space-y-3">
           {saldos.map((s) => (
-            <div key={s.id} className="rounded-xl border border-[var(--vl-card-border)] p-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className="font-semibold text-[var(--vl-heading)]">{s.razonSocial}</div>
-                <div className="text-sm">
-                  Pendiente <strong>{money(s.pendiente)}</strong>
-                  <span className="ml-2 text-[var(--vl-text-muted)]">Pagado {money(s.pagado)}</span>
+            <div key={s.id} className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-[var(--vl-heading)]">{s.razonSocial}</div>
+                  {s.aliasCbu && (
+                    <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                      Alias/CBU: {s.aliasCbu}
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:text-amber-200">
+                    Pendiente {money(s.pendiente)}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:text-emerald-200">
+                    Pagado {money(s.pagado)}
+                  </span>
                 </div>
               </div>
-              {s.aliasCbu && (
-                <div className="mt-1 text-[11px] text-[var(--vl-text-muted)]">Alias/CBU: {s.aliasCbu}</div>
-              )}
-              <ul className="mt-2 space-y-1 text-xs">
+              <ul className="mt-3 space-y-2">
                 {s.movimientos.slice(0, 8).map((m) => (
-                  <li key={m.id} className="flex items-center justify-between gap-2">
-                    <span>
-                      {money(m.montoFacturado)} · {m.estado.toLowerCase()}
-                      {m.ot?.numeroOT ? ` · ${m.ot.numeroOT}` : ""}
-                      {m.ot?.solicitud?.camioneta?.patente
-                        ? ` · ${m.ot.solicitud.camioneta.patente}`
-                        : ""}
-                      {m.fechaPago
-                        ? ` · pago ${new Date(m.fechaPago).toLocaleDateString("es-AR")}`
-                        : ""}
-                      {m.metodoPago ? ` · ${m.metodoPago.toLowerCase()}` : ""}
-                    </span>
+                  <li
+                    key={m.id}
+                    className="flex flex-col gap-2 rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-[var(--vl-heading)]">
+                          {money(m.montoFacturado)}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                            m.estado === "PENDIENTE"
+                              ? "bg-amber-500/15 text-amber-800 dark:text-amber-200"
+                              : "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+                          }`}
+                        >
+                          {m.estado === "PENDIENTE" ? "Pendiente" : "Pagado"}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                        {[
+                          m.ot?.numeroOT,
+                          m.ot?.solicitud?.camioneta?.patente,
+                          m.fechaPago
+                            ? `pago ${new Date(m.fechaPago).toLocaleDateString("es-AR")}`
+                            : null,
+                          m.metodoPago ? m.metodoPago.toLowerCase() : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "Sin OT asociada"}
+                      </div>
+                    </div>
                     {m.estado === "PENDIENTE" ? (
                       <button
                         type="button"
-                        className="underline"
+                        className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500"
                         onClick={() => void marcarPago(s.id, m.id)}
                       >
                         Marcar pagado
@@ -254,10 +282,10 @@ export function TalleresProveedoresPanel() {
                     ) : (
                       <button
                         type="button"
-                        className="underline"
+                        className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3.5 py-2 text-xs font-semibold text-[var(--vl-heading)] hover:bg-slate-50 dark:hover:bg-slate-800"
                         onClick={() => void revertirPago(s.id, m.id)}
                       >
-                        Revertir
+                        Revertir pago
                       </button>
                     )}
                   </li>
