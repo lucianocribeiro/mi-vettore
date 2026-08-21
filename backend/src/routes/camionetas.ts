@@ -874,6 +874,18 @@ router.post("/:id/asignacion", ...write, async (req, res) => {
         where: { camionetaId, periodoHasta: null },
         data: { periodoHasta: now },
       });
+      // Por defecto 1 camioneta por chofer; si la empresa permite multi, no cerramos las otras.
+      if (!empresa.permiteMultiCamioneta) {
+        await tx.asignacionFlota.updateMany({
+          where: {
+            choferId,
+            empresaId,
+            periodoHasta: null,
+            camionetaId: { not: camionetaId },
+          },
+          data: { periodoHasta: now },
+        });
+      }
       await tx.asignacionFlota.create({
         data: {
           camionetaId,

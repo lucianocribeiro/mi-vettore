@@ -127,6 +127,7 @@ model Usuario {
   cliente              Cliente?           @relation(fields: [clienteId], references: [id])
   chofer               Chofer?            @relation(fields: [choferId], references: [id])
   auditorias           OtAuditoria[]
+  comentariosOt        OtComentario[]
   sugerencias          SugerenciaUsuario[]
   avisos               AvisoInterno[]     @relation("AvisoUsuario")
   docsValidados        DocumentoEntidad[] @relation("DocValidador")
@@ -221,14 +222,16 @@ model Camioneta {
 }
 
 model EmpresaTransporte {
-  id           String           @id @default(cuid())
-  nombre       String
-  cuit         String?          @unique
-  contacto     String?
-  tipo         TipoEmpresa      @default(ALIADA)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  asignaciones AsignacionFlota[]
+  id                     String           @id @default(cuid())
+  nombre                 String
+  cuit                   String?          @unique
+  contacto               String?
+  tipo                   TipoEmpresa      @default(ALIADA)
+  /// Si true, un mismo chofer puede tener varias camionetas activas de esta empresa.
+  permiteMultiCamioneta  Boolean          @default(false)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  asignaciones           AsignacionFlota[]
 }
 
 /// Vínculo ternario: chofer y patente al mismo nivel bajo la empresa (sin chofer↔patente fijo).
@@ -340,6 +343,7 @@ model OrdenTrabajo {
   presupuestoElegido PresupuestoOt?            @relation("PresupuestoElegido", fields: [presupuestoElegidoId], references: [id])
   items              OtItem[]
   facturas           OtFactura[]
+  comentarios        OtComentario[]
   avisos             AvisoInterno[]
   auditorias         OtAuditoria[]
   diagnosticos       OrdenTrabajoDiagnostico[]
@@ -348,6 +352,21 @@ model OrdenTrabajo {
   @@index([currentStep])
   @@index([urgente])
   @@index([tallerProveedorId])
+}
+
+/// Comentario libre sobre la OT (chofer, dueño flota u oficina).
+model OtComentario {
+  id        String   @id @default(cuid())
+  otId      String
+  userId    String
+  texto     String
+  createdAt DateTime @default(now())
+
+  ot   OrdenTrabajo @relation(fields: [otId], references: [id], onDelete: Cascade)
+  user Usuario      @relation(fields: [userId], references: [id])
+
+  @@index([otId])
+  @@index([createdAt])
 }
 
 model PresupuestoOt {
@@ -493,6 +512,8 @@ model OtItem {
   aprobado          Boolean             @default(false)
   clasificacion     ClasificacionGasto?
   clasificacionOtro String?
+  /// Fecha del gasto (editable; por defecto hoy al cargar).
+  fecha             DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
@@ -549,6 +570,8 @@ model TallerProveedor {
   direccion   String?
   mail        String?
   celular     String?
+  /// Si true, el celular admite contacto por WhatsApp.
+  whatsapp    Boolean  @default(false)
   aliasCbu    String?
   activo      Boolean  @default(true)
   createdAt   DateTime @default(now())

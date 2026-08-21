@@ -303,13 +303,19 @@ export function M6MantenimientoPage() {
                     >
                       <div className="text-sm font-medium text-[var(--vl-heading)]">
                         {c.km.toLocaleString("es-AR")} km
+                        {c.kmActualizadoAt ? (
+                          <span className="ml-1 text-[11px] font-normal text-[var(--vl-text-muted)]">
+                            · act. {formatDate(c.kmActualizadoAt)}
+                          </span>
+                        ) : null}
                       </div>
                       <div className="mt-1 space-y-0.5 text-[11px] text-[var(--vl-text-muted)]">
                         <div>
                           Aceite: {formatDate(c.fechaUltimoAceite) || "sin dato"}
                         </div>
                         <div>
-                          Correa: {formatDate(c.fechaCambioCorrea) || "sin dato"}
+                          Distribución:{" "}
+                          {formatDate(c.fechaCambioCorrea) || "sin dato"}
                         </div>
                         <div>
                           Neumáticos:{" "}
@@ -317,20 +323,6 @@ export function M6MantenimientoPage() {
                         </div>
                         <div>
                           Batería: {formatDate(c.fechaCambioBateria) || "sin dato"}
-                        </div>
-                        <div>
-                          Seguro: {formatDate(c.seguroVencimiento) || "—"}
-                          {daysUntil(c.seguroVencimiento) !== null &&
-                          daysUntil(c.seguroVencimiento)! < 0
-                            ? " · vencido"
-                            : ""}
-                        </div>
-                        <div>
-                          VTV: {formatDate(c.vtbVencimiento) || "—"}
-                          {daysUntil(c.vtbVencimiento) !== null &&
-                          daysUntil(c.vtbVencimiento)! < 0
-                            ? " · vencido"
-                            : ""}
                         </div>
                       </div>
                       <div className="mt-2 text-[11px] leading-snug text-[var(--vl-text-muted)]">
@@ -430,6 +422,12 @@ export function M6MantenimientoPage() {
                     required
                   />
                 </label>
+                {selected.kmActualizadoAt && (
+                  <p className="text-[11px] text-[var(--vl-text-muted)]">
+                    Última actualización de km:{" "}
+                    {formatDate(selected.kmActualizadoAt)}
+                  </p>
+                )}
                 {!esChoferRol && (
                   <>
                 <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
@@ -442,7 +440,7 @@ export function M6MantenimientoPage() {
                   />
                 </label>
                 <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                  Último cambio de correa
+                  Último cambio de distribución
                   <input
                     type="date"
                     value={correa}
@@ -472,10 +470,7 @@ export function M6MantenimientoPage() {
                 )}
 
                 <p className="text-[11px] text-[var(--vl-text-muted)]">
-                  Seguro: {selected.seguroCompania || "—"} · vence:{" "}
-                  {formatDate(selected.seguroVencimiento)}
-                  {" · "}
-                  VTV vence: {formatDate(selected.vtbVencimiento)}
+                  Seguro, VTV y SENASA se gestionan en Documentación.
                 </p>
 
                 <button

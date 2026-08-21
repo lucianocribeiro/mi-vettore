@@ -31,16 +31,9 @@ export function totalPresupuesto(opts: {
   valorAprobado?: number | null;
   montoAutorizado?: number | null;
 }): number {
+  // Siempre sumar TODOS los ítems PRESUPUESTO. `aprobado` es solo checklist
+  // de facturación (qué se factura), no el total presupuestado.
   const items = opts.items ?? [];
-  const approved = items.filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado);
-  if (approved.length > 0) {
-    return roundMoney(
-      approved.reduce(
-        (acc, i) => acc + (Number.isFinite(i.importe) ? i.importe : 0),
-        0
-      )
-    );
-  }
   const fromItems = sumItems(items, TIPOS_PRESUPUESTO);
   if (fromItems > 0) return fromItems;
   const fromPres = roundMoney(

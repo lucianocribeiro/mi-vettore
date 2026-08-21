@@ -145,6 +145,7 @@ export function M5FichaPage() {
   const [fTipoEmpresa, setFTipoEmpresa] = useState<TipoEmpresa>("PROPIA");
   const [fCuit, setFCuit] = useState("");
   const [fContactoEmpresa, setFContactoEmpresa] = useState("");
+  const [fPermiteMultiCamioneta, setFPermiteMultiCamioneta] = useState(false);
   const [fPatente, setFPatente] = useState("");
   const [fMarca, setFMarca] = useState("");
   const [fModelo, setFModelo] = useState("");
@@ -180,6 +181,7 @@ export function M5FichaPage() {
   const [fTallerDireccion, setFTallerDireccion] = useState("");
   const [fTallerMail, setFTallerMail] = useState("");
   const [fTallerCelular, setFTallerCelular] = useState("");
+  const [fTallerWhatsapp, setFTallerWhatsapp] = useState(false);
   const [fTallerAlias, setFTallerAlias] = useState("");
   const [fTallerTipos, setFTallerTipos] = useState<TipoTaller[]>([]);
 
@@ -263,6 +265,7 @@ export function M5FichaPage() {
     setFTipoEmpresa("PROPIA");
     setFCuit("");
     setFContactoEmpresa("");
+    setFPermiteMultiCamioneta(false);
     setFPatente("");
     setFMarca("");
     setFModelo("");
@@ -294,6 +297,7 @@ export function M5FichaPage() {
     setFTallerDireccion("");
     setFTallerMail("");
     setFTallerCelular("");
+    setFTallerWhatsapp(false);
     setFTallerAlias("");
     setFTallerTipos([]);
     setForm({ kind });
@@ -333,6 +337,7 @@ export function M5FichaPage() {
     setFTipoEmpresa(item.tipo);
     setFCuit(item.cuit ?? "");
     setFContactoEmpresa(item.contacto ?? "");
+    setFPermiteMultiCamioneta(!!item.permiteMultiCamioneta);
     setForm({ kind: "empresa", item });
   }
 
@@ -457,6 +462,7 @@ export function M5FichaPage() {
           tipo: fTipoEmpresa,
           cuit: fCuit || null,
           contacto: fContactoEmpresa || null,
+          permiteMultiCamioneta: fPermiteMultiCamioneta,
         };
         if (form.item) {
           const updated = await apiFetch<Empresa>(
@@ -600,6 +606,7 @@ export function M5FichaPage() {
           direccion: fTallerDireccion || null,
           mail: fTallerMail || null,
           celular: fTallerCelular || null,
+          whatsapp: fTallerWhatsapp,
           aliasCbu: fTallerAlias || null,
           tipos: fTallerTipos,
         };
@@ -1168,6 +1175,7 @@ export function M5FichaPage() {
                     setFTallerDireccion(t.direccion ?? "");
                     setFTallerMail(t.mail ?? "");
                     setFTallerCelular(t.celular ?? "");
+                    setFTallerWhatsapp(!!t.whatsapp);
                     setFTallerAlias(t.aliasCbu ?? "");
                     setFTallerTipos((t.tipos ?? []).map((x) => x.tipo));
                     setForm({ kind: "taller", item: t });
@@ -1378,6 +1386,14 @@ export function M5FichaPage() {
                   <option value="ALIADA">Aliada</option>
                 </select>
               </Field>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={fPermiteMultiCamioneta}
+                  onChange={(e) => setFPermiteMultiCamioneta(e.target.checked)}
+                />
+                Permite asignar varias camionetas al mismo chofer
+              </label>
             </>
           )}
 
@@ -1519,7 +1535,7 @@ export function M5FichaPage() {
                   onChange={(e) => setFAceite(e.target.value)}
                 />
               </Field>
-              <Field label="Último cambio de correa">
+              <Field label="Último cambio de distribución">
                 <input
                   type="date"
                   className={inputClass}
@@ -1679,6 +1695,14 @@ export function M5FichaPage() {
                   onChange={(e) => setFTallerCelular(e.target.value)}
                 />
               </Field>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={fTallerWhatsapp}
+                  onChange={(e) => setFTallerWhatsapp(e.target.checked)}
+                />
+                WhatsApp
+              </label>
               <Field label="Alias / CBU">
                 <input
                   className={inputClass}

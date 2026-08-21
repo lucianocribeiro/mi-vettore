@@ -188,6 +188,13 @@ function includeOTFor(_viewerUserId?: string) {
     presupuestoElegido: true,
     items: { orderBy: { createdAt: "asc" as const } },
     facturas: { orderBy: { createdAt: "asc" as const } },
+    comentarios: {
+      orderBy: { createdAt: "desc" as const },
+      take: 50,
+      include: {
+        user: { select: { id: true, nombre: true, email: true, rol: true } },
+      },
+    },
     diagnosticos: {
       include: { categoria: true },
       orderBy: { createdAt: "asc" as const },
@@ -224,12 +231,18 @@ function otTotales(ot: {
   return { presupuesto, facturado };
 }
 
-/** El chofer solo ve estado + totales, no negociación interna. */
-function sanitizeOtForViewer<T extends OtLoaded>(ot: T, rol: Role) {
+/** Chofer ve totales + comentarios + ítems de presupuesto (solo lectura).
+ *  Dueño en contexto EMPRESA ve el detalle completo. */
+function sanitizeOtForViewer<T extends OtLoaded>(
+  ot: T,
+  rol: Role,
+  opts?: { esDuenoEmpresa?: boolean }
+) {
   const totales = otTotales(ot);
-  if (rol !== "CHOFER") {
+  if (rol !== "CHOFER" || opts?.esDuenoEmpresa) {
     return { ...ot, totales };
   }
+  const itemsPresupuesto = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
   return {
     id: ot.id,
     numeroOT: ot.numeroOT,
@@ -243,13 +256,14 @@ function sanitizeOtForViewer<T extends OtLoaded>(ot: T, rol: Role) {
     sugerenciaArchivo: ot.sugerenciaArchivo,
     solicitud: ot.solicitud,
     diagnosticos: ot.diagnosticos,
+    comentarios: ot.comentarios,
     totales,
     sinPresupuesto: ot.sinPresupuesto,
     resumenChofer: {
       presupuestoTotal: totales.presupuesto,
       gastoReal: totales.facturado,
     },
-    items: [] as T["items"],
+    items: itemsPresupuesto,
     facturas: [] as T["facturas"],
     presupuestos: [] as T["presupuestos"],
     presupuestoElegido: null,
@@ -257,6 +271,18 @@ function sanitizeOtForViewer<T extends OtLoaded>(ot: T, rol: Role) {
     incrementoJustificacion: null,
     tallerProveedor: null,
   };
+}
+
+async function viewerOpts(userId: string, req: AuthedRequest) {
+  const me = await prisma.usuario.findUnique({
+    where: { id: userId },
+    include: { chofer: true },
+  });
+  const esDuenoEmpresa =
+    me?.rol === "CHOFER" &&
+    !!me.chofer?.esDuenoFlota &&
+    contextoAccesoFromReq(req) === "EMPRESA";
+  return { esDuenoEmpresa };
 }
 
 /**
@@ -363,7 +389,9 @@ router.get("/meta", authenticate, (_req, res) => {
 router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
     const scope = await choferScope(req.user!.id);
-    let where = scope ? whereOwnSolicitudes(scope) : undefined;
+    let where: Prisma.OrdenTrabajoWhereInput | undefined = scope
+      ? whereOwnSolicitudes(scope)
+      : undefined;
     if (scope && contextoAccesoFromReq(req) === "EMPRESA") {
       const empresas = await empresaIdsDeDueno(req.user!.id);
       if (empresas.length > 0) {
@@ -386,8 +414,9 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       include: includeOTFor(req.user!.id),
       orderBy: { createdAt: "desc" },
     });
+    const vOpts = await viewerOpts(req.user!.id, req);
     res.json({
-      ots: items.map((ot) => sanitizeOtForViewer(ot, req.user!.rol as Role)),
+      ots: items.map((ot) => sanitizeOtForViewer(ot, req.user!.rol as Role, vOpts)),
       steps: OT_STEPS,
       fallas: FALLAS_COMUNES,
     });
@@ -567,11 +596,12 @@ router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
     const scope = await choferScope(req.user!.id);
-    if (scope && !choferOwnsOt(item, scope)) {
+    const vOpts = await viewerOpts(req.user!.id, req);
+    if (scope && !vOpts.esDuenoEmpresa && !choferOwnsOt(item, scope)) {
       res.status(403).json({ error: "Solo podés ver tus propias solicitudes" });
       return;
     }
-    res.json(sanitizeOtForViewer(item, req.user!.rol as Role));
+    res.json(sanitizeOtForViewer(item, req.user!.rol as Role, vOpts));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al obtener OT" });
@@ -1538,6 +1568,111 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
+/** Silvina (u ops) puede reabrir una OT cerrada por error. */
+router.post("/:id/reabrir", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const ot = await prisma.ordenTrabajo.findUnique({
+      where: { id: req.params.id },
+      include: includeOTFor(req.user!.id),
+    });
+    if (!ot) {
+      res.status(404).json({ error: "OT no encontrada" });
+      return;
+    }
+    if (!ot.cerradaAt) {
+      res.status(400).json({ error: "La OT no está cerrada" });
+      return;
+    }
+    const scope = await choferScope(req.user!.id);
+    if (scope) {
+      res.status(403).json({ error: "Sin permiso para reabrir" });
+      return;
+    }
+    const rol = req.user!.rol;
+    const gate = await gateOrOverride({
+      rol,
+      allowed: rol === "SILVINA" || rol === "CARLA",
+      userId: req.user!.id,
+      otId: ot.id,
+      accion: "Reabrir OT",
+      overrideComentario: parseOverrideComentario(req.body),
+    });
+    if (!gate.ok) {
+      res.status(gate.status).json({ error: gate.error });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.tallerMovimiento.deleteMany({
+        where: { otId: ot.id, estado: "PENDIENTE" },
+      });
+      await tx.ordenTrabajo.update({
+        where: { id: ot.id },
+        data: { cerradaAt: null, currentStep: 5 },
+      });
+      await tx.otAuditoria.create({
+        data: {
+          otId: ot.id,
+          userId: req.user!.id,
+          accion: "reabrir",
+          comentario: String(req.body?.motivo ?? "").trim() || "Reapertura",
+        },
+      });
+    });
+
+    const updated = await prisma.ordenTrabajo.findUnique({
+      where: { id: ot.id },
+      include: includeOTFor(req.user!.id),
+    });
+    res.json(sanitizeOtForViewer(updated!, rol));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al reabrir OT" });
+  }
+});
+
+/** Comentario libre: chofer, dueño flota u oficina. */
+router.post("/:id/comentarios", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const texto = String(req.body?.texto ?? "").trim();
+    if (!texto) {
+      res.status(400).json({ error: "Escribí un comentario" });
+      return;
+    }
+    const ot = await prisma.ordenTrabajo.findUnique({
+      where: { id: req.params.id },
+      include: includeOTFor(req.user!.id),
+    });
+    if (!ot) {
+      res.status(404).json({ error: "OT no encontrada" });
+      return;
+    }
+    const scope = await choferScope(req.user!.id);
+    const vOpts = await viewerOpts(req.user!.id, req);
+    if (scope && !vOpts.esDuenoEmpresa && !choferOwnsOt(ot, scope)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    await prisma.otComentario.create({
+      data: {
+        otId: ot.id,
+        userId: req.user!.id,
+        texto,
+      },
+    });
+    const updated = await prisma.ordenTrabajo.findUnique({
+      where: { id: ot.id },
+      include: includeOTFor(req.user!.id),
+    });
+    res.status(201).json(
+      sanitizeOtForViewer(updated!, req.user!.rol as Role, vOpts)
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al guardar comentario" });
+  }
+});
+
 router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => {
   try {
     const ot = await prisma.ordenTrabajo.findUnique({
@@ -1598,12 +1733,13 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
   }
 });
 
-async function reloadOt(id: string, userId: string, rol: Role) {
+async function reloadOt(id: string, userId: string, rol: Role, req?: AuthedRequest) {
   const ot = await prisma.ordenTrabajo.findUnique({
     where: { id },
     include: includeOTFor(userId),
   });
-  return ot ? sanitizeOtForViewer(ot, rol) : null;
+  const vOpts = req ? await viewerOpts(userId, req) : {};
+  return ot ? sanitizeOtForViewer(ot, rol, vOpts) : null;
 }
 
 router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
@@ -1671,12 +1807,23 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
     const tallerProveedorId = req.body?.tallerProveedorId
       ? String(req.body.tallerProveedorId)
       : null;
+    if ((tipoRaw === "FACTURA" || tipoRaw === "RENDICION") && !tallerProveedorId) {
+      res.status(400).json({ error: "El proveedor es obligatorio al cargar un gasto" });
+      return;
+    }
     let tallerNombre = String(req.body?.tallerNombre ?? "").trim();
     if (tallerProveedorId) {
       const tp = await prisma.tallerProveedor.findUnique({
         where: { id: tallerProveedorId },
       });
       if (tp) tallerNombre = tp.razonSocial;
+    }
+    let fecha: Date | null = null;
+    if (req.body?.fecha) {
+      const d = new Date(String(req.body.fecha));
+      if (!Number.isNaN(d.getTime())) fecha = d;
+    } else {
+      fecha = new Date();
     }
     await prisma.otItem.create({
       data: {
@@ -1689,9 +1836,10 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
         observacion: String(req.body?.observacion ?? "").trim() || null,
         clasificacion: clasif.clasificacion,
         clasificacionOtro: clasif.clasificacionOtro,
+        fecha,
       },
     });
-    res.json(await reloadOt(ot.id, req.user!.id, rol));
+    res.json(await reloadOt(ot.id, req.user!.id, rol, req));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al agregar ítem" });

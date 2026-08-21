@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { Role, UserStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { ensureDuenoFromEmpresaContact } from "../lib/dueno-flota.js";
 import {
   authenticate,
   signToken,
@@ -94,8 +95,35 @@ router.post("/login", async (req, res) => {
       rol: user.rol,
     });
 
-    const empresaNombre = await empresaNombreForChofer(user.choferId);
-    res.json({ token, user: publicUser(user, user.chofer, empresaNombre) });
+    let chofer = user.chofer;
+    let choferId = user.choferId;
+    if (user.rol === Role.CHOFER) {
+      const dueno = await ensureDuenoFromEmpresaContact({
+        userId: user.id,
+        email: user.email,
+        choferId: user.choferId,
+      });
+      choferId = dueno.choferId;
+      if (choferId) {
+        chofer = await prisma.chofer.findUnique({ where: { id: choferId } });
+      }
+    }
+
+    const empresaNombre = await empresaNombreForChofer(choferId);
+    res.json({
+      token,
+      user: publicUser(
+        { ...user, choferId },
+        chofer
+          ? {
+              esDuenoFlota: chofer.esDuenoFlota,
+              verMantenimiento: chofer.verMantenimiento,
+              verTaller: chofer.verTaller,
+            }
+          : null,
+        empresaNombre
+      ),
+    });
   } catch (err) {
     console.error("login error", err);
     res.status(500).json({ error: "Error interno" });
@@ -232,8 +260,33 @@ router.get("/me", authenticate, async (req: AuthedRequest, res) => {
       res.status(401).json({ error: "Sesión inválida" });
       return;
     }
-    const empresaNombre = await empresaNombreForChofer(user.choferId);
-    res.json({ user: publicUser(user, user.chofer, empresaNombre) });
+    let chofer = user.chofer;
+    let choferId = user.choferId;
+    if (user.rol === Role.CHOFER) {
+      const dueno = await ensureDuenoFromEmpresaContact({
+        userId: user.id,
+        email: user.email,
+        choferId: user.choferId,
+      });
+      choferId = dueno.choferId;
+      if (choferId) {
+        chofer = await prisma.chofer.findUnique({ where: { id: choferId } });
+      }
+    }
+    const empresaNombre = await empresaNombreForChofer(choferId);
+    res.json({
+      user: publicUser(
+        { ...user, choferId },
+        chofer
+          ? {
+              esDuenoFlota: chofer.esDuenoFlota,
+              verMantenimiento: chofer.verMantenimiento,
+              verTaller: chofer.verTaller,
+            }
+          : null,
+        empresaNombre
+      ),
+    });
   } catch (err) {
     console.error("me error", err);
     res.status(500).json({ error: "Error interno" });

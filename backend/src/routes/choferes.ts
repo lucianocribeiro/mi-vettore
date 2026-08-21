@@ -3,6 +3,7 @@ import { EstadoChofer } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendExcel } from "../lib/excel-export.js";
+import { ensureUsuarioForChofer } from "../lib/usuario-chofer.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 import { parseDateOnly } from "../lib/date-only.js";
 import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
@@ -205,6 +206,11 @@ router.post("/", ...write, async (req, res) => {
       },
       include: includeAsignaciones,
     });
+    await ensureUsuarioForChofer({
+      choferId: item.id,
+      email: item.email,
+      nombre: item.nombre,
+    });
     res.status(201).json(item);
   } catch (err: unknown) {
     if (
@@ -271,6 +277,11 @@ router.put("/:id", ...write, async (req, res) => {
       where: { id: req.params.id },
       data,
       include: includeAsignaciones,
+    });
+    await ensureUsuarioForChofer({
+      choferId: item.id,
+      email: item.email,
+      nombre: item.nombre,
     });
     res.json(item);
   } catch (err: unknown) {

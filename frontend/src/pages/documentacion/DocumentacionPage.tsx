@@ -47,6 +47,7 @@ type AdvFilters = {
   patenteId: string;
   sinChofer: boolean;
   sinUnidad: boolean;
+  vencimiento: "all" | "por_vencer" | "vencido";
 };
 
 const EMPTY_ADV: AdvFilters = {
@@ -57,7 +58,35 @@ const EMPTY_ADV: AdvFilters = {
   patenteId: "",
   sinChofer: false,
   sinUnidad: false,
+  vencimiento: "all",
 };
+
+function daysUntil(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso));
+  const d = m
+    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    : new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86_400_000);
+}
+
+/** Match if any date is expired / within 30 days (inclusive of today). */
+function matchesVencimiento(
+  dates: Array<string | null | undefined>,
+  filtro: AdvFilters["vencimiento"]
+): boolean {
+  if (filtro === "all") return true;
+  const days = dates
+    .map((d) => daysUntil(d))
+    .filter((d): d is number => d !== null);
+  if (days.length === 0) return false;
+  if (filtro === "vencido") return days.some((d) => d < 0);
+  return days.some((d) => d >= 0 && d <= 30);
+}
 
 export function DocumentacionPage() {
   const { token, user } = useAuth();
@@ -124,6 +153,9 @@ export function DocumentacionPage() {
       ) {
         return false;
       }
+      if (!matchesVencimiento([c.seguroVencimiento, c.vtbVencimiento], adv.vencimiento)) {
+        return false;
+      }
       return matchesText(
         [
           c.patente,
@@ -149,6 +181,18 @@ export function DocumentacionPage() {
       ) {
         return false;
       }
+      if (
+        !matchesVencimiento(
+          [
+            ch.licenciaVencimiento,
+            asg?.camioneta?.seguroVencimiento,
+            asg?.camioneta?.vtbVencimiento,
+          ],
+          adv.vencimiento
+        )
+      ) {
+        return false;
+      }
       return matchesText(
         [
           ch.nombre,
@@ -170,7 +214,8 @@ export function DocumentacionPage() {
     adv.tipos.length > 0 ||
     !!adv.empresa.trim() ||
     adv.sinChofer ||
-    adv.sinUnidad;
+    adv.sinUnidad ||
+    adv.vencimiento !== "all";
   const searchActive = !!query.trim() || advActive;
 
   const shown = tab === "unidades" ? filteredCams.length : filteredChoferes.length;
@@ -331,6 +376,23 @@ export function DocumentacionPage() {
                 aria-label="Filtrar por empresa"
                 className="min-h-11 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
               />
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+                Vencimiento
+                <select
+                  value={adv.vencimiento}
+                  onChange={(e) =>
+                    setAdv((prev) => ({
+                      ...prev,
+                      vencimiento: e.target.value as AdvFilters["vencimiento"],
+                    }))
+                  }
+                  className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm font-normal normal-case tracking-normal text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
+                >
+                  <option value="all">Todos</option>
+                  <option value="por_vencer">Por vencer (30 días)</option>
+                  <option value="vencido">Vencido</option>
+                </select>
+              </label>
               {tab === "unidades" ? (
                 <label className="flex items-center gap-2 text-xs text-[var(--vl-text)]">
                   <input

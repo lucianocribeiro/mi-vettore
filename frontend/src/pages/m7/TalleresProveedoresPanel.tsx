@@ -47,6 +47,7 @@ export function TalleresProveedoresPanel() {
   const [direccion, setDireccion] = useState("");
   const [mail, setMail] = useState("");
   const [celular, setCelular] = useState("");
+  const [whatsapp, setWhatsapp] = useState(false);
   const [alias, setAlias] = useState("");
   const [selTipos, setSelTipos] = useState<TipoTaller[]>([]);
 
@@ -78,6 +79,7 @@ export function TalleresProveedoresPanel() {
     setDireccion(t?.direccion ?? "");
     setMail(t?.mail ?? "");
     setCelular(t?.celular ?? "");
+    setWhatsapp(!!t?.whatsapp);
     setAlias(t?.aliasCbu ?? "");
     setSelTipos((t?.tipos ?? []).map((x) => x.tipo));
   }
@@ -90,6 +92,7 @@ export function TalleresProveedoresPanel() {
       direccion,
       mail,
       celular,
+      whatsapp,
       aliasCbu: alias,
       tipos: selTipos,
     };
@@ -361,6 +364,14 @@ export function TalleresProveedoresPanel() {
             <label className="mt-2 block text-xs">Dirección<input className={input} value={direccion} onChange={(e) => setDireccion(e.target.value)} /></label>
             <label className="mt-2 block text-xs">Mail<input className={input} value={mail} onChange={(e) => setMail(e.target.value)} /></label>
             <label className="mt-2 block text-xs">Celular<input className={input} value={celular} onChange={(e) => setCelular(e.target.value)} /></label>
+            <label className="mt-2 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.checked)}
+              />
+              WhatsApp
+            </label>
             <label className="mt-2 block text-xs">Alias / CBU<input className={input} value={alias} onChange={(e) => setAlias(e.target.value)} /></label>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {tipos.map((tipo) => {

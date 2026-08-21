@@ -87,6 +87,7 @@ router.post("/", ...write, async (req, res) => {
         contacto: req.body?.contacto
           ? String(req.body.contacto).trim()
           : null,
+        permiteMultiCamioneta: Boolean(req.body?.permiteMultiCamioneta),
       },
     });
     res.status(201).json(item);
@@ -119,6 +120,7 @@ router.put("/:id", ...write, async (req, res) => {
       tipo?: TipoEmpresa;
       cuit?: string | null;
       contacto?: string | null;
+      permiteMultiCamioneta?: boolean;
     } = {};
     if (req.body?.nombre !== undefined) data.nombre = String(req.body.nombre).trim();
     if (req.body?.cuit !== undefined) {
@@ -130,6 +132,9 @@ router.put("/:id", ...write, async (req, res) => {
       data.contacto = req.body.contacto
         ? String(req.body.contacto).trim()
         : null;
+    }
+    if (req.body?.permiteMultiCamioneta !== undefined) {
+      data.permiteMultiCamioneta = Boolean(req.body.permiteMultiCamioneta);
     }
     if (req.body?.tipo !== undefined) {
       const t = String(req.body.tipo).toUpperCase();

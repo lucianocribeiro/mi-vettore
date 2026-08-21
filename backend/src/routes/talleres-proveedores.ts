@@ -272,6 +272,7 @@ router.post("/", ...write, async (req, res) => {
         direccion: req.body?.direccion ? String(req.body.direccion).trim() : null,
         mail: req.body?.mail ? String(req.body.mail).trim() : null,
         celular: req.body?.celular ? String(req.body.celular).trim() : null,
+        whatsapp: Boolean(req.body?.whatsapp),
         aliasCbu: req.body?.aliasCbu ? String(req.body.aliasCbu).trim() : null,
         activo: req.body?.activo === false ? false : true,
         tipos: {
@@ -323,6 +324,9 @@ router.put("/:id", ...write, async (req, res) => {
     }
     if (req.body?.celular !== undefined) {
       data.celular = req.body.celular ? String(req.body.celular).trim() : null;
+    }
+    if (req.body?.whatsapp !== undefined) {
+      data.whatsapp = Boolean(req.body.whatsapp);
     }
     if (req.body?.aliasCbu !== undefined) {
       data.aliasCbu = req.body.aliasCbu

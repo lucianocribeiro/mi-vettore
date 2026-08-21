@@ -15,10 +15,19 @@ import {
   currentAsignacion,
   isInternalOps,
   type Camioneta,
+  type OtComentario,
   type Role,
   type TallerProveedor,
 } from "../../types";
 import { TalleresProveedoresPanel } from "./TalleresProveedoresPanel";
+
+function todayInputDate() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 const FALLAS_COMUNES = [
   "Pérdida de gas / equipo de frío",
@@ -127,7 +136,13 @@ type OrdenTrabajo = {
     solicitante: "CHOFER" | "ADMINISTRATIVO";
     habilitadaCircular?: boolean;
     inhabilitado: boolean;
-    camioneta: { id: string; patente: string };
+    camioneta: {
+      id: string;
+      patente: string;
+      asignaciones?: {
+        empresa?: { id: string; nombre: string } | null;
+      }[];
+    };
     chofer: { id: string; nombre: string } | null;
   };
   items?: OtItem[];
@@ -135,6 +150,7 @@ type OrdenTrabajo = {
   presupuestos?: { id: string; taller: string; monto: number; descripcion?: string | null; archivo: string | null }[];
   totales?: { presupuesto: number; facturado: number };
   resumenChofer?: { presupuestoTotal: number; gastoReal: number };
+  comentarios?: OtComentario[];
   auditorias?: { id: string; accion: string; createdAt: string; user?: { nombre: string | null; email: string } | null }[];
 };
 
@@ -155,8 +171,19 @@ function canCerrarOt(rol?: Role | null) {
   return rol === "SILVINA" || rol === "CARLA";
 }
 
+function canReabrirOt(rol?: Role | null) {
+  return rol === "SILVINA" || rol === "CARLA" || isInternalOps(rol);
+}
+
 function isOps(rol?: Role | null) {
   return isInternalOps(rol);
+}
+
+function otEmpresaNombre(o: OrdenTrabajo): string {
+  return (
+    o.solicitud.camioneta.asignaciones?.[0]?.empresa?.nombre ??
+    ""
+  );
 }
 
 function money(n: number | null | undefined) {
@@ -179,8 +206,12 @@ export function M7TalleresPage() {
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState<"todas" | "mia">("todas");
+  const [filtroPatente, setFiltroPatente] = useState("");
+  const [filtroEmpresa, setFiltroEmpresa] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState<"todas" | "abierta" | "cerrada">("todas");
   const [talleres, setTalleres] = useState<TallerProveedor[]>([]);
   const [exportando, setExportando] = useState(false);
+  const [comentarioTexto, setComentarioTexto] = useState("");
 
   const [tallerId, setTallerId] = useState("");
   const [inhabilitar, setInhabilitar] = useState(false);
@@ -235,9 +266,24 @@ export function M7TalleresPage() {
   }
 
   const visibleOts = useMemo(() => {
-    if (filter === "mia") return ots.filter(needsMyAction);
-    return ots;
-  }, [ots, filter, rol]);
+    const patenteQ = filtroPatente.trim().toLowerCase();
+    const empresaQ = filtroEmpresa.trim().toLowerCase();
+    return ots.filter((o) => {
+      if (filter === "mia" && !needsMyAction(o)) return false;
+      if (filtroEstado === "abierta" && o.cerradaAt) return false;
+      if (filtroEstado === "cerrada" && !o.cerradaAt) return false;
+      if (
+        patenteQ &&
+        !o.solicitud.camioneta.patente.toLowerCase().includes(patenteQ)
+      ) {
+        return false;
+      }
+      if (empresaQ && !otEmpresaNombre(o).toLowerCase().includes(empresaQ)) {
+        return false;
+      }
+      return true;
+    });
+  }, [ots, filter, filtroPatente, filtroEmpresa, filtroEstado, rol, vistaChofer]);
 
   const actionCount = ots.filter(needsMyAction).length;
 
@@ -328,6 +374,34 @@ export function M7TalleresPage() {
                     Requieren mi acción ({actionCount})
                   </button>
                 </div>
+                <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-2">
+                  <input
+                    type="search"
+                    value={filtroPatente}
+                    onChange={(e) => setFiltroPatente(e.target.value)}
+                    placeholder="Buscar patente…"
+                    className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                  />
+                  <input
+                    type="search"
+                    value={filtroEmpresa}
+                    onChange={(e) => setFiltroEmpresa(e.target.value)}
+                    placeholder="Buscar empresa…"
+                    className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                  />
+                  <select
+                    value={filtroEstado}
+                    onChange={(e) =>
+                      setFiltroEstado(e.target.value as "todas" | "abierta" | "cerrada")
+                    }
+                    className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                    aria-label="Estado de la OT"
+                  >
+                    <option value="todas">Estado: todas</option>
+                    <option value="abierta">Abiertas</option>
+                    <option value="cerrada">Cerradas</option>
+                  </select>
+                </div>
                 {visibleOts.map((o) => (
                   <button key={o.id} type="button" onClick={() => setSelectedId(o.id)} className={`w-full rounded-xl border p-3 text-left ${selectedId === o.id ? "border-slate-900 dark:border-slate-100" : "border-[var(--vl-card-border)]"}`}>
                     <div className="flex items-center justify-between gap-2">
@@ -396,6 +470,32 @@ export function M7TalleresPage() {
                             <div className="font-bold">{totF > 0 ? money(totF) : "—"}</div>
                           </div>
                         </div>
+                        {(() => {
+                          const presupItems = (ot.items ?? []).filter(
+                            (i) => i.tipo === "PRESUPUESTO"
+                          );
+                          if (presupItems.length === 0) return null;
+                          return (
+                            <div className="rounded-lg border border-[var(--vl-card-border)] p-3">
+                              <div className="mb-2 text-xs font-semibold">
+                                Ítems de presupuesto
+                              </div>
+                              <ul className="space-y-1 text-xs">
+                                {presupItems.map((i) => (
+                                  <li
+                                    key={i.id}
+                                    className="flex justify-between gap-2 border-t border-[var(--vl-card-border)] pt-1 first:border-0 first:pt-0"
+                                  >
+                                    <span>{i.descripcion}</span>
+                                    <span className="shrink-0 font-medium">
+                                      {money(i.importe)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })()}
                         <div>
                           <div className="text-xs font-medium">Sugerencia de taller (opcional)</div>
                           <textarea rows={2} value={sugText} onChange={(e) => setSugText(e.target.value)} className="mt-1 w-full rounded-md border p-2 text-sm" placeholder="Conozco un taller que cobra menos…" />
@@ -616,6 +716,38 @@ export function M7TalleresPage() {
                       )}
                     </div>
                   )}
+
+                  {ot.cerradaAt && canReabrirOt(rol) && (
+                    <div className="mt-5">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void call(`/api/talleres/${ot.id}/reabrir`, {
+                            method: "POST",
+                            body: "{}",
+                          })
+                        }
+                        className="inline-flex min-h-11 items-center justify-center rounded-xl border-2 border-amber-500 px-4 text-sm font-semibold text-amber-800 dark:text-amber-200"
+                      >
+                        Reabrir OT
+                      </button>
+                    </div>
+                  )}
+
+                  <ComentariosOt
+                    ot={ot}
+                    token={token!}
+                    texto={comentarioTexto}
+                    setTexto={setComentarioTexto}
+                    busy={busy}
+                    onSaved={(updated) => {
+                      replaceOt(updated);
+                      setComentarioTexto("");
+                    }}
+                    onBusy={setBusy}
+                    onError={setError}
+                  />
                 </div>
               )}
             </div>
@@ -633,6 +765,87 @@ export function M7TalleresPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function ComentariosOt({
+  ot,
+  token,
+  texto,
+  setTexto,
+  busy,
+  onSaved,
+  onBusy,
+  onError,
+}: {
+  ot: OrdenTrabajo;
+  token: string;
+  texto: string;
+  setTexto: (s: string) => void;
+  busy: boolean;
+  onSaved: (ot: OrdenTrabajo) => void;
+  onBusy: (b: boolean) => void;
+  onError: (msg: string | null) => void;
+}) {
+  const comentarios = ot.comentarios ?? [];
+
+  async function enviar() {
+    if (!texto.trim()) return;
+    onBusy(true);
+    onError(null);
+    try {
+      const updated = await apiFetch<OrdenTrabajo>(
+        `/api/talleres/${ot.id}/comentarios`,
+        { method: "POST", body: JSON.stringify({ texto: texto.trim() }) },
+        token
+      );
+      onSaved(updated);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Error al comentar");
+    } finally {
+      onBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 rounded-lg border border-[var(--vl-card-border)] p-3">
+      <div className="mb-2 text-xs font-semibold">Comentarios</div>
+      {comentarios.length === 0 ? (
+        <p className="mb-2 text-xs text-[var(--vl-text-muted)]">Sin comentarios aún.</p>
+      ) : (
+        <ul className="mb-3 max-h-48 space-y-2 overflow-y-auto">
+          {comentarios.map((c) => (
+            <li
+              key={c.id}
+              className="rounded-md bg-slate-50 px-2.5 py-2 text-xs dark:bg-slate-900/40"
+            >
+              <div className="font-medium text-[var(--vl-heading)]">
+                {c.user?.nombre || c.user?.email || "Usuario"}
+                <span className="ml-1.5 font-normal text-[var(--vl-text-muted)]">
+                  {new Date(c.createdAt).toLocaleString("es-AR")}
+                </span>
+              </div>
+              <p className="mt-0.5 whitespace-pre-wrap text-[var(--vl-text)]">{c.texto}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <textarea
+        rows={2}
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        placeholder="Escribí un comentario…"
+        className="w-full rounded-md border border-[var(--vl-card-border)] p-2 text-sm"
+      />
+      <button
+        type="button"
+        disabled={busy || !texto.trim()}
+        onClick={() => void enviar()}
+        className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+      >
+        Enviar comentario
+      </button>
     </div>
   );
 }
@@ -736,11 +949,13 @@ function ItemsEditor({
 }) {
   const [clasificacion, setClasificacion] = useState<ClasificacionGasto | "">("");
   const [clasificacionOtro, setClasificacionOtro] = useState("");
+  const [fecha, setFecha] = useState(todayInputDate);
   const items = (ot.items ?? []).filter((i) =>
     tipo === "PRESUPUESTO" ? i.tipo === "PRESUPUESTO" : i.tipo !== "PRESUPUESTO"
   );
   const total = items.reduce((a, i) => a + i.importe, 0);
   const gastoRequiereClasif = tipo === "FACTURA";
+  const proveedorObligatorio = tipo === "FACTURA";
 
   async function add() {
     const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items`, {
@@ -751,6 +966,7 @@ function ItemsEditor({
         importe: Number(imp),
         observacion: obs,
         tallerProveedorId: tallerId || undefined,
+        fecha: fecha || undefined,
         clasificacion: clasificacion || undefined,
         clasificacionOtro: clasificacion === "OTRO" ? clasificacionOtro : undefined,
       }),
@@ -758,6 +974,7 @@ function ItemsEditor({
     onSaved(updated);
     setDesc(""); setImp(""); setObs("");
     setClasificacion(""); setClasificacionOtro("");
+    setFecha(todayInputDate());
   }
 
   async function remove(id: string) {
@@ -774,6 +991,7 @@ function ItemsEditor({
   const puedeSumar =
     !!desc &&
     !!imp &&
+    (!proveedorObligatorio || !!tallerId) &&
     (!gastoRequiereClasif ||
       (clasificacion && (clasificacion !== "OTRO" || clasificacionOtro.trim().length >= 2)));
 
@@ -808,11 +1026,20 @@ function ItemsEditor({
           </select>
         )}
         <select className={`rounded-md border p-2 text-sm ${lockTipo ? "sm:col-span-2" : ""}`} value={tallerId} onChange={(e) => setTallerId(e.target.value)}>
-          <option value="">Proveedor…</option>
+          <option value="">{proveedorObligatorio ? "Proveedor (obligatorio)…" : "Proveedor…"}</option>
           {talleres.map((t) => <option key={t.id} value={t.id}>{t.razonSocial}</option>)}
         </select>
         <input className="rounded-md border p-2 text-sm" placeholder="Descripción" value={desc} onChange={(e) => setDesc(e.target.value)} />
         <input className="rounded-md border p-2 text-sm" placeholder="Importe" type="number" value={imp} onChange={(e) => setImp(e.target.value)} />
+        <label className="text-xs text-[var(--vl-text-muted)] sm:col-span-2">
+          Fecha
+          <input
+            type="date"
+            className="mt-1 w-full rounded-md border p-2 text-sm text-[var(--vl-text)]"
+            value={fecha}
+            onChange={(e) => setFecha(e.target.value)}
+          />
+        </label>
         <select
           className="rounded-md border p-2 text-sm"
           value={clasificacion}

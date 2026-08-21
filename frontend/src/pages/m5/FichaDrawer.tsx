@@ -251,7 +251,7 @@ export function FichaDrawer({
                   value={formatDate(cam.fechaUltimoAceite)}
                 />
                 <Row
-                  label="Últ. cambio de correa"
+                  label="Últ. cambio de distribución"
                   value={formatDate(cam.fechaCambioCorrea)}
                 />
                 <Row
@@ -355,10 +355,6 @@ export function FichaDrawer({
                 <Row label="DNI" value={ch.dni} />
                 <Row label="CUIL" value={ch.cuil || "—"} />
                 <Row label="Licencia" value={ch.licencia || "—"} />
-                <Row
-                  label="Venc. licencia"
-                  value={formatDate(ch.licenciaVencimiento)}
-                />
                 <Row label="Teléfono" value={ch.telefono || "—"} />
                 <Row label="Email" value={ch.email || "—"} />
                 <Row

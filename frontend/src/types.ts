@@ -209,6 +209,8 @@ export type Empresa = {
   cuit: string | null;
   contacto: string | null;
   tipo: TipoEmpresa;
+  /** Si true, la empresa puede tener más de una camioneta asignada a la vez. */
+  permiteMultiCamioneta?: boolean;
 };
 
 export type AsignacionFlota = {
@@ -289,11 +291,24 @@ export type TallerProveedor = {
   direccion: string | null;
   mail: string | null;
   celular: string | null;
+  /** Si true, el celular se usa también como WhatsApp. */
+  whatsapp?: boolean;
   aliasCbu: string | null;
   activo: boolean;
   createdAt?: string;
   updatedAt?: string;
   tipos: TallerProveedorTipo[];
+};
+
+export type OtComentario = {
+  id: string;
+  texto: string;
+  createdAt: string;
+  user?: {
+    nombre: string | null;
+    email: string;
+    rol?: string;
+  } | null;
 };
 
 export type DocumentoEntidad = {
