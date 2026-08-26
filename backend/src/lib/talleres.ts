@@ -28,31 +28,42 @@ export const FALLAS_COMUNES = [
 /**
  * Circuito OT.
  * 0 se completa al crear (notif automática). Urgente salta a presupuesto (2).
- * 2 Presupuesto (optativo) → 3 Facturación → 4 Incremento si hay desvío → 5 Cierre.
+ * 2 Presupuesto → 3 Aprobación empresa → 4 Facturación → 5 Incremento si hay desvío → 6 Cierre.
  */
 export const OT_STEPS = [
   {
     key: 0,
+    code: "solicitud",
     label: "Solicitud",
     ownerRoles: null as Role[] | null,
   },
   {
     key: 1,
+    code: "asignacion",
     label: "Asignación",
     ownerRoles: [Role.FACU] as Role[] | null,
   },
   {
     key: 2,
+    code: "presupuesto",
     label: "Presupuesto",
     ownerRoles: [Role.SILVINA],
   },
   {
     key: 3,
+    code: "aprobacion_empresa",
+    label: "Aprobación empresa",
+    ownerRoles: [Role.CHOFER, Role.SILVINA, Role.PABLO, Role.FACU, Role.PATRICIO, Role.JULIETA, Role.CARLA],
+  },
+  {
+    key: 4,
+    code: "facturacion",
     label: "Facturación",
     ownerRoles: [Role.SILVINA],
   },
   {
-    key: 4,
+    key: 5,
+    code: "incremento",
     label: "Incremento",
     ownerRoles: [
       Role.PABLO,
@@ -64,7 +75,8 @@ export const OT_STEPS = [
     ],
   },
   {
-    key: 5,
+    key: 6,
+    code: "cierre",
     label: "Cierre",
     ownerRoles: [Role.SILVINA, Role.CARLA],
   },
@@ -76,13 +88,25 @@ export function isPresupuestoStep(step: number): boolean {
   return step === 2;
 }
 
-export function isFacturaStep(step: number): boolean {
+export function isAprobacionEmpresaStep(step: number): boolean {
   return step === 3;
 }
 
-/** Presupuesto (2) o facturación (3). */
+export function isFacturaStep(step: number): boolean {
+  return step === 4;
+}
+
+/** Presupuesto (2) o facturación (4). */
 export function isGastoStep(step: number) {
-  return step === 2 || step === 3;
+  return step === 2 || step === 4;
+}
+
+export function isIncrementoStep(step: number): boolean {
+  return step === 5;
+}
+
+export function isCierreStep(step: number): boolean {
+  return step === 6;
 }
 
 export function canCreateSolicitud(rol: Role): boolean {
@@ -99,9 +123,12 @@ export function canCreateSolicitud(rol: Role): boolean {
 export function canAdvanceFromStep(rol: Role, currentStep: number): boolean {
   if (currentStep === 0) return canCreateSolicitud(rol);
   if (currentStep === 1) return rol === Role.FACU;
-  if (currentStep === 2 || currentStep === 3) return rol === Role.SILVINA;
-  if (currentStep === 4) return isInternalOpsRole(rol);
-  if (currentStep === 5) return false;
+  if (currentStep === 2) return rol === Role.SILVINA;
+  // Dueño flota (rol CHOFER en contexto EMPRESA) u ops internos
+  if (currentStep === 3) return rol === Role.CHOFER || isInternalOpsRole(rol);
+  if (currentStep === 4) return rol === Role.SILVINA;
+  if (currentStep === 5) return isInternalOpsRole(rol);
+  if (currentStep === 6) return false;
   return false;
 }
 

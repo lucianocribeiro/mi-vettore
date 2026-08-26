@@ -40,24 +40,37 @@ const FALLAS_COMUNES = [
 ] as const;
 
 const OT_STEPS = [
-  { label: "Solicitud", owner: null as string | null, detail: "El chofer reporta patente, problema y si puede circular." },
-  { label: "Asignación", owner: "Facu", detail: "Facu evalúa la falla, asigna taller y decide si inhabilitar." },
-  { label: "Presupuesto", owner: "Silvina", detail: "Cargá todos los presupuestos recibidos (varios talleres). No se suman entre sí." },
-  { label: "Facturación", owner: "Empresa / Silvina", detail: "La empresa sugiere qué aprobar; Silvina carga el valor real facturado (editable) y conceptos." },
-  { label: "Incremento", owner: "Ops", detail: "Solo si el gasto supera lo presupuestado. Cualquier usuario interno puede confirmar." },
-  { label: "Cierre", owner: "Silvina / Carla", detail: "Cerrar OT, reporte de salida y cuenta corriente del proveedor." },
+  { code: "solicitud", label: "Solicitud", owner: null as string | null, detail: "El chofer reporta patente, problema y si puede circular." },
+  { code: "asignacion", label: "Asignación", owner: "Facu", detail: "Facu evalúa la falla, asigna taller y decide si inhabilitar." },
+  { code: "presupuesto", label: "Presupuesto", owner: "Silvina", detail: "Cargá todos los presupuestos recibidos (varios talleres). No se suman entre sí." },
+  { code: "aprobacion_empresa", label: "Aprobación empresa", owner: "Empresa / Ops", detail: "La empresa (dueño flota) marca qué ítems/talleres aprueba. Ops también puede marcar." },
+  { code: "facturacion", label: "Facturación", owner: "Silvina", detail: "Silvina marca a facturar, edita importe y asigna concepto (3 niveles)." },
+  { code: "incremento", label: "Incremento", owner: "Ops", detail: "Solo si el gasto supera lo presupuestado. Cualquier usuario interno puede confirmar." },
+  { code: "cierre", label: "Cierre", owner: "Silvina / Carla", detail: "Cerrar OT, reporte de salida y cuenta corriente del proveedor." },
 ] as const;
 
 function isPresupuestoStep(step: number) {
   return step === 2;
 }
 
-function isFacturaStep(step: number) {
+function isAprobacionEmpresaStep(step: number) {
   return step === 3;
 }
 
+function isFacturaStep(step: number) {
+  return step === 4;
+}
+
 function isGastoStep(step: number) {
-  return step === 2 || step === 3;
+  return step === 2 || step === 4;
+}
+
+function isIncrementoStep(step: number) {
+  return step === 5;
+}
+
+function isCierreStep(step: number) {
+  return step === 6;
 }
 
 function roleActionHint(rol?: Role | null): string {
@@ -99,6 +112,9 @@ type OtItem = {
   observacion: string | null;
   archivo: string | null;
   aprobado?: boolean;
+  sugeridoEmpresa?: boolean;
+  categoriaDiagnosticoId?: string | null;
+  categoriaDiagnostico?: { id: string; nombre: string; nivel: number; padreId: string | null } | null;
   clasificacion?: ClasificacionGasto | null;
   clasificacionOtro?: string | null;
 };
@@ -162,8 +178,10 @@ function canAdvanceFromStep(rol: Role | undefined, step: number) {
   if (!rol) return false;
   if (step === 0) return canCreateSolicitud(rol);
   if (step === 1) return rol === "FACU";
-  if (step === 2 || step === 3) return rol === "SILVINA";
-  if (step === 4) return isInternalOps(rol);
+  if (step === 2) return rol === "SILVINA";
+  if (step === 3) return rol === "CHOFER" || isInternalOps(rol);
+  if (step === 4) return rol === "SILVINA";
+  if (step === 5) return isInternalOps(rol);
   return false;
 }
 
@@ -262,7 +280,7 @@ export function M7TalleresPage() {
   function needsMyAction(o: OrdenTrabajo) {
     if (o.cerradaAt) return false;
     if (vistaChofer) return !!o.urgente && isGastoStep(o.currentStep) && !(o.totales?.facturado);
-    return canAdvanceFromStep(rol, o.currentStep) || (o.currentStep === 5 && canCerrarOt(rol));
+    return canAdvanceFromStep(rol, o.currentStep) || (isCierreStep(o.currentStep) && canCerrarOt(rol));
   }
 
   const visibleOts = useMemo(() => {
@@ -328,7 +346,7 @@ export function M7TalleresPage() {
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
             {esChofer
               ? "Seguí el estado de tu solicitud. El detalle interno lo ve solo el equipo de Vettore."
-              : "Solicitud → asignación Facu → presupuestos (opc.) → factura → incremento si hay desvío → cierre."}
+              : "Solicitud → asignación → presupuesto → aprobación empresa → factura → incremento si hay desvío → cierre."}
           </p>
           <p className="mt-1 text-xs font-medium text-[#1e4080] dark:text-sky-300">{roleActionHint(rol)}</p>
         </div>
@@ -584,8 +602,8 @@ export function M7TalleresPage() {
                           <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
                             <p className="text-xs text-[var(--vl-text-muted)]">
                               El presupuesto es optativo. Podés cargar uno o más
-                              ítems y seguir. En el paso de facturación marcás
-                              cuáles se facturan.
+                              ítems y seguir. Después la empresa aprueba y en
+                              facturación marcás cuáles se facturan.
                             </p>
                             {ot.sinPresupuesto ? (
                               <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
@@ -606,6 +624,14 @@ export function M7TalleresPage() {
                               </button>
                             )}
                           </div>
+                        )}
+
+                        {isAprobacionEmpresaStep(ot.currentStep) && (
+                          <AprobacionEmpresaChecklist
+                            ot={ot}
+                            token={token!}
+                            onSaved={replaceOt}
+                          />
                         )}
 
                         {isFacturaStep(ot.currentStep) && (
@@ -659,7 +685,7 @@ export function M7TalleresPage() {
                           </div>
                         )}
 
-                        {ot.currentStep === 4 && (
+                        {isIncrementoStep(ot.currentStep) && (
                           <div>
                             <p className="text-sm">Presupuesto {money(totP)} vs facturado {money(totF)}</p>
                             <p className="mt-1 text-xs">{ot.incrementoJustificacion || "Sin nota extra"}</p>
@@ -702,12 +728,12 @@ export function M7TalleresPage() {
                           <ChevronLeft size={18} /> Volver
                         </button>
                       )}
-                      {ot.currentStep < 5 && (
+                      {ot.currentStep < OT_STEPS.length - 1 && (
                         <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/avanzar`, { method: "POST", body: JSON.stringify({ incrementoJustificacion: justif }) })} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-5 text-sm font-semibold text-white">
                           Continuar <ChevronRight size={18} />
                         </button>
                       )}
-                      {ot.currentStep === 5 && (
+                      {isCierreStep(ot.currentStep) && (
                         <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/cerrar`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white">
                           <Check size={18} /> Cerrar OT
                         </button>
@@ -860,6 +886,179 @@ function groupByTaller<T extends { tallerNombre: string; importe: number }>(item
   return [...map.values()];
 }
 
+function AprobacionEmpresaChecklist({
+  ot, token, onSaved,
+}: {
+  ot: OrdenTrabajo;
+  token: string;
+  onSaved: (ot: OrdenTrabajo) => void;
+}) {
+  const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
+  const marcados = items.filter((i) => i.sugeridoEmpresa);
+
+  async function setSugerido(id: string, sugeridoEmpresa: boolean) {
+    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ sugeridoEmpresa }),
+    }, token);
+    onSaved(updated);
+  }
+
+  if (items.length === 0) {
+    return (
+      <p className="text-xs text-[var(--vl-text-muted)]">
+        No hay ítems de presupuesto para aprobar. Podés continuar igual.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold">
+        Aprobación de la empresa (sugerencia) — {marcados.length}/{items.length} marcados
+      </div>
+      <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
+        Marcá qué presupuestos / talleres aprueba la empresa. Silvina usará esto
+        como referencia en facturación. No se suman cotizaciones alternativas.
+      </p>
+      {ot.sugerenciaChofer && (
+        <p className="mb-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-950 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
+          <strong>Sugerencia del chofer:</strong> {ot.sugerenciaChofer}
+        </p>
+      )}
+      {groupByTaller(items).map((g) => (
+        <div key={g.nombre} className="mb-3">
+          <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
+            <span>{g.nombre}</span>
+            <span>Subtotal taller {money(g.subtotal)}</span>
+          </div>
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
+                <th className="w-8 py-1" />
+                <th className="py-1">Ítem</th>
+                <th className="py-1 text-right">Importe $</th>
+              </tr>
+            </thead>
+            <tbody>
+              {g.items.map((i) => (
+                <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
+                  <td className="w-8 py-1">
+                    <label className="inline-flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!i.sugeridoEmpresa}
+                        onChange={(e) => void setSugerido(i.id, e.target.checked)}
+                      />
+                      <span className="sr-only">Aprobar sugerencia empresa</span>
+                    </label>
+                  </td>
+                  <td className="py-1">{i.descripcion}</td>
+                  <td className="py-1 text-right">{money(i.importe)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type CatDiag = {
+  id: string;
+  nombre: string;
+  nivel: number;
+  padreId: string | null;
+};
+
+function ConceptoCascada({
+  cats,
+  valueId,
+  onPick,
+}: {
+  cats: CatDiag[];
+  valueId: string | null | undefined;
+  onPick: (leafId: string | null) => void;
+}) {
+  const selected = valueId ? cats.find((c) => c.id === valueId) : null;
+  const l3 = selected?.nivel === 3 ? selected : null;
+  const l2 = l3
+    ? cats.find((c) => c.id === l3.padreId)
+    : selected?.nivel === 2
+      ? selected
+      : null;
+  const l1 = l2
+    ? cats.find((c) => c.id === l2.padreId)
+    : selected?.nivel === 1
+      ? selected
+      : null;
+
+  const [n1, setN1] = useState(l1?.id ?? "");
+  const [n2, setN2] = useState(l2?.id ?? "");
+  const [n3, setN3] = useState(l3?.id ?? "");
+
+  useEffect(() => {
+    setN1(l1?.id ?? "");
+    setN2(l2?.id ?? "");
+    setN3(l3?.id ?? "");
+  }, [valueId, cats]);
+
+  const nivel1 = cats.filter((c) => c.nivel === 1);
+  const nivel2 = cats.filter((c) => c.nivel === 2 && c.padreId === n1);
+  const nivel3 = cats.filter((c) => c.nivel === 3 && c.padreId === n2);
+
+  return (
+    <div className="mt-1 grid gap-1 sm:grid-cols-3">
+      <select
+        className="rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-1.5 py-1 text-[11px]"
+        value={n1}
+        onChange={(e) => {
+          setN1(e.target.value);
+          setN2("");
+          setN3("");
+          onPick(null);
+        }}
+      >
+        <option value="">Nivel 1…</option>
+        {nivel1.map((c) => (
+          <option key={c.id} value={c.id}>{c.nombre}</option>
+        ))}
+      </select>
+      <select
+        className="rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-1.5 py-1 text-[11px]"
+        value={n2}
+        disabled={!n1}
+        onChange={(e) => {
+          setN2(e.target.value);
+          setN3("");
+          onPick(null);
+        }}
+      >
+        <option value="">Nivel 2…</option>
+        {nivel2.map((c) => (
+          <option key={c.id} value={c.id}>{c.nombre}</option>
+        ))}
+      </select>
+      <select
+        className="rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-1.5 py-1 text-[11px]"
+        value={n3}
+        disabled={!n2}
+        onChange={(e) => {
+          const id = e.target.value;
+          setN3(id);
+          onPick(id || null);
+        }}
+      >
+        <option value="">Nivel 3…</option>
+        {nivel3.map((c) => (
+          <option key={c.id} value={c.id}>{c.nombre}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function PresupuestoChecklist({
   ot, token, onSaved,
 }: {
@@ -871,6 +1070,13 @@ function PresupuestoChecklist({
   const marcados = items.filter((i) => i.aprobado);
   const total = marcados.reduce((a, i) => a + i.importe, 0);
   const [editImp, setEditImp] = useState<Record<string, string>>({});
+  const [cats, setCats] = useState<CatDiag[]>([]);
+
+  useEffect(() => {
+    void apiFetch<CatDiag[]>("/api/diagnostico/categorias", {}, token)
+      .then(setCats)
+      .catch(() => setCats([]));
+  }, [token]);
 
   async function setAFacturar(id: string, aprobado: boolean) {
     const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
@@ -897,6 +1103,14 @@ function PresupuestoChecklist({
     });
   }
 
+  async function setConcepto(id: string, categoriaDiagnosticoId: string | null) {
+    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ categoriaDiagnosticoId }),
+    }, token);
+    onSaved(updated);
+  }
+
   if (items.length === 0) {
     return (
       <p className="text-xs text-[var(--vl-text-muted)]">
@@ -913,7 +1127,7 @@ function PresupuestoChecklist({
       </div>
       <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
         Marcá qué ítems se aprueban y, si hace falta, editá el importe facturado
-        (se compara contra el presupuestado). No se suma el total de cotizaciones
+        y el concepto (3 niveles). No se suma el total de cotizaciones
         alternativas.
       </p>
       {groupByTaller(items).map((g) => (
@@ -933,7 +1147,7 @@ function PresupuestoChecklist({
             <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
-                  <td className="w-8 py-1">
+                  <td className="w-8 py-1 align-top">
                     <label className="inline-flex items-center">
                       <input
                         type="checkbox"
@@ -943,8 +1157,20 @@ function PresupuestoChecklist({
                       <span className="sr-only">Aprobar / facturar</span>
                     </label>
                   </td>
-                  <td className="py-1">{i.descripcion}</td>
-                  <td className="py-1 text-right">
+                  <td className="py-1">
+                    <div>{i.descripcion}</div>
+                    {i.sugeridoEmpresa && (
+                      <div className="mt-0.5 text-[10px] text-emerald-700 dark:text-emerald-300">
+                        Sugerido por empresa
+                      </div>
+                    )}
+                    <ConceptoCascada
+                      cats={cats}
+                      valueId={i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id}
+                      onPick={(leafId) => void setConcepto(i.id, leafId)}
+                    />
+                  </td>
+                  <td className="py-1 text-right align-top">
                     <input
                       type="number"
                       min={0}
@@ -1282,7 +1508,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
               </select>
             </label>
             <label className="text-xs text-[var(--vl-text-muted)]">
-              Chófer
+              Chofer
               <select
                 className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)] disabled:opacity-50"
                 value={choferId}
@@ -1293,7 +1519,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
                 }}
               >
                 <option value="">
-                  {empresaId ? "Elegí el chófer…" : "Primero elegí la empresa"}
+                  {empresaId ? "Elegí el chofer…" : "Primero elegí la empresa"}
                 </option>
                 {choferesOpts.map((ch) => (
                   <option key={ch.id} value={ch.id}>
@@ -1304,7 +1530,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
             </label>
             {choferId && unidadesDeChofer.length === 0 && (
               <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
-                Ese chófer no tiene unidad asignada en esta empresa.
+                Ese chofer no tiene unidad asignada en esta empresa.
               </p>
             )}
             {choferId && unidadesDeChofer.length === 1 && selected && (

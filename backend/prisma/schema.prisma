@@ -514,28 +514,34 @@ enum MetodoPagoTaller {
 
 /// Ítems de presupuesto/factura de una OT (varios proveedores en la misma orden).
 model OtItem {
-  id                String              @id @default(cuid())
-  otId              String
-  tipo              TipoOtItem
-  tallerProveedorId String?
-  tallerNombre      String              @default("")
-  descripcion       String
-  importe           Float
-  observacion       String?
-  archivo           String?
-  aprobado          Boolean             @default(false)
-  clasificacion     ClasificacionGasto?
-  clasificacionOtro String?
+  id                     String              @id @default(cuid())
+  otId                   String
+  tipo                   TipoOtItem
+  tallerProveedorId      String?
+  tallerNombre           String              @default("")
+  descripcion            String
+  importe                Float
+  observacion            String?
+  archivo                String?
+  aprobado               Boolean             @default(false)
+  /// Sugerencia de aprobación de la empresa (dueño flota) en etapa aprobacion_empresa.
+  sugeridoEmpresa        Boolean             @default(false)
+  clasificacion          ClasificacionGasto?
+  clasificacionOtro      String?
+  /// Concepto 3 niveles (hoja del árbol CategoriaDiagnostico) al facturar.
+  categoriaDiagnosticoId String?
   /// Fecha del gasto (editable; por defecto hoy al cargar).
-  fecha             DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  fecha                  DateTime?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
 
-  ot              OrdenTrabajo     @relation(fields: [otId], references: [id], onDelete: Cascade)
-  tallerProveedor TallerProveedor? @relation(fields: [tallerProveedorId], references: [id])
+  ot                   OrdenTrabajo          @relation(fields: [otId], references: [id], onDelete: Cascade)
+  tallerProveedor      TallerProveedor?      @relation(fields: [tallerProveedorId], references: [id])
+  categoriaDiagnostico CategoriaDiagnostico? @relation(fields: [categoriaDiagnosticoId], references: [id])
 
   @@index([otId])
   @@index([tipo])
+  @@index([categoriaDiagnosticoId])
 }
 
 /// Adjuntos de factura (PDF/foto) — más de uno por OT.
@@ -648,6 +654,7 @@ model CategoriaDiagnostico {
   padre     CategoriaDiagnostico?  @relation("DiagnosticoArbol", fields: [padreId], references: [id])
   hijos     CategoriaDiagnostico[] @relation("DiagnosticoArbol")
   ots       OrdenTrabajoDiagnostico[]
+  items     OtItem[]
 
   @@index([padreId])
   @@index([nivel])

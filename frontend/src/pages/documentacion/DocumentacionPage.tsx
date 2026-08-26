@@ -461,11 +461,13 @@ export function DocumentacionPage() {
                           : "border-[var(--vl-card-border)]"
                       }`}
                     >
-                      <div className="text-[11px] text-[var(--vl-text-muted)]">
-                        {asg?.chofer?.nombre ?? "Sin chofer"}
-                        {asg?.empresa?.nombre ? ` · ${asg.empresa.nombre}` : ""}
-                      </div>
-                      <div className="mt-1 font-semibold text-[var(--vl-heading)]">
+                      {ops && (
+                        <div className="text-[11px] text-[var(--vl-text-muted)]">
+                          {asg?.chofer?.nombre ?? "Sin chofer"}
+                          {asg?.empresa?.nombre ? ` · ${asg.empresa.nombre}` : ""}
+                        </div>
+                      )}
+                      <div className={`${ops ? "mt-1" : ""} font-semibold text-[var(--vl-heading)]`}>
                         {c.patente}
                       </div>
                     </button>

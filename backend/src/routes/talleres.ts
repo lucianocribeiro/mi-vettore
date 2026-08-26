@@ -34,7 +34,10 @@ import {
   OT_STEPS,
   isGastoStep,
   isPresupuestoStep,
+  isAprobacionEmpresaStep,
   isFacturaStep,
+  isIncrementoStep,
+  isCierreStep,
 } from "../lib/talleres.js";
 import {
   assertRoleOrOverride,
@@ -186,7 +189,10 @@ function includeOTFor(_viewerUserId?: string) {
     tallerProveedor: { include: { tipos: true } },
     presupuestos: { orderBy: { createdAt: "asc" as const } },
     presupuestoElegido: true,
-    items: { orderBy: { createdAt: "asc" as const } },
+    items: {
+      orderBy: { createdAt: "asc" as const },
+      include: { categoriaDiagnostico: true },
+    },
     facturas: { orderBy: { createdAt: "asc" as const } },
     comentarios: {
       orderBy: { createdAt: "desc" as const },
@@ -992,7 +998,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
 
     if (req.body?.incrementoJustificacion !== undefined) {
-      if (!isFacturaStep(ot.currentStep) && ot.currentStep !== 4) {
+      if (!isFacturaStep(ot.currentStep) && !isIncrementoStep(ot.currentStep)) {
         res.status(400).json({ error: "La justificación del incremento va con la factura" });
         return;
       }
@@ -1012,7 +1018,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
 
     if (req.body?.incrementoAprobado === true || req.body?.incrementoAprobado === "true") {
-      if (ot.currentStep !== 4) {
+      if (!isIncrementoStep(ot.currentStep)) {
         res.status(400).json({ error: "El incremento se confirma en esa etapa" });
         return;
       }
@@ -1260,7 +1266,7 @@ router.post("/:id/sin-presupuesto", authenticate, async (req: AuthedRequest, res
   }
 });
 
-/** Factura PDF: etapa de facturación (3) o cierre (5). */
+/** Factura PDF: etapa de facturación (4) o cierre (6). */
 router.post(
   "/:id/factura",
   authenticate,
@@ -1283,7 +1289,7 @@ router.post(
       const ot = await prisma.ordenTrabajo.findUnique({
         where: { id: req.params.id },
       });
-      if (!ot || (!isFacturaStep(ot.currentStep) && ot.currentStep !== 5)) {
+      if (!ot || (!isFacturaStep(ot.currentStep) && !isCierreStep(ot.currentStep))) {
         res.status(400).json({ error: "La factura se carga en facturación o al cierre" });
         return;
       }
@@ -1362,13 +1368,15 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
     }
 
     const scope = await choferScope(req.user!.id);
-    if (scope) {
+    const vOpts = await viewerOpts(req.user!.id, req);
+    // Chofer regular no avanza; dueño flota (EMPRESA) sí puede en aprobación empresa.
+    if (scope && !vOpts.esDuenoEmpresa) {
       res.status(403).json({ error: "El chofer no avanza etapas de la OT" });
       return;
     }
 
     if (ot.currentStep >= OT_STEPS.length - 1) {
-      res.status(400).json({ error: "Usá «Cerrar pago» en la última etapa" });
+      res.status(400).json({ error: "Usá «Cerrar OT» en la última etapa" });
       return;
     }
     if (ot.cerradaAt) {
@@ -1403,7 +1411,11 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       extra.valorAprobado = tot.presupuesto || ot.valorAprobado || ot.montoAutorizado || null;
       extra.montoAutorizado = tot.presupuesto || ot.montoAutorizado || null;
       extra.sinPresupuesto = ot.sinPresupuesto || tot.presupuesto <= 0;
-      nextStep = 3;
+      nextStep = 3; // → Aprobación empresa
+    }
+
+    if (isAprobacionEmpresaStep(ot.currentStep)) {
+      nextStep = 4; // → Facturación
     }
 
     if (isFacturaStep(ot.currentStep)) {
@@ -1416,12 +1428,12 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       if (req.body?.incrementoJustificacion) {
         extra.incrementoJustificacion = String(req.body.incrementoJustificacion).trim();
       }
-      nextStep = hayIncrementoSobrePresupuesto(aprobado, facturado) ? 4 : 5;
+      nextStep = hayIncrementoSobrePresupuesto(aprobado, facturado) ? 5 : 6;
     }
 
-    if (ot.currentStep === 4) {
+    if (isIncrementoStep(ot.currentStep)) {
       extra.incrementoAprobadoAt = ot.incrementoAprobadoAt ?? new Date();
-      nextStep = 5;
+      nextStep = 6;
     }
 
     const updated = await prisma.ordenTrabajo.update({
@@ -1436,7 +1448,7 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
-/** Cierra pago y notifica a Silvina + Carla */
+/** Cierra OT y notifica a Silvina + Carla */
 router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
   try {
     const ot = await prisma.ordenTrabajo.findUnique({
@@ -1447,8 +1459,8 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       res.status(404).json({ error: "OT no encontrada" });
       return;
     }
-    if (ot.currentStep !== 5) {
-      res.status(400).json({ error: "La OT debe estar en etapa de pago" });
+    if (!isCierreStep(ot.currentStep)) {
+      res.status(400).json({ error: "La OT debe estar en etapa de cierre" });
       return;
     }
     if (ot.cerradaAt) {
@@ -1463,7 +1475,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       allowed: canCerrarOt(rol),
       userId: req.user!.id,
       otId: ot.id,
-      accion: "Cerrar pago",
+      accion: "Cerrar OT",
       overrideComentario,
     });
     if (!gate.ok) {
@@ -1540,7 +1552,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       });
     });
 
-    // Mail a Silvina y Carla al cerrar el pago (reunión 05/8)
+    // Mail a Silvina y Carla al cerrar la OT (reunión 05/8)
     const cierreUsuarios = await prisma.usuario.findMany({
       where: { rol: { in: CIERRE_AVISO_ROLES }, estado: "ACTIVO" },
     });
@@ -1608,7 +1620,7 @@ router.post("/:id/reabrir", authenticate, async (req: AuthedRequest, res) => {
       });
       await tx.ordenTrabajo.update({
         where: { id: ot.id },
-        data: { cerradaAt: null, currentStep: 5 },
+        data: { cerradaAt: null, currentStep: 6 },
       });
       await tx.otAuditoria.create({
         data: {
@@ -1701,7 +1713,7 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
     const overrideComentario = parseOverrideComentario(req.body);
     const indicated =
       canAdvanceFromStep(rol, ot.currentStep) ||
-      (ot.currentStep === 5 && canCerrarOt(rol));
+      (isCierreStep(ot.currentStep) && canCerrarOt(rol));
     if (!canRetreat(rol)) {
       res.status(403).json({ error: "Sin permiso para retroceder" });
       return;
@@ -1779,7 +1791,7 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
     if (
       (tipoRaw === "FACTURA" || tipoRaw === "RENDICION") &&
       !isFacturaStep(ot.currentStep) &&
-      ot.currentStep !== 5
+      !isCierreStep(ot.currentStep)
     ) {
       res.status(400).json({ error: "Las facturas se cargan en la etapa de facturación" });
       return;
@@ -1857,14 +1869,36 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       res.status(400).json({ error: "La OT cerrada no cambia el checklist" });
       return;
     }
-    if (await choferScope(req.user!.id)) {
+    const scope = await choferScope(req.user!.id);
+    const vOpts = await viewerOpts(req.user!.id, req);
+    if (scope && !vOpts.esDuenoEmpresa) {
       res.status(403).json({ error: "Sin permiso" });
       return;
     }
     const rol = req.user!.rol as Role;
+    const wantsSugerido = req.body?.sugeridoEmpresa !== undefined;
+    const wantsAprobado = req.body?.aprobado !== undefined;
+    const wantsCategoria = req.body?.categoriaDiagnosticoId !== undefined;
+    const wantsOtherEdit =
+      req.body?.descripcion !== undefined ||
+      req.body?.importe !== undefined ||
+      req.body?.observacion !== undefined ||
+      req.body?.clasificacion !== undefined;
+
+    // Sugerencia empresa: dueño (CHOFER) u ops — en presupuesto o aprobación.
+    const sugeridoAllowed =
+      wantsSugerido &&
+      (isPresupuestoStep(ot.currentStep) || isAprobacionEmpresaStep(ot.currentStep)) &&
+      (rol === "CHOFER" || isInternalOpsRole(rol));
+    // A facturar + importe/concepto: Silvina/ops en facturación.
+    const facturaAllowed =
+      (wantsAprobado || wantsCategoria || wantsOtherEdit) &&
+      (rol === "SILVINA" || isInternalOpsRole(rol));
+    const silvinaEdit = rol === "SILVINA" || isInternalOpsRole(rol);
+
     const gate = await gateOrOverride({
       rol,
-      allowed: rol === "SILVINA",
+      allowed: sugeridoAllowed || (silvinaEdit && (facturaAllowed || wantsOtherEdit || wantsSugerido)),
       userId: req.user!.id,
       otId: ot.id,
       accion: "Editar ítem OT",
@@ -1898,7 +1932,33 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       data.clasificacion = clasif.clasificacion;
       data.clasificacionOtro = clasif.clasificacionOtro;
     }
-    if (req.body?.aprobado !== undefined) {
+    if (wantsSugerido) {
+      if (!isPresupuestoStep(ot.currentStep) && !isAprobacionEmpresaStep(ot.currentStep)) {
+        res.status(400).json({
+          error: "La sugerencia de la empresa se marca en aprobación empresa",
+        });
+        return;
+      }
+      if (!(rol === "CHOFER" || isInternalOpsRole(rol))) {
+        res.status(403).json({ error: "Sin permiso para sugerir aprobación" });
+        return;
+      }
+      const item = await prisma.otItem.findFirst({
+        where: { id: req.params.itemId, otId: ot.id },
+      });
+      if (!item) {
+        res.status(404).json({ error: "Ítem no encontrado" });
+        return;
+      }
+      if (item.tipo !== "PRESUPUESTO") {
+        res.status(400).json({
+          error: "Solo se sugiere un ítem de presupuesto",
+        });
+        return;
+      }
+      data.sugeridoEmpresa = Boolean(req.body.sugeridoEmpresa);
+    }
+    if (wantsAprobado) {
       if (!isFacturaStep(ot.currentStep)) {
         res.status(400).json({
           error: "Qué presupuesto se factura se marca en la etapa de facturación",
@@ -1920,6 +1980,28 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       }
       data.aprobado = Boolean(req.body.aprobado);
     }
+    if (wantsCategoria) {
+      if (!isFacturaStep(ot.currentStep)) {
+        res.status(400).json({
+          error: "El concepto se asigna en la etapa de facturación",
+        });
+        return;
+      }
+      const raw = req.body.categoriaDiagnosticoId;
+      if (raw === null || raw === "") {
+        data.categoriaDiagnostico = { disconnect: true };
+      } else {
+        const catId = String(raw);
+        const cat = await prisma.categoriaDiagnostico.findFirst({
+          where: { id: catId, activo: true },
+        });
+        if (!cat) {
+          res.status(400).json({ error: "Categoría de diagnóstico inválida" });
+          return;
+        }
+        data.categoriaDiagnostico = { connect: { id: catId } };
+      }
+    }
     if (Object.keys(data).length === 0) {
       res.status(400).json({ error: "Nada para actualizar" });
       return;
@@ -1928,7 +2010,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       where: { id: req.params.itemId },
       data,
     });
-    res.json(await reloadOt(ot.id, req.user!.id, rol));
+    res.json(await reloadOt(ot.id, req.user!.id, rol, req));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al editar ítem" });

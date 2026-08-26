@@ -23,7 +23,10 @@ export function sumItems(
   );
 }
 
-type ItemTotales = Pick<OtItem, "tipo" | "importe"> & { aprobado?: boolean };
+type ItemTotales = Pick<OtItem, "tipo" | "importe"> & {
+  aprobado?: boolean;
+  sugeridoEmpresa?: boolean;
+};
 
 export function totalPresupuesto(opts: {
   items: ItemTotales[];
@@ -31,11 +34,23 @@ export function totalPresupuesto(opts: {
   valorAprobado?: number | null;
   montoAutorizado?: number | null;
 }): number {
-  // Siempre sumar TODOS los ítems PRESUPUESTO. `aprobado` es solo checklist
-  // de facturación (qué se factura), no el total presupuestado.
   const items = opts.items ?? [];
-  const fromItems = sumItems(items, TIPOS_PRESUPUESTO);
-  if (fromItems > 0) return fromItems;
+  // Preferir ítems marcados por la empresa (sugerido) o checklist de facturación.
+  // No sumar cotizaciones alternativas sueltas: si hay selección, solo esa.
+  const seleccionados = items.filter(
+    (i) =>
+      i.tipo === "PRESUPUESTO" &&
+      (i.sugeridoEmpresa === true || i.aprobado === true)
+  );
+  if (seleccionados.length > 0) {
+    return roundMoney(
+      seleccionados.reduce(
+        (acc, i) => acc + (Number.isFinite(i.importe) ? i.importe : 0),
+        0
+      )
+    );
+  }
+  // Sin selección aún: no inventar un total sumando todos los presupuestos.
   const fromPres = roundMoney(
     opts.presupuestos?.reduce((a, p) => a + (p.monto || 0), 0) ?? 0
   );

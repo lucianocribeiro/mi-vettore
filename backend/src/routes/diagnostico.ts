@@ -33,7 +33,7 @@ router.put(
         res.status(404).json({ error: "OT no encontrada" });
         return;
       }
-      if (ot.currentStep < 5 && !ot.cerradaAt) {
+      if (ot.currentStep < 6 && !ot.cerradaAt) {
         res.status(400).json({
           error: "El diagnóstico detallado se carga en el cierre, cuando ya está declarado el gasto",
         });
