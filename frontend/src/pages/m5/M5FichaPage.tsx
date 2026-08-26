@@ -389,6 +389,7 @@ export function M5FichaPage() {
     setFNombre(item.nombre ?? "");
     setFEmail(item.email);
     setFPassword("");
+    setFTelefono(item.telefono ?? "");
     setFRol(item.rol);
     setFEstadoUser(item.estado);
     setForm({ kind: "usuario", item });
@@ -581,6 +582,7 @@ export function M5FichaPage() {
           rol: fRol,
           nombre: fNombre || null,
           estado: fEstadoUser,
+          telefono: fTelefono.trim() || null,
         };
         if (fPassword) body.password = fPassword;
         if (form.item) {
@@ -592,6 +594,15 @@ export function M5FichaPage() {
           setUsuarios((prev) =>
             prev.map((u) => (u.id === updated.id ? updated : u))
           );
+          if (updated.choferId) {
+            setChoferes((prev) =>
+              prev.map((c) =>
+                c.id === updated.choferId
+                  ? { ...c, telefono: updated.telefono ?? null }
+                  : c
+              )
+            );
+          }
         } else {
           if (!fPassword) {
             setFormError("Password obligatorio para usuarios nuevos");
@@ -2048,6 +2059,21 @@ export function M5FichaPage() {
 
           {form.kind === "usuario" && (
             <>
+              <Field label="Teléfono / WhatsApp">
+                <input
+                  type="tel"
+                  className={inputClass}
+                  value={fTelefono}
+                  onChange={(e) => setFTelefono(e.target.value)}
+                  placeholder="Ej: 11 5555-5555"
+                  disabled={!!form.item && !form.item.choferId}
+                />
+                {form.item && !form.item.choferId && (
+                  <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                    Solo se edita si el usuario está vinculado a un chofer.
+                  </p>
+                )}
+              </Field>
               <Field label="Email">
                 <input
                   type="email"

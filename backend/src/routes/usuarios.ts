@@ -229,7 +229,20 @@ router.put("/:id", ...write, async (req, res) => {
       data,
       include: includeChoferList,
     });
-    res.json(publicUser(item));
+    if (req.body?.telefono !== undefined && item.choferId) {
+      const telefono = req.body.telefono
+        ? String(req.body.telefono).trim() || null
+        : null;
+      await prisma.chofer.update({
+        where: { id: item.choferId },
+        data: { telefono },
+      });
+    }
+    const refreshed = await prisma.usuario.findUnique({
+      where: { id: item.id },
+      include: includeChoferList,
+    });
+    res.json(publicUser(refreshed!));
   } catch (err: unknown) {
     if (
       typeof err === "object" &&
