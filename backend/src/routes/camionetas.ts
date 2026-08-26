@@ -892,6 +892,25 @@ router.post("/:id/asignacion", ...write, async (req, res) => {
       return;
     }
 
+    // Un chofer con asignación abierta en otra empresa no puede manejar
+    // unidades de esta (evita cruzar flotas).
+    const abiertaOtra = await prisma.asignacionFlota.findFirst({
+      where: {
+        choferId,
+        periodoHasta: null,
+        empresaId: { not: empresaId },
+      },
+      select: { id: true, empresa: { select: { nombre: true } } },
+    });
+    if (abiertaOtra) {
+      res.status(400).json({
+        error: `Ese chofer ya está asignado en otra empresa${
+          abiertaOtra.empresa?.nombre ? ` (${abiertaOtra.empresa.nombre})` : ""
+        }. Liberá esa asignación antes de pasarlo.`,
+      });
+      return;
+    }
+
     const now = new Date();
     // TODO (miércoles): historial de patentes al cambiar de empresa —
     // ¿transferir historial completo o baja + alta? No borrar datos hasta definición.

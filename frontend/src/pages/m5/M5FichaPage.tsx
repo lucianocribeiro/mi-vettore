@@ -757,6 +757,28 @@ export function M5FichaPage() {
     return map;
   }, [unidadesDeEmpresaAsig]);
 
+  /** Solo choferes de la empresa elegida (o libres para incorporar). No los de otra empresa. */
+  const choferesDeEmpresaAsig = useMemo(() => {
+    if (!asigEmpresaId) return [] as Chofer[];
+    return choferes
+      .filter((ch) => {
+        if (ch.estado !== "ACTIVO") return false;
+        const asgs = ch.asignaciones ?? [];
+        const abiertas = asgs.filter((a) => !a.periodoHasta);
+        const enOtraEmpresa = abiertas.some(
+          (a) => (a.empresaId || a.empresa?.id) !== asigEmpresaId
+        );
+        if (enOtraEmpresa) return false;
+        const deEstaEmpresa = asgs.some(
+          (a) => (a.empresaId || a.empresa?.id) === asigEmpresaId
+        );
+        if (deEstaEmpresa) return true;
+        // Libre (sin asignación abierta): puede incorporarse a esta empresa
+        return abiertas.length === 0;
+      })
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [choferes, asigEmpresaId]);
+
   useEffect(() => {
     if (!asigEmpresaId) {
       setAsigChoferByUnit({});
@@ -1086,9 +1108,8 @@ export function M5FichaPage() {
       {!loading && !error && tab === "asignacion" && (
         <div className="space-y-4">
           <p className="text-sm text-[var(--vl-text-muted)]">
-            Elegí la empresa y asigná choferes a sus unidades. Si la empresa
-            permite multi-unidad, el mismo chofer puede figurar en varias
-            patentes a la vez (dentro de esa empresa).
+            Elegí la empresa y asigná un chofer a cada unidad. Solo aparecen
+            choferes de esa empresa (o libres para incorporar); no los de otra.
           </p>
           <label className="block max-w-md text-xs text-[var(--vl-text-muted)]">
             Empresa de transporte
@@ -1164,19 +1185,33 @@ export function M5FichaPage() {
                             disabled={!canEdit}
                           >
                             <option value="">—</option>
-                            {choferes
-                              .filter((ch) => ch.estado === "ACTIVO")
-                              .map((ch) => {
+                            {choferesDeEmpresaAsig.map((ch) => {
                                 const n = unidadesPorChoferAsig.get(ch.id) ?? 0;
                                 return (
                                   <option key={ch.id} value={ch.id}>
                                     {ch.nombre}
                                     {n > 0
-                                      ? ` (${n} unidad${n === 1 ? "" : "es"})`
+                                      ? ` (${n})`
                                       : ""}
                                   </option>
                                 );
                               })}
+                            {/* Conservar valor actual si quedó fuera del filtro */}
+                            {(() => {
+                              const curId = asigChoferByUnit[c.id];
+                              if (
+                                !curId ||
+                                choferesDeEmpresaAsig.some((ch) => ch.id === curId)
+                              ) {
+                                return null;
+                              }
+                              const cur = choferes.find((ch) => ch.id === curId);
+                              return cur ? (
+                                <option key={cur.id} value={cur.id}>
+                                  {cur.nombre} (otra empresa)
+                                </option>
+                              ) : null;
+                            })()}
                           </select>
                         </td>
                         <td className="px-3 py-2 text-right">
