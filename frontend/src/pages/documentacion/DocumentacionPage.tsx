@@ -445,7 +445,6 @@ export function DocumentacionPage() {
               </p>
             ) : (
               filteredCams.map((c) => {
-                const asg = currentAsignacion(c);
                 const active = selectedCam === c.id;
                 return (
                   <div
