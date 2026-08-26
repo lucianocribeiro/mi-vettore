@@ -187,8 +187,10 @@ model Camioneta {
   modelo                 String?
   /// Año: piso desde 2000 inclusive (<= año actual). Planilla cliente decía >2005 — pendiente miércoles.
   anio                   Int?
-  /// Categoría de frío alineada a TipoServicio (Congelado, Supercongelado, Refrigerado, Seco).
+  /// Marca del equipo de frío (Carrier, Thermo King, etc.).
   equipoFrio             String?
+  /// Empresa de transporte propietaria de la unidad (ownership; distinta de AsignacionFlota).
+  empresaId              String?
   /// Número de capacidad (separado de unidad).
   capacidadValor         Int?
   /// Unidad libre: kilos, litros, canastos, baldes, etc.
@@ -216,9 +218,12 @@ model Camioneta {
   pedidos                Pedido[]
   solicitudes            SolicitudTaller[]
   tipoServicio           TipoServicio?    @relation(fields: [tipoServicioId], references: [id])
+  empresa                EmpresaTransporte? @relation("EmpresaUnidades", fields: [empresaId], references: [id])
   documentos             DocumentoEntidad[]
   kmRegistros            KmRegistro[]
   registrosMantenimiento RegistroMantenimiento[]
+
+  @@index([empresaId])
 }
 
 model EmpresaTransporte {
@@ -232,6 +237,7 @@ model EmpresaTransporte {
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   asignaciones           AsignacionFlota[]
+  unidades               Camioneta[]      @relation("EmpresaUnidades")
 }
 
 /// Vínculo ternario: chofer y patente al mismo nivel bajo la empresa (sin chofer↔patente fijo).

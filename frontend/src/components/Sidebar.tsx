@@ -28,7 +28,7 @@ const NAV: NavItem[] = [
   {
     to: "/documentacion",
     label: "Documentación",
-    sub: "Unidades y chóferes",
+    sub: "Unidades y choferes",
     icon: Folder,
     roles: [
       "CHOFER",

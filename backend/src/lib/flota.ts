@@ -3,6 +3,7 @@ import type { ContextoAcceso } from "./contexto-acceso.js";
 
 const includeAsignaciones = {
   tipoServicio: true,
+  empresa: true,
   asignaciones: {
     orderBy: { periodoDesde: "desc" as const },
     include: {

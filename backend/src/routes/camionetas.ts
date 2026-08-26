@@ -24,6 +24,7 @@ const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
 
 const includeAsignaciones = {
   tipoServicio: true,
+  empresa: true,
   asignaciones: {
     orderBy: { periodoDesde: "desc" as const },
     include: {
@@ -88,6 +89,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       orderBy: { patente: "asc" },
       include: {
         tipoServicio: true,
+        empresa: true,
         asignaciones: {
           where: { periodoHasta: null },
           include: { chofer: true, empresa: true },
@@ -136,7 +138,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
         estado: c.estado,
         km: c.km,
         chofer: a?.chofer?.nombre ?? "",
-        empresa: a?.empresa?.nombre ?? "",
+        empresa: c.empresa?.nombre ?? a?.empresa?.nombre ?? "",
         ot: sol?.ordenTrabajo?.numeroOT ?? "",
         paso: sol?.ordenTrabajo?.currentStep ?? "",
       });
@@ -324,6 +326,7 @@ router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
       where: { id: req.params.id },
       include: {
         tipoServicio: true,
+        empresa: true,
         asignaciones: {
           orderBy: { periodoDesde: "desc" },
           include: { chofer: true, empresa: true },
@@ -503,6 +506,16 @@ router.post("/", ...write, async (req, res) => {
     }
     const capacidadUnidad = strOrNull(req.body?.capacidadUnidad);
     const kmInicial = Number.isFinite(km) ? Math.max(0, Math.floor(km)) : 0;
+    const empresaId = req.body?.empresaId ? String(req.body.empresaId) : null;
+    if (empresaId) {
+      const emp = await prisma.empresaTransporte.findUnique({
+        where: { id: empresaId },
+      });
+      if (!emp) {
+        res.status(400).json({ error: "Empresa de transporte no encontrada" });
+        return;
+      }
+    }
     const item = await prisma.camioneta.create({
       data: {
         patente,
@@ -526,12 +539,12 @@ router.post("/", ...write, async (req, res) => {
         seguroVencimiento: parseDate(req.body?.seguroVencimiento),
         vtbVencimiento: parseDate(req.body?.vtbVencimiento),
         estado: estadoRaw as EstadoCamioneta,
+        empresaId,
       },
       include: includeAsignaciones,
     });
 
     const choferId = req.body?.choferId ? String(req.body.choferId) : null;
-    const empresaId = req.body?.empresaId ? String(req.body.empresaId) : null;
     if (choferId && empresaId) {
       await prisma.asignacionFlota.create({
         data: {
@@ -691,6 +704,19 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
         return;
       }
       data.estado = s as EstadoCamioneta;
+    }
+    if (req.body?.empresaId !== undefined) {
+      const nextEmpresaId = strOrNull(req.body.empresaId);
+      if (nextEmpresaId) {
+        const emp = await prisma.empresaTransporte.findUnique({
+          where: { id: nextEmpresaId },
+        });
+        if (!emp) {
+          res.status(400).json({ error: "Empresa de transporte no encontrada" });
+          return;
+        }
+      }
+      data.empresaId = nextEmpresaId;
     }
     const item = await prisma.camioneta.update({
       where: { id: req.params.id },

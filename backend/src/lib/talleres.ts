@@ -65,7 +65,7 @@ export const OT_STEPS = [
   },
   {
     key: 5,
-    label: "Cierre / pago",
+    label: "Cierre",
     ownerRoles: [Role.SILVINA, Role.CARLA],
   },
 ] as const;

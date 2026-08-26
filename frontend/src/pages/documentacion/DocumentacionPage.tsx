@@ -253,7 +253,7 @@ export function DocumentacionPage() {
               : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
           }`}
         >
-          {ops || user?.esDuenoFlota ? "Chóferes" : "Mi documentación"}
+          {ops || user?.esDuenoFlota ? "Choferes" : "Mi documentación"}
         </button>
       </div>
 

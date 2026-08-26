@@ -31,10 +31,26 @@ function money(n: number) {
   return `$${n.toLocaleString("es-AR")}`;
 }
 
-export function TalleresProveedoresPanel() {
+function whatsappDigits(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let digits = String(raw).replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("0")) digits = `54${digits.slice(1)}`;
+  if (digits.length < 8) return null;
+  return digits;
+}
+
+export function TalleresProveedoresPanel({
+  vista,
+}: {
+  /** Si se pasa, fija la vista y oculta el submenú interno (tabs al nivel de Órdenes). */
+  vista?: "abm" | "cc";
+} = {}) {
   const { token, user } = useAuth();
   const canEdit = canWriteMaster(user?.rol);
-  const [tab, setTab] = useState<"abm" | "cc">("abm");
+  const [tabInternal, setTabInternal] = useState<"abm" | "cc">("abm");
+  const tab = vista ?? tabInternal;
+  const setTab = setTabInternal;
   const [ccVista, setCcVista] = useState<"pendiente" | "pagado">("pendiente");
   const [items, setItems] = useState<TallerProveedor[]>([]);
   const [saldos, setSaldos] = useState<Saldo[]>([]);
@@ -50,6 +66,19 @@ export function TalleresProveedoresPanel() {
   const [whatsapp, setWhatsapp] = useState(false);
   const [alias, setAlias] = useState("");
   const [selTipos, setSelTipos] = useState<TipoTaller[]>([]);
+  const [contactoTaller, setContactoTaller] = useState<TallerProveedor | null>(null);
+  const [pagoModal, setPagoModal] = useState<{
+    tallerId: string;
+    movId: string;
+  } | null>(null);
+  const [pagoFecha, setPagoFecha] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [pagoMetodo, setPagoMetodo] = useState<
+    "TRANSFERENCIA" | "CHEQUE" | "EFECTIVO"
+  >("TRANSFERENCIA");
+  const [pagoSaving, setPagoSaving] = useState(false);
+  const [pagoError, setPagoError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -70,6 +99,10 @@ export function TalleresProveedoresPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (vista) setTabInternal(vista);
+  }, [vista]);
 
   function openForm(t?: TallerProveedor) {
     setEditing(t ?? null);
@@ -116,19 +149,41 @@ export function TalleresProveedoresPanel() {
     }
   }
 
-  async function marcarPago(tallerId: string, movId: string) {
-    if (!token) return;
-    const fechaPago = window.prompt("Fecha de pago (AAAA-MM-DD)", new Date().toISOString().slice(0, 10));
-    if (!fechaPago) return;
-    const metodoRaw = window.prompt("Método: transferencia, cheque o efectivo", "transferencia");
-    if (!metodoRaw) return;
-    const metodoPago = metodoRaw.trim().toUpperCase();
-    await apiFetch(
-      `/api/talleres-proveedores/${tallerId}/movimientos/${movId}/pagar`,
-      { method: "POST", body: JSON.stringify({ fechaPago, metodoPago }) },
-      token
-    );
-    await load();
+  function openPago(tallerId: string, movId: string) {
+    setPagoModal({ tallerId, movId });
+    setPagoFecha(new Date().toISOString().slice(0, 10));
+    setPagoMetodo("TRANSFERENCIA");
+    setPagoError(null);
+  }
+
+  async function confirmarPago() {
+    if (!token || !pagoModal) return;
+    if (!pagoFecha) {
+      setPagoError("La fecha es obligatoria");
+      return;
+    }
+    if (!pagoMetodo) {
+      setPagoError("El método es obligatorio");
+      return;
+    }
+    setPagoSaving(true);
+    setPagoError(null);
+    try {
+      await apiFetch(
+        `/api/talleres-proveedores/${pagoModal.tallerId}/movimientos/${pagoModal.movId}/pagar`,
+        {
+          method: "POST",
+          body: JSON.stringify({ fechaPago: pagoFecha, metodoPago: pagoMetodo }),
+        },
+        token
+      );
+      setPagoModal(null);
+      await load();
+    } catch (err) {
+      setPagoError(err instanceof ApiError ? err.message : "No se pudo registrar el pago");
+    } finally {
+      setPagoSaving(false);
+    }
   }
 
   async function revertirPago(tallerId: string, movId: string) {
@@ -146,6 +201,7 @@ export function TalleresProveedoresPanel() {
 
   return (
     <div>
+      {!vista && (
       <div className="mb-4 flex gap-2">
         <button
           type="button"
@@ -170,6 +226,7 @@ export function TalleresProveedoresPanel() {
           Cuenta corriente
         </button>
       </div>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -197,7 +254,11 @@ export function TalleresProveedoresPanel() {
               </thead>
               <tbody>
                 {items.map((t) => (
-                  <tr key={t.id} className="border-t border-[var(--vl-card-border)]">
+                  <tr
+                    key={t.id}
+                    className="cursor-pointer border-t border-[var(--vl-card-border)] hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    onClick={() => setContactoTaller(t)}
+                  >
                     <td className="px-3 py-2">{t.cuit}</td>
                     <td className="px-3 py-2">{t.razonSocial}</td>
                     <td className="px-3 py-2 text-xs">
@@ -205,8 +266,25 @@ export function TalleresProveedoresPanel() {
                     </td>
                     <td className="px-3 py-2 text-xs">{t.aliasCbu ?? "—"}</td>
                     <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        className="mr-2 text-xs underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setContactoTaller(t);
+                        }}
+                      >
+                        Contacto
+                      </button>
                       {canEdit && (
-                        <button type="button" className="text-xs underline" onClick={() => openForm(t)}>
+                        <button
+                          type="button"
+                          className="text-xs underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openForm(t);
+                          }}
+                        >
                           Editar
                         </button>
                       )}
@@ -323,7 +401,7 @@ export function TalleresProveedoresPanel() {
                       <button
                         type="button"
                         className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500"
-                        onClick={() => void marcarPago(s.id, m.id)}
+                        onClick={() => openPago(s.id, m.id)}
                       >
                         Marcar pagado
                       </button>
@@ -393,6 +471,112 @@ export function TalleresProveedoresPanel() {
                 Guardar
               </button>
               <button type="button" onClick={() => { setCreating(false); setEditing(null); }} className="rounded-md border px-3 py-2 text-sm">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {contactoTaller && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
+          onClick={() => setContactoTaller(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-2xl bg-[var(--vl-card)] p-4 sm:rounded-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-1 font-bold text-[var(--vl-heading)]">Contacto</h3>
+            <p className="mb-3 text-sm text-[var(--vl-text-muted)]">
+              {contactoTaller.razonSocial}
+            </p>
+            <dl className="space-y-2 text-sm">
+              <div>
+                <dt className="text-xs text-[var(--vl-text-muted)]">Mail</dt>
+                <dd>{contactoTaller.mail || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-[var(--vl-text-muted)]">Celular</dt>
+                <dd>{contactoTaller.celular || "—"}</dd>
+              </div>
+            </dl>
+            {(contactoTaller.whatsapp || contactoTaller.celular) &&
+              whatsappDigits(contactoTaller.celular) && (
+                <a
+                  href={`https://wa.me/${whatsappDigits(contactoTaller.celular)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white"
+                >
+                  WhatsApp
+                </a>
+              )}
+            <button
+              type="button"
+              className="mt-4 w-full rounded-md border border-[var(--vl-card-border)] py-2 text-sm"
+              onClick={() => setContactoTaller(null)}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pagoModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
+          onClick={() => !pagoSaving && setPagoModal(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-2xl bg-[var(--vl-card)] p-4 sm:rounded-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-3 font-bold text-[var(--vl-heading)]">Registrar pago</h3>
+            <label className="block text-xs">
+              Fecha
+              <input
+                type="date"
+                required
+                className={input}
+                value={pagoFecha}
+                onChange={(e) => setPagoFecha(e.target.value)}
+              />
+            </label>
+            <label className="mt-2 block text-xs">
+              Método
+              <select
+                className={input}
+                value={pagoMetodo}
+                onChange={(e) =>
+                  setPagoMetodo(
+                    e.target.value as "TRANSFERENCIA" | "CHEQUE" | "EFECTIVO"
+                  )
+                }
+              >
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="EFECTIVO">Efectivo</option>
+              </select>
+            </label>
+            {pagoError && (
+              <p className="mt-2 text-sm text-red-600">{pagoError}</p>
+            )}
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                disabled={pagoSaving}
+                onClick={() => void confirmarPago()}
+                className="flex-1 rounded-md bg-emerald-600 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {pagoSaving ? "Guardando…" : "Confirmar"}
+              </button>
+              <button
+                type="button"
+                disabled={pagoSaving}
+                onClick={() => setPagoModal(null)}
+                className="rounded-md border px-3 py-2 text-sm"
+              >
                 Cancelar
               </button>
             </div>

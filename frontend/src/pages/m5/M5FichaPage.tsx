@@ -46,7 +46,8 @@ type Tab =
   | "empresas"
   | "usuarios"
   | "tiposServicio"
-  | "talleres";
+  | "talleres"
+  | "asignacion";
 
 type DrawerOpen =
   | { tipo: "camioneta"; item: Camioneta }
@@ -70,6 +71,7 @@ const CREATE_KIND_BY_TAB: Record<Tab, CreateKind | null> = {
   usuarios: "usuario",
   tiposServicio: "tipoServicio",
   talleres: "taller",
+  asignacion: null,
 };
 
 const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
@@ -80,17 +82,31 @@ const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
   usuarios: "usuario",
   tiposServicio: "tipo de servicio",
   talleres: "taller",
+  asignacion: "",
 };
 
-const EQUIPO_FRIO_FALLBACK = [
-  "Congelado",
-  "Supercongelado",
-  "Refrigerado",
-  "Seco",
+const EQUIPO_FRIO_MARCAS = [
+  "Carrier",
+  "Thermo King",
+  "Zanotti",
+  "Mitsubishi",
+  "Guchen",
+  "Kingtec",
+  "Otro",
 ] as const;
 
 const ANIO_MIN = 2000; // piso desde 2000 inclusive; planilla decía >2005
 const ANIO_MAX = new Date().getFullYear();
+
+/** Digits for wa.me; null if not usable as phone. */
+function whatsappDigits(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let digits = String(raw).replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("0")) digits = `54${digits.slice(1)}`;
+  if (digits.length < 8) return null;
+  return digits;
+}
 
 export function M5FichaPage() {
   const { token, user } = useAuth();
@@ -166,11 +182,10 @@ export function M5FichaPage() {
   const [fEstadoCam, setFEstadoCam] = useState<
     "OPERATIVA" | "EN_TALLER" | "DE_VACACIONES" | "FUERA_SERVICIO"
   >("OPERATIVA");
-  const [fChoferId, setFChoferId] = useState("");
   const [fEmpresaId, setFEmpresaId] = useState("");
   const [fEmail, setFEmail] = useState("");
   const [fPassword, setFPassword] = useState("");
-  const [fRol, setFRol] = useState<Role>("CLIENTE");
+  const [fRol, setFRol] = useState<Role>("CHOFER");
   const [fEstadoUser, setFEstadoUser] = useState<"ACTIVO" | "INACTIVO">(
     "ACTIVO"
   );
@@ -184,20 +199,12 @@ export function M5FichaPage() {
   const [fTallerWhatsapp, setFTallerWhatsapp] = useState(false);
   const [fTallerAlias, setFTallerAlias] = useState("");
   const [fTallerTipos, setFTallerTipos] = useState<TipoTaller[]>([]);
-
-  const equipoFrioOptions = useMemo(() => {
-    const names = tiposServicio
-      .filter((t) => t.activo)
-      .map((t) => t.nombre)
-      .filter(Boolean);
-    const merged = [...names];
-    for (const f of EQUIPO_FRIO_FALLBACK) {
-      if (!merged.some((n) => n.toLowerCase() === f.toLowerCase())) {
-        merged.push(f);
-      }
-    }
-    return merged;
-  }, [tiposServicio]);
+  const [asigEmpresaId, setAsigEmpresaId] = useState("");
+  const [asigChoferByUnit, setAsigChoferByUnit] = useState<
+    Record<string, string>
+  >({});
+  const [asigSavingId, setAsigSavingId] = useState<string | null>(null);
+  const [asigError, setAsigError] = useState<string | null>(null);
 
   const modelosParaMarca = useMemo(() => {
     if (!fMarca || !(fMarca in MARCA_MODELO_CAMIONETA)) return [] as string[];
@@ -284,11 +291,10 @@ export function M5FichaPage() {
     setFSeguroVenc("");
     setFVtbVenc("");
     setFEstadoCam("OPERATIVA");
-    setFChoferId("");
     setFEmpresaId("");
     setFEmail("");
     setFPassword("");
-    setFRol("CLIENTE");
+    setFRol("CHOFER");
     setFEstadoUser("ACTIVO");
     setFTsNombre("");
     setFTsOrden("0");
@@ -373,9 +379,7 @@ export function M5FichaPage() {
     );
     setFVtbVenc(item.vtbVencimiento ? item.vtbVencimiento.slice(0, 10) : "");
     setFEstadoCam(item.estado);
-    const a = currentAsignacion(item);
-    setFChoferId(a?.choferId ?? "");
-    setFEmpresaId(a?.empresaId ?? "");
+    setFEmpresaId(item.empresaId ?? currentAsignacion(item)?.empresaId ?? "");
     setForm({ kind: "camioneta", item });
   }
 
@@ -505,55 +509,17 @@ export function M5FichaPage() {
           seguroVencimiento: fSeguroVenc || null,
           vtbVencimiento: fVtbVenc || null,
           estado: fEstadoCam,
-          choferId: fChoferId || undefined,
-          empresaId: fEmpresaId || undefined,
+          empresaId: fEmpresaId || null,
         };
         if (form.item) {
-          let updated = await apiFetch<Camioneta>(
+          const updated = await apiFetch<Camioneta>(
             `/api/camionetas/${form.item.id}`,
             {
               method: "PUT",
-              body: JSON.stringify({
-                patente: body.patente,
-                marca: body.marca,
-                modelo: body.modelo,
-                anio: body.anio,
-                equipoFrio: body.equipoFrio,
-                capacidadValor: body.capacidadValor,
-                capacidadUnidad: body.capacidadUnidad,
-                tipoServicioId: body.tipoServicioId,
-                datosTecnicos: body.datosTecnicos,
-                km: body.km,
-                fechaUltimoAceite: body.fechaUltimoAceite,
-                fechaCambioCorrea: body.fechaCambioCorrea,
-                fechaCambioNeumaticos: body.fechaCambioNeumaticos,
-                fechaCambioBateria: body.fechaCambioBateria,
-                seguroCompania: body.seguroCompania,
-                seguroVencimiento: body.seguroVencimiento,
-                vtbVencimiento: body.vtbVencimiento,
-                estado: body.estado,
-              }),
+              body: JSON.stringify(body),
             },
             token
           );
-          const cur = currentAsignacion(updated);
-          if (
-            fChoferId &&
-            fEmpresaId &&
-            (cur?.choferId !== fChoferId || cur?.empresaId !== fEmpresaId)
-          ) {
-            updated = await apiFetch<Camioneta>(
-              `/api/camionetas/${form.item.id}/asignacion`,
-              {
-                method: "POST",
-                body: JSON.stringify({
-                  choferId: fChoferId,
-                  empresaId: fEmpresaId,
-                }),
-              },
-              token
-            );
-          }
           setCamionetas((prev) =>
             prev.map((c) => (c.id === updated.id ? updated : c))
           );
@@ -754,7 +720,7 @@ export function M5FichaPage() {
     if (!token) return;
     setExportando(true);
     try {
-      const map: Record<Tab, { url: string; file: string }> = {
+      const map: Record<Tab, { url: string; file: string } | null> = {
         camioneta: { url: "/api/camionetas/export", file: "unidades.xlsx" },
         chofer: { url: "/api/choferes/export", file: "choferes.xlsx" },
         clientes: { url: "/api/clientes/export", file: "clientes.xlsx" },
@@ -768,12 +734,14 @@ export function M5FichaPage() {
           url: "/api/talleres-proveedores",
           file: "talleres.json",
         },
+        asignacion: null,
       };
       if (tab === "talleres") {
         alert("Export Excel de talleres proveedores: próximamente");
         return;
       }
       const target = map[tab];
+      if (!target) return;
       await apiDownload(target.url, token, target.file);
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo exportar");
@@ -785,6 +753,7 @@ export function M5FichaPage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "camioneta", label: "Vista por camioneta" },
     { id: "chofer", label: "Vista por chofer" },
+    { id: "asignacion", label: "Asignación flota" },
     { id: "clientes", label: "Clientes" },
     { id: "empresas", label: "Empresas" },
     { id: "usuarios", label: "Usuarios" },
@@ -795,6 +764,60 @@ export function M5FichaPage() {
     () => filterCamionetas(camionetas, unitFilters),
     [camionetas, unitFilters]
   );
+
+  const unidadesDeEmpresaAsig = useMemo(() => {
+    if (!asigEmpresaId) return [] as Camioneta[];
+    return camionetas
+      .filter((c) => {
+        if (c.empresaId === asigEmpresaId) return true;
+        const a = currentAsignacion(c);
+        return a?.empresaId === asigEmpresaId;
+      })
+      .sort((a, b) => a.patente.localeCompare(b.patente));
+  }, [camionetas, asigEmpresaId]);
+
+  useEffect(() => {
+    if (!asigEmpresaId) {
+      setAsigChoferByUnit({});
+      return;
+    }
+    const next: Record<string, string> = {};
+    for (const c of unidadesDeEmpresaAsig) {
+      const a = currentAsignacion(c);
+      next[c.id] = a?.choferId ?? "";
+    }
+    setAsigChoferByUnit(next);
+  }, [asigEmpresaId, unidadesDeEmpresaAsig]);
+
+  async function guardarAsignacionUnidad(camionetaId: string) {
+    if (!token || !asigEmpresaId) return;
+    const choferId = asigChoferByUnit[camionetaId];
+    if (!choferId) {
+      setAsigError("Elegí un chofer para guardar la asignación");
+      return;
+    }
+    setAsigSavingId(camionetaId);
+    setAsigError(null);
+    try {
+      const updated = await apiFetch<Camioneta>(
+        `/api/camionetas/${camionetaId}/asignacion`,
+        {
+          method: "POST",
+          body: JSON.stringify({ choferId, empresaId: asigEmpresaId }),
+        },
+        token
+      );
+      setCamionetas((prev) =>
+        prev.map((c) => (c.id === updated.id ? updated : c))
+      );
+    } catch (err) {
+      setAsigError(
+        err instanceof ApiError ? err.message : "No se pudo guardar la asignación"
+      );
+    } finally {
+      setAsigSavingId(null);
+    }
+  }
 
   const choferesFiltrados = useMemo(() => {
     const q = choferQuery.trim().toLowerCase();
@@ -919,8 +942,10 @@ export function M5FichaPage() {
                     className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4 text-left transition hover:border-slate-400 hover:shadow-sm dark:hover:border-slate-500"
                   >
                     <div className="text-xs text-[var(--vl-text-muted)]">
-                      {a?.empresa?.nombre ?? "Sin empresa"} ·{" "}
-                      {a?.chofer?.nombre ?? "Sin chofer"} ·{" "}
+                      {c.empresa?.nombre ??
+                        a?.empresa?.nombre ??
+                        "Sin empresa"}{" "}
+                      · {a?.chofer?.nombre ?? "Sin chofer"} ·{" "}
                       {c.km.toLocaleString("es-AR")} km
                     </div>
                     <div className="mt-2 font-semibold text-[var(--vl-heading)]">
@@ -1022,6 +1047,17 @@ export function M5FichaPage() {
                   <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>
                     {c.estado.toLowerCase()}
                   </Badge>
+                  {whatsappDigits(c.telefono) && (
+                    <a
+                      href={`https://wa.me/${whatsappDigits(c.telefono)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400"
+                    >
+                      WhatsApp
+                    </a>
+                  )}
                   {canEdit && (
                     <span
                       role="button"
@@ -1067,6 +1103,110 @@ export function M5FichaPage() {
         </>
       )}
 
+      {!loading && !error && tab === "asignacion" && (
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--vl-text-muted)]">
+            Elegí la empresa, asigná un chofer a cada unidad y guardá. La
+            propiedad de la unidad se define en el ABM de camioneta.
+          </p>
+          <label className="block max-w-md text-xs text-[var(--vl-text-muted)]">
+            Empresa de transporte
+            <select
+              className={`${inputClass} mt-1`}
+              value={asigEmpresaId}
+              onChange={(e) => setAsigEmpresaId(e.target.value)}
+            >
+              <option value="">Elegí una empresa…</option>
+              {empresas.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          {asigError && (
+            <p className="text-sm text-red-600">{asigError}</p>
+          )}
+          {!asigEmpresaId ? (
+            <p className="text-sm text-[var(--vl-text-muted)]">
+              Seleccioná una empresa para ver sus unidades.
+            </p>
+          ) : unidadesDeEmpresaAsig.length === 0 ? (
+            <p className="text-sm text-[var(--vl-text-muted)]">
+              Esta empresa no tiene unidades (por ownership ni asignación
+              abierta).
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-[var(--vl-card-border)]">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-[var(--vl-page)] text-xs text-[var(--vl-text-muted)]">
+                  <tr>
+                    <th className="px-3 py-2">Patente</th>
+                    <th className="px-3 py-2">Chofer actual</th>
+                    <th className="px-3 py-2">Asignar chofer</th>
+                    <th className="px-3 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {unidadesDeEmpresaAsig.map((c) => {
+                    const a = currentAsignacion(c);
+                    return (
+                      <tr
+                        key={c.id}
+                        className="border-t border-[var(--vl-card-border)]"
+                      >
+                        <td className="px-3 py-2 font-medium">{c.patente}</td>
+                        <td className="px-3 py-2 text-[var(--vl-text-muted)]">
+                          {a?.chofer?.nombre ?? "Sin chofer"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <select
+                            className={inputClass}
+                            value={asigChoferByUnit[c.id] ?? ""}
+                            onChange={(e) =>
+                              setAsigChoferByUnit((prev) => ({
+                                ...prev,
+                                [c.id]: e.target.value,
+                              }))
+                            }
+                            disabled={!canEdit}
+                          >
+                            <option value="">—</option>
+                            {choferes
+                              .filter((ch) => ch.estado === "ACTIVO")
+                              .map((ch) => (
+                                <option key={ch.id} value={ch.id}>
+                                  {ch.nombre}
+                                </option>
+                              ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {canEdit && (
+                            <button
+                              type="button"
+                              disabled={
+                                !asigChoferByUnit[c.id] ||
+                                asigSavingId === c.id ||
+                                a?.choferId === asigChoferByUnit[c.id]
+                              }
+                              onClick={() => void guardarAsignacionUnidad(c.id)}
+                              className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+                            >
+                              {asigSavingId === c.id ? "Guardando…" : "Guardar"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {!loading && !error && tab === "clientes" && (
         <EntityTable
           headers={["Nombre", "Segmento", "Contacto", ""]}
@@ -1089,20 +1229,33 @@ export function M5FichaPage() {
       {!loading && !error && tab === "empresas" && (
         <EntityTable
           headers={["Nombre", "CUIT", "Contacto", "Tipo", ""]}
-          rows={empresas.map((e) => [
-            e.nombre,
-            e.cuit || "—",
-            e.contacto || "—",
-            e.tipo.toLowerCase(),
-            canEdit ? (
-              <Actions
-                onEdit={() => openEditEmpresa(e)}
-                onDelete={() => void deleteEntity("empresa", e.id)}
-              />
-            ) : (
-              ""
-            ),
-          ])}
+          rows={empresas.map((e) => {
+            const wa = whatsappDigits(e.contacto);
+            return [
+              e.nombre,
+              e.cuit || "—",
+              e.contacto || "—",
+              e.tipo.toLowerCase(),
+              <div key={e.id} className="flex flex-wrap items-center justify-end gap-2 text-xs">
+                {wa && (
+                  <a
+                    href={`https://wa.me/${wa}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400"
+                  >
+                    WhatsApp
+                  </a>
+                )}
+                {canEdit ? (
+                  <Actions
+                    onEdit={() => openEditEmpresa(e)}
+                    onDelete={() => void deleteEntity("empresa", e.id)}
+                  />
+                ) : null}
+              </div>,
+            ];
+          })}
         />
       )}
 
@@ -1392,7 +1545,7 @@ export function M5FichaPage() {
                   checked={fPermiteMultiCamioneta}
                   onChange={(e) => setFPermiteMultiCamioneta(e.target.checked)}
                 />
-                Permite asignar varias camionetas al mismo chofer
+                Permitir varias camionetas por chofer en esta empresa
               </label>
             </>
           )}
@@ -1470,11 +1623,17 @@ export function M5FichaPage() {
                   onChange={(e) => setFEquipoFrio(e.target.value)}
                 >
                   <option value="">—</option>
-                  {equipoFrioOptions.map((n) => (
+                  {EQUIPO_FRIO_MARCAS.map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
                   ))}
+                  {fEquipoFrio &&
+                    !(EQUIPO_FRIO_MARCAS as readonly string[]).includes(
+                      fEquipoFrio
+                    ) && (
+                      <option value={fEquipoFrio}>{fEquipoFrio}</option>
+                    )}
                 </select>
               </Field>
               <Field label="Capacidad (número)">
@@ -1602,7 +1761,7 @@ export function M5FichaPage() {
                   <option value="FUERA_SERVICIO">Fuera de servicio</option>
                 </select>
               </Field>
-              <Field label="Empresa (asignación)">
+              <Field label="Empresa de transporte (propietaria)">
                 <select
                   className={inputClass}
                   value={fEmpresaId}
@@ -1612,21 +1771,6 @@ export function M5FichaPage() {
                   {empresas.map((e) => (
                     <option key={e.id} value={e.id}>
                       {e.nombre}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Chofer (asignación)">
-                <select
-                  className={inputClass}
-                  value={fChoferId}
-                  onChange={(e) => setFChoferId(e.target.value)}
-                >
-                  <option value="">—</option>
-                  {choferes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre}
-                      {c.esDuenoFlota ? " (empresa transp.)" : ""}
                     </option>
                   ))}
                 </select>
@@ -1789,11 +1933,13 @@ export function M5FichaPage() {
                   value={fRol}
                   onChange={(e) => setFRol(e.target.value as Role)}
                 >
-                  {ALL_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {ROLE_LABELS[r]}
-                    </option>
-                  ))}
+                  {ALL_ROLES.filter((r) => r !== "CLIENTE" || form.item?.rol === "CLIENTE").map(
+                    (r) => (
+                      <option key={r} value={r}>
+                        {ROLE_LABELS[r]}
+                      </option>
+                    )
+                  )}
                 </select>
               </Field>
               <Field label="Estado">

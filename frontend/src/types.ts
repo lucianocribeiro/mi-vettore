@@ -209,7 +209,7 @@ export type Empresa = {
   cuit: string | null;
   contacto: string | null;
   tipo: TipoEmpresa;
-  /** Si true, la empresa puede tener más de una camioneta asignada a la vez. */
+  /** Si true, un mismo chofer puede tener varias camionetas activas de esta empresa. */
   permiteMultiCamioneta?: boolean;
 };
 
@@ -261,6 +261,9 @@ export type Camioneta = {
   tipoTransporte: TipoTransporte | null;
   tipoServicioId: string | null;
   tipoServicio?: TipoServicio | null;
+  /** Empresa propietaria (ownership). */
+  empresaId?: string | null;
+  empresa?: Empresa | null;
   datosTecnicos: string | null;
   km: number;
   kmActualizadoAt?: string | null;

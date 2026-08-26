@@ -42,10 +42,10 @@ const FALLAS_COMUNES = [
 const OT_STEPS = [
   { label: "Solicitud", owner: null as string | null, detail: "El chofer reporta patente, problema y si puede circular." },
   { label: "Asignación", owner: "Facu", detail: "Facu evalúa la falla, asigna taller y decide si inhabilitar." },
-  { label: "Presupuesto", owner: "Silvina", detail: "Cargá ítems de presupuesto (optativo). Después se factura en el paso siguiente." },
-  { label: "Facturación", owner: "Silvina", detail: "Marcá en el checklist qué ítems del presupuesto se facturan. El PDF es optativo." },
-  { label: "Incremento", owner: "Ops", detail: "Solo si el gasto supera el presupuesto. Cualquier usuario interno puede confirmar y seguir." },
-  { label: "Cierre / pago", owner: "Silvina / Carla", detail: "Cierre, reporte de salida y cuenta corriente del proveedor." },
+  { label: "Presupuesto", owner: "Silvina", detail: "Cargá todos los presupuestos recibidos (varios talleres). No se suman entre sí." },
+  { label: "Facturación", owner: "Empresa / Silvina", detail: "La empresa sugiere qué aprobar; Silvina carga el valor real facturado (editable) y conceptos." },
+  { label: "Incremento", owner: "Ops", detail: "Solo si el gasto supera lo presupuestado. Cualquier usuario interno puede confirmar." },
+  { label: "Cierre", owner: "Silvina / Carla", detail: "Cerrar OT, reporte de salida y cuenta corriente del proveedor." },
 ] as const;
 
 function isPresupuestoStep(step: number) {
@@ -198,7 +198,7 @@ export function M7TalleresPage() {
   const vistaChofer =
     esChofer && !(user?.esDuenoFlota && contextoAcceso === "EMPRESA");
 
-  const [pageTab, setPageTab] = useState<"ots" | "proveedores">("ots");
+  const [pageTab, setPageTab] = useState<"ots" | "proveedores" | "cc">("ots");
   const [ots, setOts] = useState<OrdenTrabajo[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -347,18 +347,21 @@ export function M7TalleresPage() {
       </div>
 
       {isOps(rol) && (
-        <div className="mb-4 flex gap-2">
+        <div className="mb-4 flex flex-wrap gap-2">
           <button type="button" onClick={() => setPageTab("ots")} className={`rounded-full border px-3 py-1 text-xs font-medium ${pageTab === "ots" ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900" : "border-[var(--vl-card-border)]"}`}>
             Órdenes
           </button>
           <button type="button" onClick={() => setPageTab("proveedores")} className={`rounded-full border px-3 py-1 text-xs font-medium ${pageTab === "proveedores" ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900" : "border-[var(--vl-card-border)]"}`}>
-            Proveedores y cuenta
+            Proveedores
+          </button>
+          <button type="button" onClick={() => setPageTab("cc")} className={`rounded-full border px-3 py-1 text-xs font-medium ${pageTab === "cc" ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900" : "border-[var(--vl-card-border)]"}`}>
+            Cuenta corriente
           </button>
         </div>
       )}
 
-      {pageTab === "proveedores" && isOps(rol) ? (
-        <TalleresProveedoresPanel />
+      {(pageTab === "proveedores" || pageTab === "cc") && isOps(rol) ? (
+        <TalleresProveedoresPanel vista={pageTab === "cc" ? "cc" : "abm"} />
       ) : (
         <>
           {loading && <p className="text-sm text-[var(--vl-text-muted)]">Cargando…</p>}
@@ -680,20 +683,15 @@ export function M7TalleresPage() {
                     )}
                   </div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-xl border p-3">
-                      <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto</div>
-                      <div className="font-bold">
-                        {totP > 0
-                          ? money(totP)
-                          : ot.sinPresupuesto
-                            ? "Sin presupuesto"
-                            : "—"}
-                      </div>
-                    </div>
+                  <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                     <div className="rounded-xl border p-3">
                       <div className="text-xs text-[var(--vl-text-muted)]">Facturado / gasto</div>
                       <div className="font-bold">{totF > 0 ? money(totF) : "—"}</div>
+                      {totP > 0 && (
+                        <div className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                          Referencia presupuestada (ítems tildados): {money(totP)}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -711,7 +709,7 @@ export function M7TalleresPage() {
                       )}
                       {ot.currentStep === 5 && (
                         <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/cerrar`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white">
-                          <Check size={18} /> Cerrar pago
+                          <Check size={18} /> Cerrar OT
                         </button>
                       )}
                     </div>
@@ -872,6 +870,7 @@ function PresupuestoChecklist({
   const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
   const marcados = items.filter((i) => i.aprobado);
   const total = marcados.reduce((a, i) => a + i.importe, 0);
+  const [editImp, setEditImp] = useState<Record<string, string>>({});
 
   async function setAFacturar(id: string, aprobado: boolean) {
     const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
@@ -879,6 +878,23 @@ function PresupuestoChecklist({
       body: JSON.stringify({ aprobado }),
     }, token);
     onSaved(updated);
+  }
+
+  async function guardarImporte(id: string) {
+    const raw = editImp[id];
+    if (raw === undefined) return;
+    const importe = Number(raw);
+    if (!Number.isFinite(importe) || importe < 0) return;
+    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ importe }),
+    }, token);
+    onSaved(updated);
+    setEditImp((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
 
   if (items.length === 0) {
@@ -892,19 +908,28 @@ function PresupuestoChecklist({
   return (
     <div>
       <div className="mb-2 text-xs font-semibold">
-        Presupuesto a facturar — {marcados.length}/{items.length} marcados
-        {marcados.length > 0 ? ` · ${money(total)}` : ""}
+        Aprobación / facturación — {marcados.length}/{items.length} marcados
+        {marcados.length > 0 ? ` · facturado ${money(total)}` : ""}
       </div>
       <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-        Marcá los ítems del presupuesto que entran en esta factura.
+        Marcá qué ítems se aprueban y, si hace falta, editá el importe facturado
+        (se compara contra el presupuestado). No se suma el total de cotizaciones
+        alternativas.
       </p>
       {groupByTaller(items).map((g) => (
         <div key={g.nombre} className="mb-3">
           <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
             <span>{g.nombre}</span>
-            <span>Subtotal {money(g.subtotal)}</span>
+            <span>Subtotal taller {money(g.subtotal)}</span>
           </div>
           <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
+                <th className="w-8 py-1" />
+                <th className="py-1">Ítem</th>
+                <th className="py-1 text-right">Facturado $</th>
+              </tr>
+            </thead>
             <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
@@ -915,11 +940,23 @@ function PresupuestoChecklist({
                         checked={!!i.aprobado}
                         onChange={(e) => void setAFacturar(i.id, e.target.checked)}
                       />
-                      <span className="sr-only">Se factura</span>
+                      <span className="sr-only">Aprobar / facturar</span>
                     </label>
                   </td>
                   <td className="py-1">{i.descripcion}</td>
-                  <td className="py-1 text-right">{money(i.importe)}</td>
+                  <td className="py-1 text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="w-24 rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-1.5 py-1 text-right"
+                      value={editImp[i.id] ?? String(i.importe)}
+                      onChange={(e) =>
+                        setEditImp((prev) => ({ ...prev, [i.id]: e.target.value }))
+                      }
+                      onBlur={() => void guardarImporte(i.id)}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1325,13 +1362,30 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
             type="number"
             min={selected?.km ?? 0}
             inputMode="numeric"
-            className="mt-1 mb-1 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]"
+            className={`mt-1 mb-1 w-full rounded-md border bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)] ${
+              selected &&
+              Number.isFinite(Number(kmDraft)) &&
+              Number(kmDraft) < selected.km
+                ? "border-red-500"
+                : "border-[var(--vl-card-border)]"
+            }`}
             value={kmDraft}
             onChange={(e) => setKmDraft(e.target.value)}
             placeholder={selected ? `Actual: ${selected.km}` : "Km"}
           />
         </label>
-        {selected && (
+        {selected &&
+          Number.isFinite(Number(kmDraft)) &&
+          Number(kmDraft) < selected.km && (
+          <p className="mb-3 text-sm font-bold text-red-600">
+            El kilometraje no puede ser menor al registrado ({selected.km.toLocaleString("es-AR")} km).
+          </p>
+        )}
+        {selected &&
+          !(
+            Number.isFinite(Number(kmDraft)) &&
+            Number(kmDraft) < selected.km
+          ) && (
           <p className="mb-3 text-[11px] text-[var(--vl-text-muted)]">
             Registrado: {selected.km.toLocaleString("es-AR")} km. No puede ser menor.
           </p>
