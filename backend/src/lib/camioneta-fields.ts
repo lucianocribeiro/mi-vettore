@@ -19,6 +19,32 @@ export const MARCA_MODELO_CAMIONETA: Record<string, string[]> = {
 
 export const MARCAS_CAMIONETA = Object.keys(MARCA_MODELO_CAMIONETA);
 
+/** Marcas de equipo de frío (documento de diseño). Sin validación dura en API. */
+export const EQUIPO_FRIO_MARCAS = [
+  "Carrier",
+  "Hwasung Thermo",
+  "Eléctrico",
+  "Ser Per",
+  "Civiar",
+  "Tecno Ref",
+  "Otros",
+  "Furgón",
+] as const;
+
+export type EquipoFrioMarca = (typeof EQUIPO_FRIO_MARCAS)[number];
+
+/** Tipo de frío (nombre TipoServicio) permitido por marca. */
+export const EQUIPO_FRIO_TIPOS: Record<EquipoFrioMarca, readonly string[]> = {
+  Carrier: ["Supercongelado"],
+  "Hwasung Thermo": ["Supercongelado"],
+  Eléctrico: ["Congelado", "Refrigerado"],
+  "Ser Per": ["Congelado", "Refrigerado"],
+  Civiar: ["Congelado"],
+  "Tecno Ref": ["Congelado"],
+  Otros: ["Congelado", "Refrigerado"],
+  Furgón: ["Seco"],
+};
+
 export function anioCamionetaValido(
   anio: number | null | undefined
 ): { ok: true; value: number | null } | { ok: false; error: string } {

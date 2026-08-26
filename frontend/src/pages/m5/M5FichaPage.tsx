@@ -16,6 +16,7 @@ import { Download, Plus } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
 import {
   ALL_ROLES,
+  EQUIPO_FRIO_MARCAS,
   MARCAS_CAMIONETA,
   MARCA_MODELO_CAMIONETA,
   ROLE_LABELS,
@@ -23,6 +24,7 @@ import {
   canWriteMaster,
   currentAsignacion,
   isInternalOps,
+  tiposFrioParaEquipo,
   type Camioneta,
   type Chofer,
   type Empresa,
@@ -78,16 +80,6 @@ const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
   talleres: "taller",
   asignacion: "",
 };
-
-const EQUIPO_FRIO_MARCAS = [
-  "Carrier",
-  "Thermo King",
-  "Zanotti",
-  "Mitsubishi",
-  "Guchen",
-  "Kingtec",
-  "Otro",
-] as const;
 
 const ANIO_MIN = 2000; // piso desde 2000 inclusive; planilla decía >2005
 const ANIO_MAX = new Date().getFullYear();
@@ -200,6 +192,33 @@ export function M5FichaPage() {
     if (!fMarca || !(fMarca in MARCA_MODELO_CAMIONETA)) return [] as string[];
     return [...MARCA_MODELO_CAMIONETA[fMarca as MarcaCamioneta]];
   }, [fMarca]);
+
+  const tiposFrioPermitidos = useMemo(
+    () => tiposFrioParaEquipo(fEquipoFrio),
+    [fEquipoFrio]
+  );
+
+  const tiposServicioParaEquipo = useMemo(() => {
+    const activos = tiposServicio.filter(
+      (t) => t.activo || t.id === fTipoServicioId
+    );
+    if (!tiposFrioPermitidos) return activos;
+    const allowed = new Set(
+      tiposFrioPermitidos.map((n) => n.toLowerCase())
+    );
+    const filtered = activos.filter((t) =>
+      allowed.has(t.nombre.trim().toLowerCase())
+    );
+    // Conservar selección actual si quedó fuera del catálogo (datos viejos).
+    const current = activos.find((t) => t.id === fTipoServicioId);
+    if (
+      current &&
+      !filtered.some((t) => t.id === current.id)
+    ) {
+      return [...filtered, current];
+    }
+    return filtered;
+  }, [tiposServicio, tiposFrioPermitidos, fTipoServicioId]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -1517,7 +1536,37 @@ export function M5FichaPage() {
                 <select
                   className={inputClass}
                   value={fEquipoFrio}
-                  onChange={(e) => setFEquipoFrio(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setFEquipoFrio(next);
+                    const permitidos = tiposFrioParaEquipo(next);
+                    if (!permitidos) {
+                      return;
+                    }
+                    const allowed = new Set(
+                      permitidos.map((n) => n.toLowerCase())
+                    );
+                    const current = tiposServicio.find(
+                      (t) => t.id === fTipoServicioId
+                    );
+                    if (
+                      current &&
+                      allowed.has(current.nombre.trim().toLowerCase())
+                    ) {
+                      return;
+                    }
+                    if (permitidos.length === 1) {
+                      const auto = tiposServicio.find(
+                        (t) =>
+                          t.activo &&
+                          t.nombre.trim().toLowerCase() ===
+                            permitidos[0].toLowerCase()
+                      );
+                      setFTipoServicioId(auto?.id ?? "");
+                    } else {
+                      setFTipoServicioId("");
+                    }
+                  }}
                 >
                   <option value="">—</option>
                   {EQUIPO_FRIO_MARCAS.map((n) => (
@@ -1551,22 +1600,33 @@ export function M5FichaPage() {
                   placeholder="kilos, litros, canastos…"
                 />
               </Field>
-              <Field label="Tipo de servicio">
+              <Field label="Tipo de frío">
                 <select
                   className={inputClass}
                   value={fTipoServicioId}
                   onChange={(e) => setFTipoServicioId(e.target.value)}
+                  disabled={!!fEquipoFrio && tiposServicioParaEquipo.length === 0}
                 >
                   <option value="">—</option>
-                  {tiposServicio
-                    .filter((t) => t.activo || t.id === fTipoServicioId)
-                    .map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.nombre}
-                        {!t.activo ? " (inactivo)" : ""}
-                      </option>
-                    ))}
+                  {tiposServicioParaEquipo.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre}
+                      {!t.activo ? " (inactivo)" : ""}
+                      {tiposFrioPermitidos &&
+                      !tiposFrioPermitidos.some(
+                        (n) =>
+                          n.toLowerCase() === t.nombre.trim().toLowerCase()
+                      )
+                        ? " (fuera de catálogo)"
+                        : ""}
+                    </option>
+                  ))}
                 </select>
+                {fEquipoFrio && tiposFrioPermitidos && (
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Para {fEquipoFrio}: {tiposFrioPermitidos.join(", ")}
+                  </p>
+                )}
               </Field>
               <Field label="Datos técnicos">
                 <input

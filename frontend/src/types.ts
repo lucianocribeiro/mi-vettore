@@ -186,6 +186,42 @@ export const MARCA_MODELO_CAMIONETA: Record<MarcaCamioneta, readonly string[]> =
     Otros: ["Otros"],
   };
 
+/** Marcas de equipo de frío (documento de diseño original). */
+export const EQUIPO_FRIO_MARCAS = [
+  "Carrier",
+  "Hwasung Thermo",
+  "Eléctrico",
+  "Ser Per",
+  "Civiar",
+  "Tecno Ref",
+  "Otros",
+  "Furgón",
+] as const;
+
+export type EquipoFrioMarca = (typeof EQUIPO_FRIO_MARCAS)[number];
+
+/** Nombre de TipoServicio / tipo de frío permitido por marca de equipo. */
+export const EQUIPO_FRIO_TIPOS: Record<EquipoFrioMarca, readonly string[]> = {
+  Carrier: ["Supercongelado"],
+  "Hwasung Thermo": ["Supercongelado"],
+  Eléctrico: ["Congelado", "Refrigerado"],
+  "Ser Per": ["Congelado", "Refrigerado"],
+  Civiar: ["Congelado"],
+  "Tecno Ref": ["Congelado"],
+  Otros: ["Congelado", "Refrigerado"],
+  Furgón: ["Seco"],
+};
+
+export function tiposFrioParaEquipo(
+  equipoFrio: string | null | undefined
+): readonly string[] | null {
+  if (!equipoFrio) return null;
+  if ((EQUIPO_FRIO_MARCAS as readonly string[]).includes(equipoFrio)) {
+    return EQUIPO_FRIO_TIPOS[equipoFrio as EquipoFrioMarca];
+  }
+  return null;
+}
+
 export type TipoPedido =
   | "ALTA"
   | "BAJA"
