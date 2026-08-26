@@ -75,7 +75,7 @@ export async function empresaIdsDeDueno(userId: string): Promise<string[]> {
 export async function choferPuedeVerChofer(
   userId: string,
   choferId: string,
-  contexto: ContextoAcceso
+  _contexto: ContextoAcceso
 ): Promise<boolean> {
   const me = await prisma.usuario.findUnique({
     where: { id: userId },
@@ -83,7 +83,9 @@ export async function choferPuedeVerChofer(
   });
   if (!me?.choferId) return false;
   if (me.choferId === choferId) return true;
-  if (!me.chofer?.esDuenoFlota || contexto !== "EMPRESA") return false;
+  // Empresa de transporte: siempre puede ver/cargar docs de choferes de su flota
+  // (no depende del toggle Conductor/Empresa).
+  if (!me.chofer?.esDuenoFlota) return false;
   const empresas = await empresaIdsDeDueno(userId);
   if (empresas.length === 0) return false;
   const hit = await prisma.asignacionFlota.findFirst({

@@ -127,7 +127,7 @@ export function DocumentacionPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar");
     }
-  }, [token, ops, user?.choferId, user?.nombre]);
+  }, [token, ops, user?.choferId, user?.nombre, user?.esDuenoFlota]);
 
   useEffect(() => {
     void load();
@@ -231,7 +231,9 @@ export function DocumentacionPage() {
       <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
         {ops
           ? "Chofer: DNI, licencia y habilitación de alimentos. Unidad: VTV, SENASA y seguro. La documentación de empleados de empresas tercerizadas la carga administración (Pablo/Silvina)."
-          : "Podés cargar tu DNI y licencia, y los documentos de tu unidad. La ficha de otros choferes la carga Vettore."}
+          : user?.esDuenoFlota
+            ? "Como empresa de transporte podés ver y cargar la documentación de tus choferes y de tus unidades."
+            : "Podés cargar tu DNI y licencia, y los documentos de tu unidad. La ficha de otros choferes la carga Vettore."}
       </p>
 
       <div className="mt-4 flex gap-2">
@@ -495,10 +497,12 @@ export function DocumentacionPage() {
               filteredChoferes.map((c) => {
                 const asg = currentChoferAsignacion(c);
                 const active = selectedChofer === c.id;
-                const canUpload = ops || c.id === user?.choferId;
+                // Ops, el propio chofer, o empresa de transporte sobre su flota
+                const canVerPanel =
+                  ops || !!user?.esDuenoFlota || c.id === user?.choferId;
                 return (
                   <Fragment key={c.id}>
-                    {active && canUpload && (
+                    {active && canVerPanel && (
                       <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
                         <DocumentUpload choferId={c.id} />
                       </div>
@@ -518,6 +522,9 @@ export function DocumentacionPage() {
                         {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
                         {asg?.camioneta?.patente
                           ? ` · ${asg.camioneta.patente}`
+                          : ""}
+                        {asg?.empresa?.nombre
+                          ? ` · ${asg.empresa.nombre}`
                           : ""}
                       </div>
                       <div className="mt-1 font-semibold text-[var(--vl-heading)]">

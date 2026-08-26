@@ -35,16 +35,17 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
         where: { id: req.user!.id },
         include: { chofer: true },
       });
-      const ctx = contextoAccesoFromReq(req);
-      if (me?.chofer?.esDuenoFlota && ctx === "EMPRESA") {
+      // Empresa de transporte: lista todos los choferes activos de su/s empresa/s
+      if (me?.chofer?.esDuenoFlota) {
         const empresas = await empresaIdsDeDueno(req.user!.id);
         const asig = await prisma.asignacionFlota.findMany({
           where: { empresaId: { in: empresas }, periodoHasta: null },
           select: { choferId: true },
         });
-        const ids = [...new Set(asig.map((a) => a.choferId))];
+        const ids = new Set(asig.map((a) => a.choferId));
+        if (me.choferId) ids.add(me.choferId);
         const items = await prisma.chofer.findMany({
-          where: { id: { in: ids }, ...(whereBase ?? {}) },
+          where: { id: { in: [...ids] }, ...(whereBase ?? {}) },
           orderBy: { nombre: "asc" },
           include: includeAsignaciones,
         });
