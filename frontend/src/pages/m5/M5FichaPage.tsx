@@ -1101,22 +1101,15 @@ export function M5FichaPage() {
               {empresas.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.nombre}
-                  {e.permiteMultiCamioneta ? " · multi-unidad" : ""}
                 </option>
               ))}
             </select>
           </label>
-          {empresaAsig && (
-            <p
-              className={`text-xs ${
-                empresaAsig.permiteMultiCamioneta
-                  ? "text-emerald-700 dark:text-emerald-400"
-                  : "text-amber-700 dark:text-amber-400"
-              }`}
-            >
-              {empresaAsig.permiteMultiCamioneta
-                ? "Multi-unidad activa: un chofer puede manejar varias patentes de esta empresa."
-                : "Multi-unidad desactivada: al asignar una patente nueva se libera la anterior del mismo chofer. Activá la opción en Empresas."}
+          {empresaAsig && !empresaAsig.permiteMultiCamioneta && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Esta empresa tiene restringido un chofer a una sola patente. Al
+              asignar una nueva se libera la anterior. Podés cambiarlo en
+              Empresas.
             </p>
           )}
           {asigError && (
