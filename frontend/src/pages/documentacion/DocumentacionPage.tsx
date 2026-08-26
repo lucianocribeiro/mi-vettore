@@ -89,7 +89,7 @@ function matchesVencimiento(
 }
 
 export function DocumentacionPage() {
-  const { token, user, contextoAcceso } = useAuth();
+  const { token, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") ?? "";
   const [tab, setTab] = useState<"unidades" | "choferes">("unidades");
@@ -101,9 +101,8 @@ export function DocumentacionPage() {
   const [advanced, setAdvanced] = useState(false);
   const [adv, setAdv] = useState<AdvFilters>(EMPTY_ADV);
   const ops = isInternalOps(user?.rol);
-  /** Empresa de transporte (dueño en modo EMPRESA) y ops ven chofer; el chofer en su vista solo ve patente. */
-  const verChoferEnUnidad =
-    ops || (!!user?.esDuenoFlota && contextoAcceso === "EMPRESA");
+  /** En Unidades, ops ven chofer·empresa (Silvina). Dueño/chofer: solo patente (el detalle de personas está en la pestaña Choferes). */
+  const verChoferEnUnidad = ops;
 
   const setQuery = (next: string) => {
     const params = new URLSearchParams(searchParams);
