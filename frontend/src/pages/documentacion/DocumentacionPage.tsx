@@ -463,16 +463,7 @@ export function DocumentacionPage() {
                           : "border-[var(--vl-card-border)]"
                       }`}
                     >
-                      {(asg?.empresa?.nombre || c.empresa?.nombre) && (
-                        <div className="text-[11px] text-[var(--vl-text-muted)]">
-                          {asg?.empresa?.nombre || c.empresa?.nombre}
-                        </div>
-                      )}
-                      <div
-                        className={`${
-                          asg?.empresa?.nombre || c.empresa?.nombre ? "mt-1" : ""
-                        } font-semibold text-[var(--vl-heading)]`}
-                      >
+                      <div className="font-semibold text-[var(--vl-heading)]">
                         {c.patente}
                       </div>
                     </button>
