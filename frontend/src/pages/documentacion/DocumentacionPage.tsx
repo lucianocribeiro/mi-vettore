@@ -101,8 +101,6 @@ export function DocumentacionPage() {
   const [advanced, setAdvanced] = useState(false);
   const [adv, setAdv] = useState<AdvFilters>(EMPTY_ADV);
   const ops = isInternalOps(user?.rol);
-  /** En Unidades, ops ven chofer·empresa (Silvina). Dueño/chofer: solo patente (el detalle de personas está en la pestaña Choferes). */
-  const verChoferEnUnidad = ops;
 
   const setQuery = (next: string) => {
     const params = new URLSearchParams(searchParams);
@@ -273,7 +271,7 @@ export function DocumentacionPage() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder={
               tab === "unidades"
-                ? "Buscar unidad: patente, chofer, DNI, empresa…"
+                ? "Buscar unidad: patente, empresa…"
                 : "Buscar chofer: nombre, DNI, patente…"
             }
             autoComplete="off"
@@ -465,13 +463,16 @@ export function DocumentacionPage() {
                           : "border-[var(--vl-card-border)]"
                       }`}
                     >
-                      {verChoferEnUnidad && (
+                      {(asg?.empresa?.nombre || c.empresa?.nombre) && (
                         <div className="text-[11px] text-[var(--vl-text-muted)]">
-                          {asg?.chofer?.nombre ?? "Sin chofer"}
-                          {asg?.empresa?.nombre ? ` · ${asg.empresa.nombre}` : ""}
+                          {asg?.empresa?.nombre || c.empresa?.nombre}
                         </div>
                       )}
-                      <div className={`${verChoferEnUnidad ? "mt-1" : ""} font-semibold text-[var(--vl-heading)]`}>
+                      <div
+                        className={`${
+                          asg?.empresa?.nombre || c.empresa?.nombre ? "mt-1" : ""
+                        } font-semibold text-[var(--vl-heading)]`}
+                      >
                         {c.patente}
                       </div>
                     </button>

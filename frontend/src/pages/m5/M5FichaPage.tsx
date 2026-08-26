@@ -910,8 +910,7 @@ export function M5FichaPage() {
                       {c.empresa?.nombre ??
                         a?.empresa?.nombre ??
                         "Sin empresa"}{" "}
-                      · {a?.chofer?.nombre ?? "Sin chofer"} ·{" "}
-                      {c.km.toLocaleString("es-AR")} km
+                      · {c.km.toLocaleString("es-AR")} km
                     </div>
                     <div className="mt-2 font-semibold text-[var(--vl-heading)]">
                       {c.patente}
