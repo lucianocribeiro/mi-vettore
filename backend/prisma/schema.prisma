@@ -417,15 +417,23 @@ model AvisoInterno {
   @@index([createdAt])
 }
 
+enum EstadoSugerencia {
+  PENDIENTE
+  HECHO
+}
+
 model SugerenciaUsuario {
-  id        String   @id @default(cuid())
+  id        String            @id @default(cuid())
   userId    String?
   texto     String
-  createdAt DateTime @default(now())
+  estado    EstadoSugerencia  @default(PENDIENTE)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 
   user Usuario? @relation(fields: [userId], references: [id])
 
   @@index([createdAt])
+  @@index([estado])
 }
 
 enum TipoComunicacion {
