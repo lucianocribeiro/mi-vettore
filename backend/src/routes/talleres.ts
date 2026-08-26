@@ -401,15 +401,21 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
     if (scope && contextoAccesoFromReq(req) === "EMPRESA") {
       const empresas = await empresaIdsDeDueno(req.user!.id);
       if (empresas.length > 0) {
+        // Todas las OT de unidades de su/s empresa/s (cualquier chofer de la flota).
         where = {
           solicitud: {
             camioneta: {
-              asignaciones: {
-                some: {
-                  empresaId: { in: empresas },
-                  periodoHasta: null,
+              OR: [
+                { empresaId: { in: empresas } },
+                {
+                  asignaciones: {
+                    some: {
+                      empresaId: { in: empresas },
+                      periodoHasta: null,
+                    },
+                  },
                 },
-              },
+              ],
             },
           },
         };
@@ -603,9 +609,28 @@ router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
     const scope = await choferScope(req.user!.id);
     const vOpts = await viewerOpts(req.user!.id, req);
-    if (scope && !vOpts.esDuenoEmpresa && !choferOwnsOt(item, scope)) {
-      res.status(403).json({ error: "Solo podés ver tus propias solicitudes" });
-      return;
+    if (scope) {
+      if (vOpts.esDuenoEmpresa) {
+        const empresas = await empresaIdsDeDueno(req.user!.id);
+        const cam = item.solicitud.camioneta as {
+          empresaId?: string | null;
+          asignaciones?: Array<{ empresaId: string }>;
+        };
+        const deSuFlota =
+          (!!cam.empresaId && empresas.includes(cam.empresaId)) ||
+          (cam.asignaciones ?? []).some((a) =>
+            empresas.includes(a.empresaId)
+          );
+        if (!deSuFlota) {
+          res.status(403).json({
+            error: "Solo podés ver solicitudes de unidades de tu empresa",
+          });
+          return;
+        }
+      } else if (!choferOwnsOt(item, scope)) {
+        res.status(403).json({ error: "Solo podés ver tus propias solicitudes" });
+        return;
+      }
     }
     res.json(sanitizeOtForViewer(item, req.user!.rol as Role, vOpts));
   } catch (err) {

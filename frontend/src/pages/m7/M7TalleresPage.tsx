@@ -73,7 +73,13 @@ function isCierreStep(step: number) {
   return step === 6;
 }
 
-function roleActionHint(rol?: Role | null): string {
+function roleActionHint(
+  rol?: Role | null,
+  opts?: { esDuenoEmpresa?: boolean }
+): string {
+  if (opts?.esDuenoEmpresa) {
+    return "Tu rol: ves todas las solicitudes de las unidades de tu empresa, creás pedidos y seguís el estado.";
+  }
   switch (rol) {
     case "CHOFER":
       return "Tu rol: crear solicitudes y seguir el estado. En urgencias, rendí el gasto en 24hs.";
@@ -260,7 +266,7 @@ export function M7TalleresPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, esChofer]);
+  }, [token, esChofer, contextoAcceso]);
 
   useEffect(() => {
     void load();
@@ -348,7 +354,11 @@ export function M7TalleresPage() {
               ? "Seguí el estado de tu solicitud. El detalle interno lo ve solo el equipo de Vettore."
               : "Solicitud → asignación → presupuesto → aprobación empresa → factura → incremento si hay desvío → cierre."}
           </p>
-          <p className="mt-1 text-xs font-medium text-[#1e4080] dark:text-sky-300">{roleActionHint(rol)}</p>
+          <p className="mt-1 text-xs font-medium text-[#1e4080] dark:text-sky-300">
+            {roleActionHint(rol, {
+              esDuenoEmpresa: !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA"),
+            })}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {isOps(rol) && (
@@ -403,13 +413,15 @@ export function M7TalleresPage() {
                     placeholder="Buscar patente…"
                     className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
                   />
-                  <input
-                    type="search"
-                    value={filtroEmpresa}
-                    onChange={(e) => setFiltroEmpresa(e.target.value)}
-                    placeholder="Buscar empresa…"
-                    className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
-                  />
+                  {!(user?.esDuenoFlota && contextoAcceso === "EMPRESA") && (
+                    <input
+                      type="search"
+                      value={filtroEmpresa}
+                      onChange={(e) => setFiltroEmpresa(e.target.value)}
+                      placeholder="Buscar empresa…"
+                      className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                    />
+                  )}
                   <select
                     value={filtroEstado}
                     onChange={(e) =>
