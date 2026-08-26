@@ -89,7 +89,7 @@ function matchesVencimiento(
 }
 
 export function DocumentacionPage() {
-  const { token, user } = useAuth();
+  const { token, user, contextoAcceso } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") ?? "";
   const [tab, setTab] = useState<"unidades" | "choferes">("unidades");
@@ -101,6 +101,9 @@ export function DocumentacionPage() {
   const [advanced, setAdvanced] = useState(false);
   const [adv, setAdv] = useState<AdvFilters>(EMPTY_ADV);
   const ops = isInternalOps(user?.rol);
+  /** Empresa de transporte (dueño en modo EMPRESA) y ops ven chofer; el chofer en su vista solo ve patente. */
+  const verChoferEnUnidad =
+    ops || (!!user?.esDuenoFlota && contextoAcceso === "EMPRESA");
 
   const setQuery = (next: string) => {
     const params = new URLSearchParams(searchParams);
@@ -461,13 +464,13 @@ export function DocumentacionPage() {
                           : "border-[var(--vl-card-border)]"
                       }`}
                     >
-                      {ops && (
+                      {verChoferEnUnidad && (
                         <div className="text-[11px] text-[var(--vl-text-muted)]">
                           {asg?.chofer?.nombre ?? "Sin chofer"}
                           {asg?.empresa?.nombre ? ` · ${asg.empresa.nombre}` : ""}
                         </div>
                       )}
-                      <div className={`${ops ? "mt-1" : ""} font-semibold text-[var(--vl-heading)]`}>
+                      <div className={`${verChoferEnUnidad ? "mt-1" : ""} font-semibold text-[var(--vl-heading)]`}>
                         {c.patente}
                       </div>
                     </button>
