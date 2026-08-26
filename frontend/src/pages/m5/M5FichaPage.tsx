@@ -24,12 +24,10 @@ import {
   currentAsignacion,
   isInternalOps,
   type Camioneta,
-  type Cliente,
   type Chofer,
   type Empresa,
   type MarcaCamioneta,
   type Role,
-  type SegmentoCliente,
   type TallerProveedor,
   type TipoEmpresa,
   type TipoServicio,
@@ -42,7 +40,6 @@ import { Field, FormModal, inputClass } from "./FormModal";
 type Tab =
   | "camioneta"
   | "chofer"
-  | "clientes"
   | "empresas"
   | "usuarios"
   | "tiposServicio"
@@ -57,7 +54,6 @@ type DrawerOpen =
 type CreateKind =
   | "camioneta"
   | "chofer"
-  | "cliente"
   | "empresa"
   | "usuario"
   | "tipoServicio"
@@ -66,7 +62,6 @@ type CreateKind =
 const CREATE_KIND_BY_TAB: Record<Tab, CreateKind | null> = {
   camioneta: "camioneta",
   chofer: "chofer",
-  clientes: "cliente",
   empresas: "empresa",
   usuarios: "usuario",
   tiposServicio: "tipoServicio",
@@ -77,7 +72,6 @@ const CREATE_KIND_BY_TAB: Record<Tab, CreateKind | null> = {
 const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
   camioneta: "camioneta",
   chofer: "chofer",
-  clientes: "cliente",
   empresas: "empresa",
   usuarios: "usuario",
   tiposServicio: "tipo de servicio",
@@ -118,7 +112,6 @@ export function M5FichaPage() {
 
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);
   const [choferes, setChoferes] = useState<Chofer[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [usuarios, setUsuarios] = useState<User[]>([]);
   const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([]);
@@ -132,7 +125,6 @@ export function M5FichaPage() {
   const [exportando, setExportando] = useState(false);
   const [form, setForm] = useState<
     | null
-    | { kind: "cliente"; item?: Cliente }
     | { kind: "chofer"; item?: Chofer }
     | { kind: "empresa"; item?: Empresa }
     | { kind: "camioneta"; item?: Camioneta }
@@ -144,8 +136,6 @@ export function M5FichaPage() {
 
   // form drafts
   const [fNombre, setFNombre] = useState("");
-  const [fContacto, setFContacto] = useState("");
-  const [fSegmento, setFSegmento] = useState<SegmentoCliente>("ESTATICO");
   const [fDni, setFDni] = useState("");
   const [fCuil, setFCuil] = useState("");
   const [fLicencia, setFLicencia] = useState("");
@@ -216,11 +206,10 @@ export function M5FichaPage() {
     setLoading(true);
     setError(null);
     try {
-      const [cami, chof, cli, emp, usu, tServ, tall, tallMeta] =
+      const [cami, chof, emp, usu, tServ, tall, tallMeta] =
         await Promise.all([
           apiFetch<Camioneta[]>("/api/camionetas", {}, token),
           apiFetch<Chofer[]>("/api/choferes", {}, token),
-          apiFetch<Cliente[]>("/api/clientes", {}, token),
           apiFetch<Empresa[]>("/api/empresas", {}, token),
           apiFetch<User[]>("/api/usuarios", {}, token),
           apiFetch<TipoServicio[]>("/api/tipos-servicio", {}, token),
@@ -233,7 +222,6 @@ export function M5FichaPage() {
         ]);
       setCamionetas(cami);
       setChoferes(chof);
-      setClientes(cli);
       setEmpresas(emp);
       setUsuarios(usu);
       setTiposServicio(tServ);
@@ -257,8 +245,6 @@ export function M5FichaPage() {
   function openCreate(kind: NonNullable<typeof form>["kind"]) {
     setFormError(null);
     setFNombre("");
-    setFContacto("");
-    setFSegmento("ESTATICO");
     setFDni("");
     setFCuil("");
     setFLicencia("");
@@ -307,14 +293,6 @@ export function M5FichaPage() {
     setFTallerAlias("");
     setFTallerTipos([]);
     setForm({ kind });
-  }
-
-  function openEditCliente(item: Cliente) {
-    setFormError(null);
-    setFNombre(item.nombre);
-    setFContacto(item.contacto ?? "");
-    setFSegmento(item.segmento);
-    setForm({ kind: "cliente", item });
   }
 
   function openEditChofer(item: Chofer) {
@@ -397,31 +375,6 @@ export function M5FichaPage() {
     if (!token || !form) return;
     setFormError(null);
     try {
-      if (form.kind === "cliente") {
-        const body = {
-          nombre: fNombre,
-          contacto: fContacto || null,
-          segmento: fSegmento,
-        };
-        if (form.item) {
-          const updated = await apiFetch<Cliente>(
-            `/api/clientes/${form.item.id}`,
-            { method: "PUT", body: JSON.stringify(body) },
-            token
-          );
-          setClientes((prev) =>
-            prev.map((c) => (c.id === updated.id ? updated : c))
-          );
-        } else {
-          const created = await apiFetch<Cliente>(
-            "/api/clientes",
-            { method: "POST", body: JSON.stringify(body) },
-            token
-          );
-          setClientes((prev) => [...prev, created].sort((a, b) => a.nombre.localeCompare(b.nombre)));
-        }
-      }
-
       if (form.kind === "chofer") {
         const body = {
           nombre: fNombre,
@@ -639,20 +592,15 @@ export function M5FichaPage() {
     }
   }
 
-  async function deleteEntity(
-    kind: "cliente" | "empresa" | "usuario",
-    id: string
-  ) {
+  async function deleteEntity(kind: "empresa" | "usuario", id: string) {
     if (!token || !canEdit) return;
     if (!confirm("¿Eliminar este registro?")) return;
     const paths = {
-      cliente: `/api/clientes/${id}`,
       empresa: `/api/empresas/${id}`,
       usuario: `/api/usuarios/${id}`,
     };
     try {
       await apiFetch(paths[kind], { method: "DELETE" }, token);
-      if (kind === "cliente") setClientes((p) => p.filter((x) => x.id !== id));
       if (kind === "empresa") setEmpresas((p) => p.filter((x) => x.id !== id));
       if (kind === "usuario") setUsuarios((p) => p.filter((x) => x.id !== id));
     } catch (err) {
@@ -723,7 +671,6 @@ export function M5FichaPage() {
       const map: Record<Tab, { url: string; file: string } | null> = {
         camioneta: { url: "/api/camionetas/export", file: "unidades.xlsx" },
         chofer: { url: "/api/choferes/export", file: "choferes.xlsx" },
-        clientes: { url: "/api/clientes/export", file: "clientes.xlsx" },
         empresas: { url: "/api/empresas/export", file: "empresas.xlsx" },
         usuarios: { url: "/api/usuarios/export", file: "usuarios.xlsx" },
         tiposServicio: {
@@ -754,7 +701,6 @@ export function M5FichaPage() {
     { id: "camioneta", label: "Vista por camioneta" },
     { id: "chofer", label: "Vista por chofer" },
     { id: "asignacion", label: "Asignación flota" },
-    { id: "clientes", label: "Clientes" },
     { id: "empresas", label: "Empresas" },
     { id: "usuarios", label: "Usuarios" },
     { id: "tiposServicio", label: "Tipos de servicio" },
@@ -1207,25 +1153,6 @@ export function M5FichaPage() {
         </div>
       )}
 
-      {!loading && !error && tab === "clientes" && (
-        <EntityTable
-          headers={["Nombre", "Segmento", "Contacto", ""]}
-          rows={clientes.map((c) => [
-            c.nombre,
-            c.segmento.toLowerCase(),
-            c.contacto || "—",
-            canEdit ? (
-              <Actions
-                onEdit={() => openEditCliente(c)}
-                onDelete={() => void deleteEntity("cliente", c.id)}
-              />
-            ) : (
-              ""
-            ),
-          ])}
-        />
-      )}
-
       {!loading && !error && tab === "empresas" && (
         <EntityTable
           headers={["Nombre", "CUIT", "Contacto", "Tipo", ""]}
@@ -1379,8 +1306,7 @@ export function M5FichaPage() {
           onSubmit={submitForm}
           error={formError}
         >
-          {(form.kind === "cliente" ||
-            form.kind === "chofer" ||
+          {(form.kind === "chofer" ||
             form.kind === "empresa" ||
             form.kind === "usuario") && (
             <Field label="Nombre">
@@ -1391,35 +1317,6 @@ export function M5FichaPage() {
                 required={form.kind !== "usuario"}
               />
             </Field>
-          )}
-
-          {form.kind === "cliente" && (
-            <>
-              <Field label="Segmento">
-                <select
-                  className={inputClass}
-                  value={fSegmento}
-                  onChange={(e) =>
-                    setFSegmento(e.target.value as SegmentoCliente)
-                  }
-                >
-                  <option value="ESTATICO">Estático (plan fijo)</option>
-                  <option value="CONSULTA">
-                    Consulta (demanda variable · M3 12:00)
-                  </option>
-                  <option value="CONFIRMACION">
-                    Confirmación (demanda variable · M3 12:00)
-                  </option>
-                </select>
-              </Field>
-              <Field label="Contacto">
-                <input
-                  className={inputClass}
-                  value={fContacto}
-                  onChange={(e) => setFContacto(e.target.value)}
-                />
-              </Field>
-            </>
           )}
 
           {form.kind === "chofer" && (
