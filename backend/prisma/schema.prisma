@@ -233,7 +233,7 @@ model EmpresaTransporte {
   contacto               String?
   tipo                   TipoEmpresa      @default(ALIADA)
   /// Si true, un mismo chofer puede tener varias camionetas activas de esta empresa.
-  permiteMultiCamioneta  Boolean          @default(false)
+  permiteMultiCamioneta  Boolean          @default(true)
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   asignaciones           AsignacionFlota[]

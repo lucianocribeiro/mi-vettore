@@ -143,7 +143,7 @@ export function M5FichaPage() {
   const [fTipoEmpresa, setFTipoEmpresa] = useState<TipoEmpresa>("PROPIA");
   const [fCuit, setFCuit] = useState("");
   const [fContactoEmpresa, setFContactoEmpresa] = useState("");
-  const [fPermiteMultiCamioneta, setFPermiteMultiCamioneta] = useState(false);
+  const [fPermiteMultiCamioneta, setFPermiteMultiCamioneta] = useState(true);
   const [fPatente, setFPatente] = useState("");
   const [fMarca, setFMarca] = useState("");
   const [fModelo, setFModelo] = useState("");
@@ -277,7 +277,7 @@ export function M5FichaPage() {
     setFTipoEmpresa("PROPIA");
     setFCuit("");
     setFContactoEmpresa("");
-    setFPermiteMultiCamioneta(false);
+    setFPermiteMultiCamioneta(true);
     setFPatente("");
     setFMarca("");
     setFModelo("");
@@ -741,6 +741,22 @@ export function M5FichaPage() {
       .sort((a, b) => a.patente.localeCompare(b.patente));
   }, [camionetas, asigEmpresaId]);
 
+  const empresaAsig = useMemo(
+    () => empresas.find((e) => e.id === asigEmpresaId) ?? null,
+    [empresas, asigEmpresaId]
+  );
+
+  /** Cuántas unidades de esta empresa tiene cada chofer (asignación abierta). */
+  const unidadesPorChoferAsig = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of unidadesDeEmpresaAsig) {
+      const a = currentAsignacion(c);
+      if (!a?.choferId) continue;
+      map.set(a.choferId, (map.get(a.choferId) ?? 0) + 1);
+    }
+    return map;
+  }, [unidadesDeEmpresaAsig]);
+
   useEffect(() => {
     if (!asigEmpresaId) {
       setAsigChoferByUnit({});
@@ -1070,8 +1086,9 @@ export function M5FichaPage() {
       {!loading && !error && tab === "asignacion" && (
         <div className="space-y-4">
           <p className="text-sm text-[var(--vl-text-muted)]">
-            Elegí la empresa, asigná un chofer a cada unidad y guardá. La
-            propiedad de la unidad se define en el ABM de camioneta.
+            Elegí la empresa y asigná choferes a sus unidades. Si la empresa
+            permite multi-unidad, el mismo chofer puede figurar en varias
+            patentes a la vez (dentro de esa empresa).
           </p>
           <label className="block max-w-md text-xs text-[var(--vl-text-muted)]">
             Empresa de transporte
@@ -1084,10 +1101,24 @@ export function M5FichaPage() {
               {empresas.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.nombre}
+                  {e.permiteMultiCamioneta ? " · multi-unidad" : ""}
                 </option>
               ))}
             </select>
           </label>
+          {empresaAsig && (
+            <p
+              className={`text-xs ${
+                empresaAsig.permiteMultiCamioneta
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : "text-amber-700 dark:text-amber-400"
+              }`}
+            >
+              {empresaAsig.permiteMultiCamioneta
+                ? "Multi-unidad activa: un chofer puede manejar varias patentes de esta empresa."
+                : "Multi-unidad desactivada: al asignar una patente nueva se libera la anterior del mismo chofer. Activá la opción en Empresas."}
+            </p>
+          )}
           {asigError && (
             <p className="text-sm text-red-600">{asigError}</p>
           )}
@@ -1122,6 +1153,10 @@ export function M5FichaPage() {
                         <td className="px-3 py-2 font-medium">{c.patente}</td>
                         <td className="px-3 py-2 text-[var(--vl-text-muted)]">
                           {a?.chofer?.nombre ?? "Sin chofer"}
+                          {a?.choferId &&
+                          (unidadesPorChoferAsig.get(a.choferId) ?? 0) > 1
+                            ? ` · ${unidadesPorChoferAsig.get(a.choferId)} unidades`
+                            : ""}
                         </td>
                         <td className="px-3 py-2">
                           <select
@@ -1138,11 +1173,17 @@ export function M5FichaPage() {
                             <option value="">—</option>
                             {choferes
                               .filter((ch) => ch.estado === "ACTIVO")
-                              .map((ch) => (
-                                <option key={ch.id} value={ch.id}>
-                                  {ch.nombre}
-                                </option>
-                              ))}
+                              .map((ch) => {
+                                const n = unidadesPorChoferAsig.get(ch.id) ?? 0;
+                                return (
+                                  <option key={ch.id} value={ch.id}>
+                                    {ch.nombre}
+                                    {n > 0
+                                      ? ` (${n} unidad${n === 1 ? "" : "es"})`
+                                      : ""}
+                                  </option>
+                                );
+                              })}
                           </select>
                         </td>
                         <td className="px-3 py-2 text-right">
@@ -1460,8 +1501,12 @@ export function M5FichaPage() {
                   checked={fPermiteMultiCamioneta}
                   onChange={(e) => setFPermiteMultiCamioneta(e.target.checked)}
                 />
-                Permitir varias camionetas por chofer en esta empresa
+                Permitir que un chofer maneje varias unidades de esta empresa
               </label>
+              <p className="text-[11px] text-[var(--vl-text-muted)]">
+                Si está activo, el mismo chofer puede quedar asignado a más de
+                una patente a la vez (solo dentro de esta empresa).
+              </p>
             </>
           )}
 

@@ -87,7 +87,10 @@ router.post("/", ...write, async (req, res) => {
         contacto: req.body?.contacto
           ? String(req.body.contacto).trim()
           : null,
-        permiteMultiCamioneta: Boolean(req.body?.permiteMultiCamioneta),
+        permiteMultiCamioneta:
+          req.body?.permiteMultiCamioneta === undefined
+            ? true
+            : Boolean(req.body.permiteMultiCamioneta),
       },
     });
     res.status(201).json(item);

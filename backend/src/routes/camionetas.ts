@@ -900,7 +900,9 @@ router.post("/:id/asignacion", ...write, async (req, res) => {
         where: { camionetaId, periodoHasta: null },
         data: { periodoHasta: now },
       });
-      // Por defecto 1 camioneta por chofer; si la empresa permite multi, no cerramos las otras.
+      // Por defecto la empresa permite varias unidades por chofer (mismo
+      // empresaId). Si permiteMultiCamioneta=false, al reasignar se cierra la
+      // asignación abierta anterior de ese chofer en esta empresa.
       if (!empresa.permiteMultiCamioneta) {
         await tx.asignacionFlota.updateMany({
           where: {
