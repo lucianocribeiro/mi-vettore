@@ -187,6 +187,10 @@ export function M5FichaPage() {
   >({});
   const [asigSavingId, setAsigSavingId] = useState<string | null>(null);
   const [asigError, setAsigError] = useState<string | null>(null);
+  const [userQuery, setUserQuery] = useState("");
+  const [userEmpresaId, setUserEmpresaId] = useState("");
+  const [userRol, setUserRol] = useState<"" | Role>("");
+  const [userAdvOpen, setUserAdvOpen] = useState(false);
 
   const modelosParaMarca = useMemo(() => {
     if (!fMarca || !(fMarca in MARCA_MODELO_CAMIONETA)) return [] as string[];
@@ -841,6 +845,28 @@ export function M5FichaPage() {
     });
   }, [choferes, choferQuery]);
 
+  const usuariosFiltrados = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    return usuarios.filter((u) => {
+      if (userEmpresaId && u.empresaId !== userEmpresaId) return false;
+      if (userRol && u.rol !== userRol) return false;
+      if (!q) return true;
+      const hay = [
+        u.email,
+        u.nombre,
+        u.telefono,
+        u.empresaNombre,
+        ROLE_LABELS[u.rol],
+        u.estado,
+        u.esDuenoFlota ? "empresa de transporte" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return q.split(/\s+/).every((token) => hay.includes(token));
+    });
+  }, [usuarios, userQuery, userEmpresaId, userRol]);
+
   return (
     <div>
       <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
@@ -1274,23 +1300,113 @@ export function M5FichaPage() {
       )}
 
       {!loading && !error && tab === "usuarios" && (
-        <EntityTable
-          headers={["Email", "Nombre", "Rol", "Estado", ""]}
-          rows={usuarios.map((u) => [
-            u.email,
-            u.nombre || "—",
-            ROLE_LABELS[u.rol],
-            u.estado.toLowerCase(),
-            canEdit ? (
-              <Actions
-                onEdit={() => openEditUsuario(u)}
-                onDelete={() => void deleteEntity("usuario", u.id)}
-              />
-            ) : (
-              ""
-            ),
-          ])}
-        />
+        <div className="space-y-3">
+          <div className="space-y-2 rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
+            <input
+              type="search"
+              value={userQuery}
+              onChange={(e) => setUserQuery(e.target.value)}
+              placeholder="Buscar: nombre, email, teléfono, empresa, rol…"
+              autoComplete="off"
+              className={inputClass}
+            />
+            <button
+              type="button"
+              onClick={() => setUserAdvOpen((v) => !v)}
+              className="text-xs font-medium text-[var(--vl-text-muted)] underline-offset-2 hover:underline"
+            >
+              {userAdvOpen ? "Ocultar" : "Búsqueda avanzada"}
+            </button>
+            {userAdvOpen && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="text-xs text-[var(--vl-text-muted)]">
+                  Empresa de transporte
+                  <select
+                    className={`${inputClass} mt-1`}
+                    value={userEmpresaId}
+                    onChange={(e) => setUserEmpresaId(e.target.value)}
+                  >
+                    <option value="">Todas</option>
+                    {empresas.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs text-[var(--vl-text-muted)]">
+                  Rol
+                  <select
+                    className={`${inputClass} mt-1`}
+                    value={userRol}
+                    onChange={(e) =>
+                      setUserRol((e.target.value || "") as "" | Role)
+                    }
+                  >
+                    <option value="">Todos</option>
+                    {ALL_ROLES.filter((r) => r !== "CLIENTE").map((r) => (
+                      <option key={r} value={r}>
+                        {ROLE_LABELS[r]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+            {(userQuery.trim() || userEmpresaId || userRol) && (
+              <p className="text-[11px] text-[var(--vl-text-muted)]">
+                Mostrando {usuariosFiltrados.length} de {usuarios.length}
+                {" · "}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => {
+                    setUserQuery("");
+                    setUserEmpresaId("");
+                    setUserRol("");
+                  }}
+                >
+                  Limpiar filtros
+                </button>
+              </p>
+            )}
+          </div>
+          <EntityTable
+            headers={["Email", "Nombre", "Teléfono", "Empresa", "Rol", "Estado", ""]}
+            rows={usuariosFiltrados.map((u) => {
+              const wa = whatsappDigits(u.telefono);
+              return [
+                u.email,
+                u.nombre || "—",
+                u.telefono || "—",
+                u.empresaNombre || "—",
+                ROLE_LABELS[u.rol],
+                u.estado.toLowerCase(),
+                <div
+                  key={u.id}
+                  className="flex flex-wrap items-center justify-end gap-2 text-xs"
+                >
+                  {wa && (
+                    <a
+                      href={`https://wa.me/${wa}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400"
+                    >
+                      WhatsApp
+                    </a>
+                  )}
+                  {canEdit ? (
+                    <Actions
+                      onEdit={() => openEditUsuario(u)}
+                      onDelete={() => void deleteEntity("usuario", u.id)}
+                    />
+                  ) : null}
+                </div>,
+              ];
+            })}
+          />
+        </div>
       )}
 
       {!loading && !error && tab === "tiposServicio" && (

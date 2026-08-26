@@ -20,11 +20,14 @@ export type User = {
   estado: "ACTIVO" | "INACTIVO";
   clienteId?: string | null;
   choferId?: string | null;
+  /** Teléfono del chofer vinculado (si aplica). */
+  telefono?: string | null;
   /** Solo aplica si rol=CHOFER: ve todas las unidades de su empresa */
   esDuenoFlota?: boolean;
   verMantenimiento?: boolean;
   verTaller?: boolean;
   /** Empresa de transporte vigente (asignación actual) */
+  empresaId?: string | null;
   empresaNombre?: string | null;
   createdAt?: string;
   updatedAt?: string;

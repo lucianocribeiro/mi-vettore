@@ -9,21 +9,61 @@ import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
 
-function publicUser(u: {
+const includeChoferList = {
+  chofer: {
+    select: {
+      id: true,
+      telefono: true,
+      nombre: true,
+      esDuenoFlota: true,
+      asignaciones: {
+        where: { periodoHasta: null },
+        take: 3,
+        orderBy: { periodoDesde: "desc" as const },
+        select: {
+          empresaId: true,
+          empresa: { select: { id: true, nombre: true } },
+        },
+      },
+    },
+  },
+} as const;
+
+type UsuarioConChofer = {
   id: string;
   email: string;
   rol: Role;
   nombre: string | null;
   estado: UserStatus;
+  choferId: string | null;
   createdAt: Date;
   updatedAt: Date;
-}) {
+  chofer?: {
+    id: string;
+    telefono: string | null;
+    nombre: string;
+    esDuenoFlota: boolean;
+    asignaciones: Array<{
+      empresaId: string;
+      empresa: { id: string; nombre: string } | null;
+    }>;
+  } | null;
+};
+
+function publicUser(u: UsuarioConChofer) {
+  const asig = u.chofer?.asignaciones?.[0];
+  const empresa = asig?.empresa ?? null;
   return {
     id: u.id,
     email: u.email,
     rol: u.rol,
-    nombre: u.nombre,
+    nombre: u.nombre ?? u.chofer?.nombre ?? null,
     estado: u.estado,
+    choferId: u.choferId ?? null,
+    telefono: u.chofer?.telefono ?? null,
+    esDuenoFlota: u.chofer?.esDuenoFlota ?? false,
+    empresaId: empresa?.id ?? asig?.empresaId ?? null,
+    empresaNombre: empresa?.nombre ?? null,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
   };
@@ -33,8 +73,9 @@ router.get("/", authenticate, async (_req, res) => {
   try {
     const items = await prisma.usuario.findMany({
       orderBy: { email: "asc" },
+      include: includeChoferList,
     });
-    res.json(items.map(publicUser));
+    res.json(items.map((u) => publicUser(u)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al listar usuarios" });
@@ -47,22 +88,32 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       res.status(403).json({ error: "Sin permiso para exportar" });
       return;
     }
-    const items = await prisma.usuario.findMany({ orderBy: { email: "asc" } });
+    const items = await prisma.usuario.findMany({
+      orderBy: { email: "asc" },
+      include: includeChoferList,
+    });
     await sendExcel(res, {
       sheetName: "Usuarios",
       filename: `usuarios_${new Date().toISOString().slice(0, 10)}.xlsx`,
       columns: [
         { header: "Email", key: "email", width: 28 },
         { header: "Nombre", key: "nombre", width: 22 },
+        { header: "Teléfono", key: "telefono", width: 16 },
+        { header: "Empresa", key: "empresa", width: 24 },
         { header: "Rol", key: "rol", width: 14 },
         { header: "Estado", key: "estado", width: 12 },
       ],
-      rows: items.map((u) => ({
-        email: u.email,
-        nombre: u.nombre ?? "",
-        rol: u.rol,
-        estado: u.estado,
-      })),
+      rows: items.map((u) => {
+        const pub = publicUser(u);
+        return {
+          email: pub.email,
+          nombre: pub.nombre ?? "",
+          telefono: pub.telefono ?? "",
+          empresa: pub.empresaNombre ?? "",
+          rol: pub.rol,
+          estado: pub.estado,
+        };
+      }),
     });
   } catch (err) {
     console.error(err);
@@ -72,7 +123,10 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
 
 router.get("/:id", authenticate, async (req, res) => {
   try {
-    const item = await prisma.usuario.findUnique({ where: { id: req.params.id } });
+    const item = await prisma.usuario.findUnique({
+      where: { id: req.params.id },
+      include: includeChoferList,
+    });
     if (!item) {
       res.status(404).json({ error: "Usuario no encontrado" });
       return;
@@ -111,6 +165,7 @@ router.post("/", ...write, async (req, res) => {
             ? UserStatus.INACTIVO
             : UserStatus.ACTIVO,
       },
+      include: includeChoferList,
     });
     res.status(201).json(publicUser(item));
   } catch (err: unknown) {
@@ -172,6 +227,7 @@ router.put("/:id", ...write, async (req, res) => {
     const item = await prisma.usuario.update({
       where: { id: req.params.id },
       data,
+      include: includeChoferList,
     });
     res.json(publicUser(item));
   } catch (err: unknown) {
