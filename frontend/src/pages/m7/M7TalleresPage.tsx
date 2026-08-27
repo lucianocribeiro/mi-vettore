@@ -210,6 +210,19 @@ function otEmpresaNombre(o: OrdenTrabajo): string {
   );
 }
 
+function otTallerNombre(o: OrdenTrabajo): string {
+  const fromItems = o.items?.find((i) => i.tallerNombre?.trim())?.tallerNombre;
+  const fromFacturas = o.facturas?.find((f) => f.tallerNombre?.trim())?.tallerNombre;
+  const fromPresup = o.presupuestos?.find((p) => p.taller?.trim())?.taller;
+  return (
+    o.tallerAsignado?.trim() ||
+    fromItems?.trim() ||
+    fromFacturas?.trim() ||
+    fromPresup?.trim() ||
+    ""
+  );
+}
+
 function money(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "—";
   return `$${n.toLocaleString("es-AR")}`;
@@ -232,6 +245,7 @@ export function M7TalleresPage() {
   const [filter, setFilter] = useState<"todas" | "mia">("todas");
   const [filtroPatente, setFiltroPatente] = useState("");
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
+  const [filtroTaller, setFiltroTaller] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<"todas" | "abierta" | "cerrada">("todas");
   const [talleres, setTalleres] = useState<TallerProveedor[]>([]);
   const [exportando, setExportando] = useState(false);
@@ -292,6 +306,7 @@ export function M7TalleresPage() {
   const visibleOts = useMemo(() => {
     const patenteQ = filtroPatente.trim().toLowerCase();
     const empresaQ = filtroEmpresa.trim().toLowerCase();
+    const tallerQ = filtroTaller.trim().toLowerCase();
     return ots.filter((o) => {
       if (filter === "mia" && !needsMyAction(o)) return false;
       if (filtroEstado === "abierta" && o.cerradaAt) return false;
@@ -305,9 +320,21 @@ export function M7TalleresPage() {
       if (empresaQ && !otEmpresaNombre(o).toLowerCase().includes(empresaQ)) {
         return false;
       }
+      if (tallerQ && !otTallerNombre(o).toLowerCase().includes(tallerQ)) {
+        return false;
+      }
       return true;
     });
-  }, [ots, filter, filtroPatente, filtroEmpresa, filtroEstado, rol, vistaChofer]);
+  }, [ots, filter, filtroPatente, filtroEmpresa, filtroTaller, filtroEstado, rol, vistaChofer]);
+
+  const otCounts = useMemo(
+    () => ({
+      todas: ots.length,
+      abiertas: ots.filter((o) => !o.cerradaAt).length,
+      cerradas: ots.filter((o) => !!o.cerradaAt).length,
+    }),
+    [ots]
+  );
 
   const actionCount = ots.filter(needsMyAction).length;
 
@@ -406,6 +433,41 @@ export function M7TalleresPage() {
                   </button>
                 </div>
                 <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setFiltroEstado("todas")}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        filtroEstado === "todas"
+                          ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                      }`}
+                    >
+                      Todas ({otCounts.todas})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltroEstado("abierta")}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        filtroEstado === "abierta"
+                          ? "border-amber-600 bg-amber-500/20 text-amber-900 dark:border-amber-400 dark:text-amber-100"
+                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                      }`}
+                    >
+                      Abiertas ({otCounts.abiertas})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltroEstado("cerrada")}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        filtroEstado === "cerrada"
+                          ? "border-emerald-600 bg-emerald-500/20 text-emerald-900 dark:border-emerald-400 dark:text-emerald-100"
+                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                      }`}
+                    >
+                      Cerradas ({otCounts.cerradas})
+                    </button>
+                  </div>
                   <input
                     type="search"
                     value={filtroPatente}
@@ -418,23 +480,43 @@ export function M7TalleresPage() {
                       type="search"
                       value={filtroEmpresa}
                       onChange={(e) => setFiltroEmpresa(e.target.value)}
-                      placeholder="Buscar empresa…"
+                      placeholder="Buscar empresa de transporte…"
                       className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
                     />
                   )}
-                  <select
-                    value={filtroEstado}
-                    onChange={(e) =>
-                      setFiltroEstado(e.target.value as "todas" | "abierta" | "cerrada")
-                    }
-                    className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
-                    aria-label="Estado de la OT"
-                  >
-                    <option value="todas">Estado: todas</option>
-                    <option value="abierta">Abiertas</option>
-                    <option value="cerrada">Cerradas</option>
-                  </select>
+                  {isOps(rol) && (
+                    <input
+                      type="search"
+                      value={filtroTaller}
+                      onChange={(e) => setFiltroTaller(e.target.value)}
+                      placeholder="Buscar taller / proveedor…"
+                      className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                    />
+                  )}
+                  {(filtroPatente || filtroEmpresa || filtroTaller || filtroEstado !== "todas") && (
+                    <p className="text-[10px] text-[var(--vl-text-muted)]">
+                      {visibleOts.length} resultado{visibleOts.length === 1 ? "" : "s"}
+                      {" · "}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => {
+                          setFiltroPatente("");
+                          setFiltroEmpresa("");
+                          setFiltroTaller("");
+                          setFiltroEstado("todas");
+                        }}
+                      >
+                        Limpiar filtros
+                      </button>
+                    </p>
+                  )}
                 </div>
+                {visibleOts.length === 0 && (
+                  <p className="rounded-lg border border-[var(--vl-card-border)] p-3 text-xs text-[var(--vl-text-muted)]">
+                    No hay órdenes con esos filtros.
+                  </p>
+                )}
                 {visibleOts.map((o) => (
                   <button key={o.id} type="button" onClick={() => setSelectedId(o.id)} className={`w-full rounded-xl border p-3 text-left ${selectedId === o.id ? "border-slate-900 dark:border-slate-100" : "border-[var(--vl-card-border)]"}`}>
                     <div className="flex items-center justify-between gap-2">
@@ -442,6 +524,11 @@ export function M7TalleresPage() {
                       <Badge className="border-slate-200 bg-slate-100 text-slate-600">{o.solicitud.camioneta.patente}</Badge>
                     </div>
                     <div className="mt-1 text-xs text-[var(--vl-text-muted)]">{o.solicitud.falla}</div>
+                    {isOps(rol) && (
+                      <div className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
+                        {[otEmpresaNombre(o), otTallerNombre(o)].filter(Boolean).join(" · ") || "—"}
+                      </div>
+                    )}
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                       <span>{o.cerradaAt ? "Cerrada" : OT_STEPS[o.currentStep]?.label}</span>
                       {o.urgente && <span className="rounded bg-red-100 px-1.5 text-red-800 dark:bg-red-950 dark:text-red-200">Urgente</span>}

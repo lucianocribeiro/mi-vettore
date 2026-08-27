@@ -114,6 +114,9 @@ export function M5FichaPage() {
   const [unitFilters, setUnitFilters] =
     useState<FlotaUnitFilters>(EMPTY_FLOTA_FILTERS);
   const [choferQuery, setChoferQuery] = useState("");
+  const [choferEstadoFiltro, setChoferEstadoFiltro] = useState<
+    "ACTIVO" | "INACTIVO" | "TODOS"
+  >("ACTIVO");
   const [exportando, setExportando] = useState(false);
   const [form, setForm] = useState<
     | null
@@ -232,7 +235,11 @@ export function M5FichaPage() {
       const [cami, chof, emp, usu, tServ, tall, tallMeta] =
         await Promise.all([
           apiFetch<Camioneta[]>("/api/camionetas", {}, token),
-          apiFetch<Chofer[]>("/api/choferes", {}, token),
+          apiFetch<Chofer[]>(
+            canEdit ? "/api/choferes?incluirBajas=1" : "/api/choferes",
+            {},
+            token
+          ),
           apiFetch<Empresa[]>("/api/empresas", {}, token),
           apiFetch<User[]>("/api/usuarios", {}, token),
           apiFetch<TipoServicio[]>("/api/tipos-servicio", {}, token),
@@ -259,7 +266,7 @@ export function M5FichaPage() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, canEdit]);
 
   useEffect(() => {
     void load();
@@ -837,10 +844,25 @@ export function M5FichaPage() {
     }
   }
 
+  const choferCounts = useMemo(
+    () => ({
+      activos: choferes.filter((c) => c.estado === "ACTIVO").length,
+      inactivos: choferes.filter((c) => c.estado === "INACTIVO").length,
+      todos: choferes.length,
+    }),
+    [choferes]
+  );
+
   const choferesFiltrados = useMemo(() => {
+    let list = choferes;
+    if (choferEstadoFiltro === "ACTIVO") {
+      list = list.filter((c) => c.estado === "ACTIVO");
+    } else if (choferEstadoFiltro === "INACTIVO") {
+      list = list.filter((c) => c.estado === "INACTIVO");
+    }
     const q = choferQuery.trim().toLowerCase();
-    if (!q) return choferes;
-    return choferes.filter((c) => {
+    if (!q) return list;
+    return list.filter((c) => {
       const hay = [
         c.nombre,
         c.dni,
@@ -854,7 +876,7 @@ export function M5FichaPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [choferes, choferQuery]);
+  }, [choferes, choferQuery, choferEstadoFiltro]);
 
   const usuariosFiltrados = useMemo(() => {
     const q = userQuery.trim().toLowerCase();
@@ -1054,7 +1076,44 @@ export function M5FichaPage() {
 
       {!loading && !error && tab === "chofer" && (
         <>
-          <div className="mb-4">
+          <div className="mb-4 space-y-3">
+            {canEdit && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChoferEstadoFiltro("ACTIVO")}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                    choferEstadoFiltro === "ACTIVO"
+                      ? "border-emerald-600 bg-emerald-500/20 text-emerald-900 dark:border-emerald-400 dark:text-emerald-100"
+                      : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                  }`}
+                >
+                  Activos ({choferCounts.activos})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChoferEstadoFiltro("INACTIVO")}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                    choferEstadoFiltro === "INACTIVO"
+                      ? "border-slate-600 bg-slate-500/20 text-slate-900 dark:border-slate-400 dark:text-slate-100"
+                      : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                  }`}
+                >
+                  Baja / inactivos ({choferCounts.inactivos})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChoferEstadoFiltro("TODOS")}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                    choferEstadoFiltro === "TODOS"
+                      ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                      : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                  }`}
+                >
+                  Todos ({choferCounts.todos})
+                </button>
+              </div>
+            )}
             <input
               type="search"
               value={choferQuery}
@@ -1062,8 +1121,13 @@ export function M5FichaPage() {
               placeholder="Buscar chofer por nombre, DNI, CUIL…"
               className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
             />
-            <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-              Mostrando {choferesFiltrados.length} de {choferes.length}
+            <p className="text-[11px] text-[var(--vl-text-muted)]">
+              Mostrando {choferesFiltrados.length}
+              {choferEstadoFiltro === "TODOS"
+                ? ` de ${choferCounts.todos}`
+                : choferEstadoFiltro === "ACTIVO"
+                  ? ` activo${choferesFiltrados.length === 1 ? "" : "s"}`
+                  : ` en baja / inactivo${choferesFiltrados.length === 1 ? "" : "s"}`}
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1084,7 +1148,7 @@ export function M5FichaPage() {
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>
-                    {c.estado.toLowerCase()}
+                    {c.estado === "INACTIVO" ? "Baja" : "Activo"}
                   </Badge>
                   {whatsappDigits(c.telefono) && (
                     <a
