@@ -274,7 +274,7 @@ export function DocumentacionPage() {
             placeholder={
               tab === "unidades"
                 ? "Buscar unidad: patente, empresa…"
-                : "Buscar chofer: nombre, DNI, patente…"
+                : "Buscar chofer: nombre o DNI…"
             }
             autoComplete="off"
             className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] py-2 pl-9 pr-9 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
@@ -488,7 +488,6 @@ export function DocumentacionPage() {
               </p>
             ) : (
               filteredChoferes.map((c) => {
-                const asg = currentChoferAsignacion(c);
                 const active = selectedChofer === c.id;
                 // Ops, el propio chofer, o empresa de transporte sobre su flota
                 const canVerPanel =
@@ -511,17 +510,11 @@ export function DocumentacionPage() {
                           : "border-[var(--vl-card-border)]"
                       }`}
                     >
-                      <div className="text-[11px] text-[var(--vl-text-muted)]">
-                        {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
-                        {asg?.camioneta?.patente
-                          ? ` · ${asg.camioneta.patente}`
-                          : ""}
-                        {asg?.empresa?.nombre
-                          ? ` · ${asg.empresa.nombre}`
-                          : ""}
-                      </div>
-                      <div className="mt-1 font-semibold text-[var(--vl-heading)]">
+                      <div className="font-semibold text-[var(--vl-heading)]">
                         {c.nombre}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                        {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
                       </div>
                     </button>
                   </Fragment>
