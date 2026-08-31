@@ -44,11 +44,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return saved === "EMPRESA" ? "EMPRESA" : "CHOFER";
   });
 
-  const setContextoAcceso = useCallback((c: ContextoAcceso) => {
-    localStorage.setItem(CONTEXTO_ACCESO_KEY, c);
-    setContextoAccesoState(c);
-    window.dispatchEvent(new CustomEvent("vettore-contexto-change", { detail: c }));
-  }, []);
+  const setContextoAcceso = useCallback(
+    (c: ContextoAcceso) => {
+      if (c === "EMPRESA" && user && !user.esDuenoFlota) return;
+      localStorage.setItem(CONTEXTO_ACCESO_KEY, c);
+      setContextoAccesoState(c);
+      window.dispatchEvent(
+        new CustomEvent("vettore-contexto-change", { detail: c })
+      );
+    },
+    [user]
+  );
+
+  useEffect(() => {
+    if (user && !user.esDuenoFlota && contextoAcceso === "EMPRESA") {
+      localStorage.setItem(CONTEXTO_ACCESO_KEY, "CHOFER");
+      setContextoAccesoState("CHOFER");
+    }
+  }, [user, contextoAcceso]);
 
   const refreshMe = useCallback(async () => {
     if (!token) {
@@ -59,6 +72,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await apiFetch<{ user: User }>("/api/auth/me", {}, token);
       setUser(data.user);
+      if (!data.user.esDuenoFlota) {
+        localStorage.setItem(CONTEXTO_ACCESO_KEY, "CHOFER");
+        setContextoAccesoState("CHOFER");
+      }
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         logout();
@@ -83,6 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(TOKEN_KEY, data.token);
     setToken(data.token);
     setUser(data.user);
+    if (!data.user.esDuenoFlota) {
+      localStorage.setItem(CONTEXTO_ACCESO_KEY, "CHOFER");
+      setContextoAccesoState("CHOFER");
+    }
     return data.user;
   }, []);
 

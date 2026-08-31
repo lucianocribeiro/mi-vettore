@@ -178,8 +178,12 @@ export function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      if (contexto) setContextoAcceso(contexto);
-      await login(nextEmail.trim(), nextPassword);
+      const logged = await login(nextEmail.trim(), nextPassword);
+      if (contexto === "EMPRESA" && logged.esDuenoFlota) {
+        setContextoAcceso("EMPRESA");
+      } else {
+        setContextoAcceso("CHOFER");
+      }
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "No se pudo iniciar sesión"
