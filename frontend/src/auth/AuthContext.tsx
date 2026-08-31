@@ -47,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setContextoAcceso = useCallback((c: ContextoAcceso) => {
     localStorage.setItem(CONTEXTO_ACCESO_KEY, c);
     setContextoAccesoState(c);
+    window.dispatchEvent(new CustomEvent("vettore-contexto-change", { detail: c }));
   }, []);
 
   const refreshMe = useCallback(async () => {

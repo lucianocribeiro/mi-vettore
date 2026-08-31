@@ -286,6 +286,15 @@ export function M7TalleresPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setSelectedId(null);
+    setFilter("todas");
+    setFiltroPatente("");
+    setFiltroEmpresa("");
+    setFiltroTaller("");
+    setFiltroEstado("todas");
+  }, [contextoAcceso]);
+
   const ot = ots.find((o) => o.id === selectedId) ?? ots[0] ?? null;
   useEffect(() => {
     if (ot && !selectedId) setSelectedId(ot.id);

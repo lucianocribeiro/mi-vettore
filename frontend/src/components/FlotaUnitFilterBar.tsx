@@ -1,4 +1,4 @@
-import { currentAsignacion, type Camioneta, type EstadoCamioneta, type TipoTransporte } from "../types";
+import { currentAsignacion, type Camioneta, type EstadoCamioneta, type TipoTransporte, unidadPropietario, unidadTitulo } from "../types";
 
 export type TipoFiltroTransporte = TipoTransporte | "SIN_TIPO";
 
@@ -117,6 +117,8 @@ type Props = {
   hideDetalleUnidad?: boolean;
   empresas?: { id: string; nombre: string }[];
   unidades?: Camioneta[];
+  /** Muestra nombre de unidad + propietario en el selector (en lugar de solo patente). */
+  labelUnidad?: boolean;
 };
 
 export function FlotaUnitFilterBar({
@@ -127,6 +129,7 @@ export function FlotaUnitFilterBar({
   placeholder = "Buscar patente o empresa…",
   hideEstado,
   hideDetalleUnidad,
+  labelUnidad,
   empresas = [],
   unidades = [],
 }: Props) {
@@ -167,12 +170,14 @@ export function FlotaUnitFilterBar({
           value={value.patenteId}
           onChange={(e) => onChange({ ...value, patenteId: e.target.value })}
           className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-          aria-label="Patente"
+          aria-label={labelUnidad ? "Unidad" : "Patente"}
         >
-          <option value="">Patente…</option>
+          <option value="">{labelUnidad ? "Unidad…" : "Patente…"}</option>
           {patentes.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.patente}
+              {labelUnidad
+                ? `${unidadTitulo(c)} · ${unidadPropietario(c)}`
+                : c.patente}
             </option>
           ))}
         </select>

@@ -13,6 +13,8 @@ import {
   formatDate,
   isInternalOps,
   toInputDate,
+  unidadPropietario,
+  unidadTitulo,
   type Camioneta,
 } from "../../types";
 import { Download, X } from "../../components/icons";
@@ -59,7 +61,7 @@ const CARD_TINT: Record<AlertLevel, string> = {
 
 /** M6 — panel de tarjetas: km / aceite + colores por vencimiento. */
 export function M6MantenimientoPage() {
-  const { token, user } = useAuth();
+  const { token, user, contextoAcceso } = useAuth();
   const esDueno = !!user?.esDuenoFlota;
   const esChoferRol = user?.rol === "CHOFER";
 
@@ -94,16 +96,18 @@ export function M6MantenimientoPage() {
     if (!token) return;
     setLoading(true);
     setError(null);
+    setUnitFilters(EMPTY_FLOTA_FILTERS);
+    setSelectedId(null);
     try {
       const items = await apiFetch<Camioneta[]>("/api/camionetas", {}, token);
       setCamionetas(items);
-      if (items.length === 1) setSelectedId(items[0].id);
+      setSelectedId(items.length === 1 ? items[0].id : null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar flota");
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, contextoAcceso]);
 
   useEffect(() => {
     void load();
@@ -267,6 +271,8 @@ export function M6MantenimientoPage() {
             shown={filtradas.length}
             hideEstado={!isInternalOps(user?.rol)}
             hideDetalleUnidad
+            labelUnidad={esChoferRol || esDueno}
+            placeholder="Buscar unidad o empresa…"
             empresas={[
               ...new Map(
                 camionetas
@@ -341,15 +347,13 @@ export function M6MantenimientoPage() {
                       <div className="mt-3 flex items-start justify-between gap-2 border-t border-[var(--vl-card-border)] pt-3">
                         <div className="min-w-0">
                           <div className="truncate text-lg font-bold text-[var(--vl-heading)]">
-                            {c.patente}
+                            {unidadTitulo(c)}
                           </div>
-                          <div className="mt-0.5 text-xs text-[var(--vl-text-muted)]">
-                            {c.equipoFrio ||
-                              c.tipoTransporte
-                                ?.replace(/_/g, " ")
-                                .toLowerCase() ||
-                              c.datosTecnicos ||
-                              "Sin clasificación"}
+                          <div className="mt-0.5 text-xs font-medium text-[var(--vl-text)]">
+                            {unidadPropietario(c)}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                            Patente {c.patente}
                           </div>
                         </div>
                         <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
@@ -377,19 +381,22 @@ export function M6MantenimientoPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="truncate text-lg font-bold text-[var(--vl-heading)]">
-                    Actualizar {selected.patente}
+                    {unidadTitulo(selected)}
                   </h2>
                   <Badge className={ESTADO_CAMIONETA_STYLE[selected.estado]}>
                     {selected.estado.replace(/_/g, " ").toLowerCase()}
                   </Badge>
                 </div>
-                <p className="mt-0.5 text-sm text-[var(--vl-text-muted)]">
+                <p className="mt-0.5 text-sm font-medium text-[var(--vl-text)]">
+                  {unidadPropietario(selected)}
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--vl-text-muted)]">
+                  Patente {selected.patente}
                   {[selected.marca, selected.modelo, selected.equipoFrio]
                     .filter(Boolean)
-                    .join(" · ") ||
-                    selected.datosTecnicos ||
-                    selected.tipoTransporte?.replace(/_/g, " ").toLowerCase() ||
-                    "—"}
+                    .length
+                    ? ` · ${[selected.marca, selected.modelo, selected.equipoFrio].filter(Boolean).join(" · ")}`
+                    : ""}
                 </p>
                 <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
                   Precargado el último registro (km y fechas). Confirmá o corregí.

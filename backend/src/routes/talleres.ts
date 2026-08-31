@@ -23,6 +23,10 @@ import { authenticate, type AuthedRequest } from "../middleware/auth.js";
 import { ensureUploadDirs } from "../lib/uploads.js";
 import { isInternalOpsRole } from "../lib/roles.js";
 import {
+  diagnosticoPathFromId,
+} from "../lib/diagnostico-path.js";
+import { queryHistorialReparaciones } from "../lib/historial-reparaciones.js";
+import {
   canAdvanceFromStep,
   canCerrarOt,
   canCreateSolicitud,
@@ -523,12 +527,20 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
           },
         },
         tallerProveedor: true,
-        items: { orderBy: { createdAt: "asc" } },
+        items: {
+          orderBy: { createdAt: "asc" },
+          include: { categoriaDiagnostico: true },
+        },
         facturas: true,
         movimientos: true,
       },
       orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
       take: 300,
+    });
+
+    const cats = await prisma.categoriaDiagnostico.findMany({
+      where: { activo: true },
+      select: { id: true, nombre: true, padreId: true, nivel: true },
     });
 
     const rows = ots.map((ot) => {
@@ -537,12 +549,22 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
       );
       const presupuestoItems = ot.items.filter((i) => i.tipo === "PRESUPUESTO");
       const repuestos = (facturaItems.length ? facturaItems : presupuestoItems).map(
-        (i) => ({
-          descripcion: i.descripcion,
-          importe: i.importe,
-          taller: i.tallerNombre || i.tallerProveedorId || "",
-          tipo: i.tipo,
-        })
+        (i) => {
+          const diag = diagnosticoPathFromId(
+            cats,
+            i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id
+          );
+          return {
+            descripcion: i.descripcion,
+            importe: i.importe,
+            taller: i.tallerNombre || i.tallerProveedorId || "",
+            tipo: i.tipo,
+            reparacion: diag.path,
+            reparacionNivel1: diag.nivel1,
+            reparacionNivel2: diag.nivel2,
+            reparacionNivel3: diag.nivel3,
+          };
+        }
       );
       const tot = otTotales(ot);
       const facturado = tot.facturado > 0 ? tot.facturado : null;
@@ -583,6 +605,7 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
             r.tallerPrincipal ?? "",
             ...r.talleres,
             ...r.repuestos.map((x) => x.descripcion),
+            ...r.repuestos.map((x) => x.reparacion ?? ""),
           ]
             .join(" ")
             .toLowerCase();
@@ -596,6 +619,119 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
     res.status(500).json({ error: "Error al cargar historial de talleres" });
   }
 });
+
+/** Historial por reparación (árbol de diagnóstico nivel 1/2/3 en ítems de OT). */
+router.get("/historial/reparaciones", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso para ver el historial" });
+      return;
+    }
+    const data = await queryHistorialReparaciones({
+      q: String(req.query?.q ?? ""),
+      nivel1: String(req.query?.nivel1 ?? ""),
+      nivel2: String(req.query?.nivel2 ?? ""),
+      nivel3: String(req.query?.nivel3 ?? ""),
+    });
+    res.json({ items: data.items, resumen: data.resumen });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al cargar historial por reparación" });
+  }
+});
+
+router.get(
+  "/historial/reparaciones/export",
+  authenticate,
+  async (req: AuthedRequest, res) => {
+    try {
+      if (!isInternalOpsRole(req.user!.rol)) {
+        res.status(403).json({ error: "Sin permiso para exportar" });
+        return;
+      }
+      const data = await queryHistorialReparaciones({
+        q: String(req.query?.q ?? ""),
+        nivel1: String(req.query?.nivel1 ?? ""),
+        nivel2: String(req.query?.nivel2 ?? ""),
+        nivel3: String(req.query?.nivel3 ?? ""),
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      const detalle = workbook.addWorksheet("Detalle");
+      detalle.columns = [
+        { header: "Nivel 1", key: "n1", width: 18 },
+        { header: "Nivel 2", key: "n2", width: 18 },
+        { header: "Nivel 3", key: "n3", width: 20 },
+        { header: "OT", key: "ot", width: 12 },
+        { header: "Patente", key: "patente", width: 12 },
+        { header: "Fecha", key: "fecha", width: 12 },
+        { header: "Taller", key: "taller", width: 24 },
+        { header: "Descripción", key: "desc", width: 32 },
+        { header: "Importe", key: "importe", width: 14 },
+        { header: "Chofer", key: "chofer", width: 20 },
+        { header: "Falla OT", key: "falla", width: 28 },
+      ];
+      detalle.getRow(1).font = { bold: true };
+      for (const r of data.items) {
+        detalle.addRow({
+          n1: r.reparacionNivel1 ?? "",
+          n2: r.reparacionNivel2 ?? "",
+          n3: r.reparacionNivel3 ?? "",
+          ot: r.numeroOT,
+          patente: r.patente,
+          fecha: r.fecha ? new Date(r.fecha).toISOString().slice(0, 10) : "",
+          taller: r.taller,
+          desc: r.descripcion,
+          importe: r.importe,
+          chofer: r.chofer ?? "",
+          falla: r.falla,
+        });
+      }
+
+      const porTipo = workbook.addWorksheet("Por tipo reparación");
+      porTipo.columns = [
+        { header: "Nivel 1", key: "nombre", width: 28 },
+        { header: "Ítems", key: "count", width: 10 },
+        { header: "Total $", key: "total", width: 16 },
+      ];
+      porTipo.getRow(1).font = { bold: true };
+      for (const r of data.resumen) {
+        porTipo.addRow({
+          nombre: r.nombre,
+          count: r.count,
+          total: r.total,
+        });
+      }
+
+      const porTaller = workbook.addWorksheet("Por taller");
+      porTaller.columns = [
+        { header: "Taller", key: "nombre", width: 32 },
+        { header: "Ítems", key: "count", width: 10 },
+        { header: "Total $", key: "total", width: 16 },
+      ];
+      porTaller.getRow(1).font = { bold: true };
+      for (const r of data.resumenTaller) {
+        porTaller.addRow({
+          nombre: r.nombre,
+          count: r.count,
+          total: r.total,
+        });
+      }
+
+      const filename = `historial_reparaciones_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al exportar historial por reparación" });
+    }
+  }
+);
 
 router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
   try {

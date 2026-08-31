@@ -388,6 +388,25 @@ export function currentChoferAsignacion(chofer: Chofer): AsignacionFlota | null 
   return list.find((a) => !a.periodoHasta) ?? list[0] ?? null;
 }
 
+/** Nombre visible de la unidad (marca/modelo, equipo, etc.) — no patente. */
+export function unidadTitulo(c: Camioneta): string {
+  const marcaModelo = [c.marca, c.modelo].filter(Boolean).join(" ").trim();
+  return (
+    marcaModelo ||
+    c.equipoFrio ||
+    c.datosTecnicos ||
+    c.tipoTransporte?.replace(/_/g, " ").toLowerCase() ||
+    c.tipoServicio?.nombre ||
+    "Unidad"
+  );
+}
+
+/** Propietario / empresa de transporte de la unidad. */
+export function unidadPropietario(c: Camioneta): string {
+  const asg = currentAsignacion(c);
+  return c.empresa?.nombre ?? asg?.empresa?.nombre ?? "Sin propietario";
+}
+
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const dateOnly = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.\d+)?Z)?$/.exec(

@@ -285,10 +285,7 @@ export function Sidebar({ open, onClose }: Props) {
           <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg bg-[#0b182c] p-1">
             <button
               type="button"
-              onClick={() => {
-                setContextoAcceso("CHOFER");
-                window.location.reload();
-              }}
+              onClick={() => setContextoAcceso("CHOFER")}
               className={`rounded-md px-2 py-1.5 text-[10px] font-semibold ${
                 contextoAcceso === "CHOFER"
                   ? "bg-[#1e4080] text-white"
@@ -299,10 +296,7 @@ export function Sidebar({ open, onClose }: Props) {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setContextoAcceso("EMPRESA");
-                window.location.reload();
-              }}
+              onClick={() => setContextoAcceso("EMPRESA")}
               className={`rounded-md px-2 py-1.5 text-[10px] font-semibold ${
                 contextoAcceso === "EMPRESA"
                   ? "bg-[#1e4080] text-white"

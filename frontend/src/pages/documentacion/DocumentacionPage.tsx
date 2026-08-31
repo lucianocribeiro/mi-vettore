@@ -89,7 +89,7 @@ function matchesVencimiento(
 }
 
 export function DocumentacionPage() {
-  const { token, user } = useAuth();
+  const { token, user, contextoAcceso } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") ?? "";
   const [tab, setTab] = useState<"unidades" | "choferes">("unidades");
@@ -111,6 +111,8 @@ export function DocumentacionPage() {
 
   const load = useCallback(async () => {
     if (!token) return;
+    setSelectedCam(null);
+    setSelectedChofer(null);
     try {
       const cams = await apiFetch<Camioneta[]>("/api/camionetas", {}, token);
       setCamionetas(cams);
@@ -125,7 +127,7 @@ export function DocumentacionPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar");
     }
-  }, [token, ops, user?.choferId, user?.nombre, user?.esDuenoFlota]);
+  }, [token, ops, user?.choferId, user?.nombre, user?.esDuenoFlota, contextoAcceso]);
 
   useEffect(() => {
     void load();
