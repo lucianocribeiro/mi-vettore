@@ -13,6 +13,7 @@ import {
   currentAsignacion,
   currentChoferAsignacion,
   isInternalOps,
+  unidadPropietario,
   type Camioneta,
   type Chofer,
   type EstadoCamioneta,
@@ -466,6 +467,9 @@ export function DocumentacionPage() {
                     >
                       <div className="font-semibold text-[var(--vl-heading)]">
                         {c.patente}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                        {unidadPropietario(c)}
                       </div>
                     </button>
                     {active && (
