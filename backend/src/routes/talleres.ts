@@ -2234,6 +2234,22 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       where: { id: req.params.itemId },
       data,
     });
+    // Si cambió el importe de un ítem tildado/aprobado, recalcular importe final de la OT.
+    if (req.body?.importe !== undefined || wantsSugerido || wantsAprobado) {
+      const items = await prisma.otItem.findMany({
+        where: { otId: ot.id, tipo: "PRESUPUESTO" },
+        select: { importe: true, sugeridoEmpresa: true, aprobado: true },
+      });
+      const totalSel = items
+        .filter((i) => i.sugeridoEmpresa || i.aprobado)
+        .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0);
+      if (totalSel > 0) {
+        await prisma.ordenTrabajo.update({
+          where: { id: ot.id },
+          data: { valorAprobado: totalSel, montoAutorizado: totalSel },
+        });
+      }
+    }
     res.json(await reloadOt(ot.id, req.user!.id, rol, req));
   } catch (err) {
     console.error(err);

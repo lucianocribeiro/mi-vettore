@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge } from "../../components/Badge";
 import {
@@ -252,6 +252,7 @@ export function M7TalleresPage() {
   const [exportando, setExportando] = useState(false);
   const [comentarioTexto, setComentarioTexto] = useState("");
   const [browseStep, setBrowseStep] = useState<number | null>(null);
+  const [importeDrafts, setImporteDrafts] = useState<Record<string, number>>({});
   const puedeEditarTaller = isOps(rol);
 
   const [inhabilitar, setInhabilitar] = useState(false);
@@ -354,6 +355,7 @@ export function M7TalleresPage() {
     setJustif(ot.incrementoJustificacion ?? "");
     setBrowseStep(null);
     setInhabilitar(!!ot.solicitud?.inhabilitado);
+    setImporteDrafts({});
   }, [ot?.id]);
 
   const displayStep = vistaChofer
@@ -366,7 +368,10 @@ export function M7TalleresPage() {
     : 0;
 
   function replaceOt(updated: OrdenTrabajo) {
-    setOts((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
+    setOts((prev) =>
+      prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o))
+    );
+    setImporteDrafts({});
   }
 
   async function call(path: string, init: RequestInit) {
@@ -399,14 +404,29 @@ export function M7TalleresPage() {
     (i) => i.tipo === "FACTURA" || i.tipo === "RENDICION"
   );
   /** Suma de TODAS las cotizaciones cargadas (sin filtrar por tilde). */
-  const totTodosPresupuestos = itemsPresupuesto.reduce(
-    (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
-    0
-  );
-  /** Solo ítems con el check de aprobación (sugeridoEmpresa). */
+  const totTodosPresupuestos = itemsPresupuesto.reduce((a, i) => {
+    const draft = importeDrafts[i.id];
+    const val =
+      draft !== undefined && Number.isFinite(draft)
+        ? draft
+        : Number.isFinite(i.importe)
+          ? i.importe
+          : 0;
+    return a + val;
+  }, 0);
+  /** Solo ítems tildados (sugerido) o ya aprobados a facturar — con borradores de edición. */
   const totTildados = itemsPresupuesto
-    .filter((i) => i.sugeridoEmpresa === true)
-    .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0);
+    .filter((i) => i.sugeridoEmpresa === true || i.aprobado === true)
+    .reduce((a, i) => {
+      const draft = importeDrafts[i.id];
+      const val =
+        draft !== undefined && Number.isFinite(draft)
+          ? draft
+          : Number.isFinite(i.importe)
+            ? i.importe
+            : 0;
+      return a + val;
+    }, 0);
   const totFacturaReal = itemsFacturaReal.reduce(
     (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
     0
@@ -796,6 +816,9 @@ export function M7TalleresPage() {
                             esEmpresa={
                               !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA")
                             }
+                            puedeEditarImporte={puedeEditarTaller}
+                            importeDrafts={importeDrafts}
+                            setImporteDraft={setImporteDrafts}
                           />
                         )}
 
@@ -804,6 +827,8 @@ export function M7TalleresPage() {
                             ot={ot}
                             token={token!}
                             onSaved={replaceOt}
+                            importeDrafts={importeDrafts}
+                            setImporteDraft={setImporteDrafts}
                           />
                         )}
 
@@ -1134,13 +1159,16 @@ function groupByTaller<T extends { tallerNombre: string; importe: number }>(item
 }
 
 function AprobacionEmpresaChecklist({
-  ot, token, onSaved, soloLecturaEmpresa, esEmpresa,
+  ot, token, onSaved, soloLecturaEmpresa, esEmpresa, puedeEditarImporte, importeDrafts, setImporteDraft,
 }: {
   ot: OrdenTrabajo;
   token: string;
   onSaved: (ot: OrdenTrabajo) => void;
   soloLecturaEmpresa?: boolean;
   esEmpresa?: boolean;
+  puedeEditarImporte?: boolean;
+  importeDrafts: Record<string, number>;
+  setImporteDraft: Dispatch<SetStateAction<Record<string, number>>>;
 }) {
   const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
   const marcados = items.filter((i) => i.sugeridoEmpresa);
@@ -1150,6 +1178,18 @@ function AprobacionEmpresaChecklist({
     const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ sugeridoEmpresa }),
+    }, token);
+    onSaved(updated);
+  }
+
+  async function guardarImporte(id: string) {
+    if (!puedeEditarImporte) return;
+    const draft = importeDrafts[id];
+    if (draft === undefined) return;
+    if (!Number.isFinite(draft) || draft < 0) return;
+    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ importe: draft }),
     }, token);
     onSaved(updated);
   }
@@ -1183,7 +1223,8 @@ function AprobacionEmpresaChecklist({
         </p>
       ) : (
         <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-          Marcá qué presupuestos / talleres aprueba la empresa. No se suman cotizaciones alternativas.
+          Marcá qué presupuestos / talleres aprueba la empresa. Si editás un importe tildado,
+          la referencia presupuestada se actualiza al salir del campo.
         </p>
       )}
       {ot.sugerenciaChofer && (
@@ -1201,7 +1242,7 @@ function AprobacionEmpresaChecklist({
             <thead>
               <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
                 {!soloLecturaEmpresa && <th className="w-8 py-1" />}
-                <th className="py-1">Ítem</th>
+                <th className="py-1">Descripción</th>
                 <th className="py-1">Concepto</th>
                 <th className="py-1 text-right">Importe $</th>
               </tr>
@@ -1229,7 +1270,31 @@ function AprobacionEmpresaChecklist({
                         : CLASIFICACION_LABEL[i.clasificacion]
                       : "—"}
                   </td>
-                  <td className="py-1 text-right">{money(i.importe)}</td>
+                  <td className="py-1 text-right">
+                    {puedeEditarImporte ? (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="min-h-10 w-32 rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1 text-right text-sm font-medium"
+                        value={
+                          importeDrafts[i.id] !== undefined
+                            ? String(importeDrafts[i.id])
+                            : String(i.importe)
+                        }
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          setImporteDraft((prev) => ({
+                            ...prev,
+                            [i.id]: e.target.value === "" ? NaN : n,
+                          }));
+                        }}
+                        onBlur={() => void guardarImporte(i.id)}
+                      />
+                    ) : (
+                      money(i.importe)
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1335,16 +1400,22 @@ function ConceptoCascada({
 }
 
 function PresupuestoChecklist({
-  ot, token, onSaved,
+  ot, token, onSaved, importeDrafts, setImporteDraft,
 }: {
   ot: OrdenTrabajo;
   token: string;
   onSaved: (ot: OrdenTrabajo) => void;
+  importeDrafts: Record<string, number>;
+  setImporteDraft: Dispatch<SetStateAction<Record<string, number>>>;
 }) {
   const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
   const marcados = items.filter((i) => i.aprobado);
-  const total = marcados.reduce((a, i) => a + i.importe, 0);
-  const [editImp, setEditImp] = useState<Record<string, string>>({});
+  const total = marcados.reduce((a, i) => {
+    const draft = importeDrafts[i.id];
+    const val =
+      draft !== undefined && Number.isFinite(draft) ? draft : i.importe;
+    return a + val;
+  }, 0);
   const [cats, setCats] = useState<CatDiag[]>([]);
 
   useEffect(() => {
@@ -1362,20 +1433,14 @@ function PresupuestoChecklist({
   }
 
   async function guardarImporte(id: string) {
-    const raw = editImp[id];
-    if (raw === undefined) return;
-    const importe = Number(raw);
-    if (!Number.isFinite(importe) || importe < 0) return;
+    const draft = importeDrafts[id];
+    if (draft === undefined) return;
+    if (!Number.isFinite(draft) || draft < 0) return;
     const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ importe }),
+      body: JSON.stringify({ importe: draft }),
     }, token);
     onSaved(updated);
-    setEditImp((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
   }
 
   async function setConcepto(id: string, categoriaDiagnosticoId: string | null) {
@@ -1402,8 +1467,7 @@ function PresupuestoChecklist({
       </div>
       <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
         Marcá qué ítems se aprueban y, si hace falta, editá el importe facturado
-        y el concepto (3 niveles). No se suma el total de cotizaciones
-        alternativas.
+        y el concepto (3 niveles). Al cambiar el importe, la referencia presupuestada se actualiza.
       </p>
       {groupByTaller(items).map((g) => (
         <div key={g.nombre} className="mb-3">
@@ -1415,7 +1479,7 @@ function PresupuestoChecklist({
             <thead>
               <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
                 <th className="w-8 py-1" />
-                <th className="py-1">Ítem</th>
+                <th className="py-1">Descripción</th>
                 <th className="py-1 text-right">Facturado $</th>
               </tr>
             </thead>
@@ -1451,10 +1515,18 @@ function PresupuestoChecklist({
                       min={0}
                       step="0.01"
                       className="min-h-11 w-32 rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-right text-base font-medium"
-                      value={editImp[i.id] ?? String(i.importe)}
-                      onChange={(e) =>
-                        setEditImp((prev) => ({ ...prev, [i.id]: e.target.value }))
+                      value={
+                        importeDrafts[i.id] !== undefined
+                          ? String(importeDrafts[i.id])
+                          : String(i.importe)
                       }
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        setImporteDraft((prev) => ({
+                          ...prev,
+                          [i.id]: e.target.value === "" ? NaN : n,
+                        }));
+                      }}
                       onBlur={() => void guardarImporte(i.id)}
                     />
                   </td>
