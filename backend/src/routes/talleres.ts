@@ -1597,6 +1597,8 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       const tot = otTotales(ot);
       const sinPresu = ot.sinPresupuesto || tot.presupuestoTodos <= 0;
       extra.sinPresupuesto = sinPresu;
+      // Congela la suma de TODOS los presupuestos cargados (Facturado/gasto fijo).
+      extra.presupuestoMonto = tot.presupuestoTodos > 0 ? tot.presupuestoTodos : null;
       // Sin selección aún: no fijar importe final. Si no hay presupuesto, saltea aprobación.
       if (sinPresu) {
         extra.valorAprobado = null;
@@ -1970,10 +1972,26 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
 });
 
 async function reloadOt(id: string, userId: string, rol: Role, req?: AuthedRequest) {
-  const ot = await prisma.ordenTrabajo.findUnique({
+  let ot = await prisma.ordenTrabajo.findUnique({
     where: { id },
     include: includeOTFor(userId),
   });
+  // Congela suma de todos los presupuestos si ya pasó la carga y aún no estaba guardada.
+  if (
+    ot &&
+    ot.presupuestoMonto == null &&
+    !isAsignacionOPresupuestoStep(ot.currentStep) &&
+    ot.currentStep >= 3
+  ) {
+    const todos = totalPresupuestosCargados(ot.items ?? []);
+    if (todos > 0) {
+      ot = await prisma.ordenTrabajo.update({
+        where: { id },
+        data: { presupuestoMonto: todos },
+        include: includeOTFor(userId),
+      });
+    }
+  }
   const vOpts = req ? await viewerOpts(userId, req) : {};
   return ot ? sanitizeOtForViewer(ot, rol, vOpts) : null;
 }
@@ -2075,6 +2093,20 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
         fecha,
       },
     });
+    if (tipoRaw === "PRESUPUESTO" && isAsignacionOPresupuestoStep(ot.currentStep)) {
+      const items = await prisma.otItem.findMany({
+        where: { otId: ot.id, tipo: "PRESUPUESTO" },
+        select: { importe: true },
+      });
+      const todos = items.reduce(
+        (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
+        0
+      );
+      await prisma.ordenTrabajo.update({
+        where: { id: ot.id },
+        data: { presupuestoMonto: todos > 0 ? todos : null },
+      });
+    }
     res.json(await reloadOt(ot.id, req.user!.id, rol, req));
   } catch (err) {
     console.error(err);
@@ -2235,6 +2267,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       data,
     });
     // Si cambió el importe de un ítem tildado/aprobado, recalcular importe final de la OT.
+    // No tocar presupuestoMonto (Facturado/gasto fijo) fuera de la etapa de carga.
     if (req.body?.importe !== undefined || wantsSugerido || wantsAprobado) {
       const items = await prisma.otItem.findMany({
         where: { otId: ot.id, tipo: "PRESUPUESTO" },
@@ -2243,10 +2276,26 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       const totalSel = items
         .filter((i) => i.sugeridoEmpresa || i.aprobado)
         .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0);
+      const dataOt: { valorAprobado?: number; montoAutorizado?: number; presupuestoMonto?: number | null } =
+        {};
       if (totalSel > 0) {
+        dataOt.valorAprobado = totalSel;
+        dataOt.montoAutorizado = totalSel;
+      }
+      if (
+        req.body?.importe !== undefined &&
+        isAsignacionOPresupuestoStep(ot.currentStep)
+      ) {
+        const todos = items.reduce(
+          (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
+          0
+        );
+        dataOt.presupuestoMonto = todos > 0 ? todos : null;
+      }
+      if (Object.keys(dataOt).length > 0) {
         await prisma.ordenTrabajo.update({
           where: { id: ot.id },
-          data: { valorAprobado: totalSel, montoAutorizado: totalSel },
+          data: dataOt,
         });
       }
     }

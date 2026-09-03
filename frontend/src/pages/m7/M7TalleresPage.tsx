@@ -145,6 +145,8 @@ type OrdenTrabajo = {
   sugerenciaChofer?: string | null;
   sugerenciaArchivo?: string | null;
   montoAutorizado: number | null;
+  /** Suma fija de todos los presupuestos al pactar la carga (no cambia al tildar). */
+  presupuestoMonto?: number | null;
   valorAprobado: number | null;
   valorFinal: number | null;
   incrementoJustificacion: string | null;
@@ -403,7 +405,7 @@ export function M7TalleresPage() {
   const itemsFacturaReal = itemsAll.filter(
     (i) => i.tipo === "FACTURA" || i.tipo === "RENDICION"
   );
-  /** Suma de TODAS las cotizaciones cargadas (sin filtrar por tilde). */
+  /** Suma viva de cotizaciones (solo mientras se cargan). */
   const totTodosPresupuestos = itemsPresupuesto.reduce((a, i) => {
     const draft = importeDrafts[i.id];
     const val =
@@ -414,7 +416,7 @@ export function M7TalleresPage() {
           : 0;
     return a + val;
   }, 0);
-  /** Solo ítems tildados (sugerido) o ya aprobados a facturar — con borradores de edición. */
+  /** Solo ítems tildados — cambia al marcar / editar. */
   const totTildados = itemsPresupuesto
     .filter((i) => i.sugeridoEmpresa === true || i.aprobado === true)
     .reduce((a, i) => {
@@ -431,12 +433,22 @@ export function M7TalleresPage() {
     (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
     0
   );
-  /** Arriba: factura real si existe; si no, TODO el presupuesto cargado. */
-  const totFacturadoOCargado =
-    totFacturaReal > 0 ? totFacturaReal : totTodosPresupuestos;
-  /** Compat: incremento / otros bloques que usan totP / totF */
+  /**
+   * Facturado/gasto: fijo una vez pactada la carga de presupuestos.
+   * En pasos 1–2 se actualiza en vivo; después usa presupuestoMonto congelado.
+   * Si ya hay factura real, esa manda.
+   */
+  const cargaPresupuestoAbierta = isAsignacionOPresupuestoStep(ot?.currentStep ?? -1);
+  const totFacturadoFijo =
+    totFacturaReal > 0
+      ? totFacturaReal
+      : cargaPresupuestoAbierta
+        ? totTodosPresupuestos
+        : ot?.presupuestoMonto != null && ot.presupuestoMonto > 0
+          ? ot.presupuestoMonto
+          : totTodosPresupuestos;
   const totP = totTildados > 0 ? totTildados : 0;
-  const totF = totFacturaReal > 0 ? totFacturaReal : totFacturadoOCargado;
+  const totF = totFacturadoFijo;
 
   return (
     <div>
@@ -908,12 +920,14 @@ export function M7TalleresPage() {
                     <div className="rounded-xl border p-3">
                       <div className="text-xs text-[var(--vl-text-muted)]">Facturado / gasto</div>
                       <div className="text-base font-bold">
-                        {totFacturadoOCargado > 0 ? money(totFacturadoOCargado) : "—"}
+                        {totFacturadoFijo > 0 ? money(totFacturadoFijo) : "—"}
                       </div>
                       <p className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
                         {totFacturaReal > 0
                           ? "Gasto / factura cargada"
-                          : "Suma de todos los presupuestos cargados"}
+                          : cargaPresupuestoAbierta
+                            ? "Suma de todos los presupuestos (se fija al Continuar)"
+                            : "Suma fija de todos los presupuestos pactados"}
                       </p>
                       <div className="mt-3 border-t border-[var(--vl-card-border)] pt-3">
                         <div className="text-sm font-semibold text-[var(--vl-heading)]">
@@ -923,7 +937,7 @@ export function M7TalleresPage() {
                           {totTildados > 0 ? money(totTildados) : "—"}
                         </div>
                         <p className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
-                          Solo lo marcado con el check · importe final al continuar
+                          Cambia al tildar o editar · se compara con lo facturado
                         </p>
                       </div>
                     </div>
