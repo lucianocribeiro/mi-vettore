@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { AppLogo } from "../components/AppLogo";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { apiFetch, ApiError } from "../lib/api";
+import { homePathForUser } from "../lib/homePath";
 import { ROLE_LABELS, type Role } from "../types";
 
 const DEMO_PASSWORD = "vettore123";
@@ -160,7 +161,7 @@ export function LoginPage() {
   }, [pool, choferQuery]);
 
   if (!loading && user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={homePathForUser(user)} replace />;
   }
 
   async function doLogin(

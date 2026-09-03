@@ -10,7 +10,7 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-  CREATE TYPE "TipoDocumento" AS ENUM ('DNI_FRENTE', 'DNI_DORSO', 'LICENCIA', 'HABILITACION_MANIPULACION', 'VTV', 'SENASA', 'SEGURO');
+  CREATE TYPE "TipoDocumento" AS ENUM ('DNI_FRENTE', 'DNI_DORSO', 'LICENCIA', 'HABILITACION_MANIPULACION', 'VTV', 'SENASA', 'SEGURO', 'CEDULA');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -186,4 +186,11 @@ DO $$ BEGIN
   ALTER TABLE "CorreccionAdmin" ADD CONSTRAINT "CorreccionAdmin_userId_fkey"
     FOREIGN KEY ("userId") REFERENCES "Usuario"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- Cédula como documento de unidad
+DO $$ BEGIN
+  ALTER TYPE "TipoDocumento" ADD VALUE 'CEDULA';
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
 END $$;

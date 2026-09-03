@@ -40,6 +40,7 @@ const CON_VENCIMIENTO = new Set<TipoDocumento>([
   TipoDocumento.VTV,
   TipoDocumento.SENASA,
   TipoDocumento.SEGURO,
+  TipoDocumento.CEDULA,
 ]);
 
 const TIPOS_CHOFER = new Set<TipoDocumento>([
@@ -53,6 +54,7 @@ const TIPOS_UNIDAD = new Set<TipoDocumento>([
   TipoDocumento.VTV,
   TipoDocumento.SENASA,
   TipoDocumento.SEGURO,
+  TipoDocumento.CEDULA,
 ]);
 
 function parseTipo(raw: unknown): TipoDocumento | null {
@@ -176,7 +178,7 @@ router.post(
       if (camionetaId && !TIPOS_UNIDAD.has(tipo)) {
         res.status(400).json({
           error:
-            "En unidad solo se carga VTV, SENASA o seguro",
+            "En unidad solo se carga VTV, SENASA, seguro o cédula",
         });
         return;
       }

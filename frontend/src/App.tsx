@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { AppLayout } from "./components/AppLayout";
+import { AppLogo } from "./components/AppLogo";
+import { homePathForUser } from "./lib/homePath";
 import { LoginPage } from "./pages/LoginPage";
 import { M4AlertasPage } from "./pages/m4/M4AlertasPage";
 import { M5FichaPage } from "./pages/m5/M5FichaPage";
@@ -13,12 +15,26 @@ import { HistorialTalleresPage } from "./pages/m7/HistorialTalleresPage";
 import { DocumentacionPage } from "./pages/documentacion/DocumentacionPage";
 import { SugerenciasPage } from "./pages/SugerenciasPage";
 
-function HomeRedirect() {
-  const { user } = useAuth();
-  if (user?.rol === "SUGERENCIAS") return <Navigate to="/sugerencias" replace />;
-  if (user?.rol === "CLIENTE") return <Navigate to="/login" replace />;
-  if (user?.rol === "CHOFER") return <Navigate to={user.esDuenoFlota ? "/documentacion" : "/m7"} replace />;
-  return <Navigate to="/m7" replace />;
+function RootEntry() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-[var(--vl-page)] text-sm text-[var(--vl-text-muted)]">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--vl-sidebar)]">
+          <AppLogo size={30} />
+        </div>
+        Cargando…
+      </div>
+    );
+  }
+
+  // Entrar al link raíz siempre manda al login si no hay sesión.
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to={homePathForUser(user)} replace />;
 }
 
 /** Rol SUGERENCIAS solo puede estar en /sugerencias. */
@@ -35,9 +51,9 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<RootEntry />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
-            <Route index element={<HomeRedirect />} />
             <Route path="/m1" element={<Navigate to="/" replace />} />
             <Route path="/m2" element={<Navigate to="/" replace />} />
             <Route
@@ -99,7 +115,8 @@ export default function App() {
             <Route path="/sugerencias" element={<SugerenciasPage />} />
           </Route>
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Cualquier otra URL sin sesión → login */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </AuthProvider>
   );

@@ -104,6 +104,7 @@ enum TipoDocumento {
   VTV
   SENASA
   SEGURO
+  CEDULA
 }
 
 enum EstadoValidacionDoc {

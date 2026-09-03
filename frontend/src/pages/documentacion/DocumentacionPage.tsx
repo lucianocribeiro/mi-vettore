@@ -230,7 +230,7 @@ export function DocumentacionPage() {
       </h1>
       <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
         {ops
-          ? "Chofer: DNI, licencia y habilitación de alimentos. Unidad: VTV, SENASA y seguro. La documentación de empleados de empresas tercerizadas la carga administración (Pablo/Silvina)."
+          ? "Chofer: DNI, licencia y habilitación de alimentos. Unidad: VTV, SENASA, seguro y cédula. La documentación de empleados de empresas tercerizadas la carga administración (Pablo/Silvina)."
           : user?.esDuenoFlota
             ? "Como empresa de transporte podés ver y cargar la documentación de tus choferes y de tus unidades."
             : "Podés cargar tu DNI y licencia, y los documentos de tu unidad. La ficha de otros choferes la carga Vettore."}

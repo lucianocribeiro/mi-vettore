@@ -124,7 +124,8 @@ export type TipoDocumento =
   | "HABILITACION_MANIPULACION"
   | "VTV"
   | "SENASA"
-  | "SEGURO";
+  | "SEGURO"
+  | "CEDULA";
 
 export type EstadoValidacionDoc = "PENDIENTE" | "VALIDADO" | "RECHAZADO";
 
@@ -134,6 +135,7 @@ export const TIPOS_DOCUMENTO_CON_VENCIMIENTO: TipoDocumento[] = [
   "VTV",
   "SENASA",
   "SEGURO",
+  "CEDULA",
 ];
 
 export const TIPOS_DOCUMENTO_CHOFER: TipoDocumento[] = [
@@ -147,6 +149,7 @@ export const TIPOS_DOCUMENTO_UNIDAD: TipoDocumento[] = [
   "VTV",
   "SENASA",
   "SEGURO",
+  "CEDULA",
 ];
 
 export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
@@ -157,6 +160,7 @@ export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
   VTV: "VTV",
   SENASA: "SENASA",
   SEGURO: "Seguro",
+  CEDULA: "Cédula",
 };
 
 export const TIPO_TALLER_LABEL: Record<TipoTaller, string> = {
