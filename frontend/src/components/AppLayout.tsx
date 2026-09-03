@@ -177,6 +177,9 @@ function SugerenciaModal({
             <X size={18} />
           </button>
         </div>
+        <p className="mb-3 text-xs text-[var(--vl-text-muted)]">
+          Disponible para choferes y empresas de transporte (y todo el equipo).
+        </p>
 
         {sent ? (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">

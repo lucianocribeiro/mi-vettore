@@ -43,7 +43,7 @@ const OT_STEPS = [
   { code: "solicitud", label: "Solicitud", owner: null as string | null, detail: "Se reporta la unidad (patente), el problema y si puede circular." },
   { code: "asignacion", label: "Asignación y presupuesto", owner: "Facu / Silvina", detail: "Asigná taller, cargá presupuestos e inhabilitá la unidad si hace falta (solo Vettore)." },
   { code: "presupuesto", label: "Asignación y presupuesto", owner: "Facu / Silvina", detail: "Asigná taller y cargá presupuestos. Guardá sin necesidad de Continuar." },
-  { code: "aprobacion_empresa", label: "Aprobación empresa", owner: "Empresa de transporte", detail: "La empresa ve los presupuestos y sugiere dónde reparar por comentario. No edita montos." },
+  { code: "aprobacion_empresa", label: "Aprobación empresa", owner: "Empresa de transporte", detail: "La empresa ve montos y sugiere dónde reparar por comentario. El chofer no ve montos; ambos pueden enviar sugerencias." },
   { code: "facturacion", label: "Facturación", owner: "Facu / Silvina", detail: "Marcá a facturar, editá importe y asigná concepto (3 niveles)." },
   { code: "incremento", label: "Incremento", owner: "Ops", detail: "Solo si el gasto supera lo presupuestado. Cualquier usuario interno puede confirmar." },
   { code: "cierre", label: "Cierre", owner: "Facu / Silvina / Carla", detail: "Cerrar OT, reporte de salida y cuenta corriente del proveedor." },
@@ -82,11 +82,11 @@ function roleActionHint(
   opts?: { esDuenoEmpresa?: boolean }
 ): string {
   if (opts?.esDuenoEmpresa) {
-    return "Tu rol: ves las solicitudes de tu flota, aprobás en comentario y seguís el estado.";
+    return "Tu rol: ves montos de tu flota, sugerís por comentario y podés enviar sugerencias. No editás presupuestos.";
   }
   switch (rol) {
     case "CHOFER":
-      return "Tu rol: crear solicitudes y seguir el estado. Una vez enviada, solo ves el progreso.";
+      return "Tu rol: crear solicitudes y seguir el avance (sin montos). Podés comentar y enviar sugerencias.";
     case "FACU":
     case "SILVINA":
       return "Tu rol: asignación, presupuesto, facturación y cierre (mismos permisos Facu/Silvina).";
@@ -632,7 +632,9 @@ export function M7TalleresPage() {
                             Solo lectura · sin montos
                           </p>
                           <p className="mt-1 text-xs text-[var(--vl-text-muted)]">
-                            Podés avanzar y volver para ver qué pasó en cada etapa.
+                            Podés avanzar y volver para ver cada etapa. Los importes no se muestran
+                            a choferes (la empresa de transporte sí los ve). Podés dejar un
+                            comentario o usar el botón «Sugerencia».
                             Etapa real de la OT:{" "}
                             <strong>
                               {ot.cerradaAt
@@ -1104,7 +1106,7 @@ function ComentariosOt({
         rows={2}
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
-        placeholder="Escribí un comentario…"
+        placeholder="Sugerencia o comentario…"
         className="w-full rounded-md border border-[var(--vl-card-border)] p-2 text-sm"
       />
       <button
@@ -1113,7 +1115,7 @@ function ComentariosOt({
         onClick={() => void enviar()}
         className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
       >
-        Enviar comentario
+        Enviar sugerencia
       </button>
     </div>
   );
@@ -1175,8 +1177,9 @@ function AprobacionEmpresaChecklist({
       </div>
       {esEmpresa ? (
         <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-          Solo lectura de montos. Para sugerir taller o reparación, usá un{" "}
-          <strong className="text-red-700 dark:text-red-300">comentario</strong> (queda marcado en rojo).
+          Ves los montos. No los editás: para sugerir taller o reparación usá un{" "}
+          <strong className="text-red-700 dark:text-red-300">comentario</strong>{" "}
+          (queda marcado en rojo) o el botón «Sugerencia».
         </p>
       ) : (
         <p className="mb-2 text-xs text-[var(--vl-text-muted)]">

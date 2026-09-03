@@ -126,8 +126,9 @@ export function SugerenciasPage() {
           </h1>
         </div>
         <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-          Comentarios enviados desde el botón flotante «Sugerencia» (cualquier
-          usuario). Marcá cada una como pendiente o hecho.
+          Comentarios del botón flotante «Sugerencia»: choferes, empresas de
+          transporte y el resto del equipo pueden enviar. Marcá cada una como
+          pendiente o hecho.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button

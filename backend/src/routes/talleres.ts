@@ -249,8 +249,7 @@ function otTotales(ot: {
   return { presupuesto, facturado, presupuestoTodos };
 }
 
-/** Chofer ve totales + comentarios + ítems de presupuesto (solo lectura).
- *  Dueño en contexto EMPRESA ve el detalle completo. */
+/** Chofer: sin montos. Dueño en contexto EMPRESA ve importes completos. */
 function sanitizeOtForViewer<T extends OtLoaded>(
   ot: T,
   rol: Role,
@@ -260,7 +259,13 @@ function sanitizeOtForViewer<T extends OtLoaded>(
   if (rol !== "CHOFER" || opts?.esDuenoEmpresa) {
     return { ...ot, totales };
   }
-  const itemsPresupuesto = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
+  const itemsPresupuesto = (ot.items ?? [])
+    .filter((i) => i.tipo === "PRESUPUESTO")
+    .map((i) => ({
+      ...i,
+      importe: 0,
+      observacion: null,
+    }));
   return {
     id: ot.id,
     numeroOT: ot.numeroOT,
@@ -275,11 +280,11 @@ function sanitizeOtForViewer<T extends OtLoaded>(
     solicitud: ot.solicitud,
     diagnosticos: ot.diagnosticos,
     comentarios: ot.comentarios,
-    totales,
+    totales: { presupuesto: 0, facturado: 0, presupuestoTodos: 0 },
     sinPresupuesto: ot.sinPresupuesto,
     resumenChofer: {
-      presupuestoTotal: totales.presupuesto,
-      gastoReal: totales.facturado,
+      presupuestoTotal: null as number | null,
+      gastoReal: null as number | null,
     },
     items: itemsPresupuesto,
     facturas: [] as T["facturas"],
@@ -288,6 +293,9 @@ function sanitizeOtForViewer<T extends OtLoaded>(
     auditorias: [] as T["auditorias"],
     incrementoJustificacion: null,
     tallerProveedor: null,
+    valorAprobado: null,
+    montoAutorizado: null,
+    valorFinal: null,
   };
 }
 
