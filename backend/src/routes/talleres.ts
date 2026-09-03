@@ -1870,7 +1870,9 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
       return;
     }
     const scope = await choferScope(req.user!.id);
-    if (scope) {
+    const vOpts = await viewerOpts(req.user!.id, req);
+    // Chofer regular no retrocede; dueño flota (EMPRESA) sí puede volver etapas.
+    if (scope && !vOpts.esDuenoEmpresa) {
       res.status(403).json({ error: "El chofer no retrocede etapas de la OT" });
       return;
     }
@@ -1887,8 +1889,9 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
     const overrideComentario = parseOverrideComentario(req.body);
     const indicated =
       canAdvanceFromStep(rol, ot.currentStep) ||
-      (isCierreStep(ot.currentStep) && canCerrarOt(rol));
-    if (!canRetreat(rol)) {
+      (isCierreStep(ot.currentStep) && canCerrarOt(rol)) ||
+      vOpts.esDuenoEmpresa;
+    if (!canRetreat(rol) && !vOpts.esDuenoEmpresa) {
       res.status(403).json({ error: "Sin permiso para retroceder" });
       return;
     }

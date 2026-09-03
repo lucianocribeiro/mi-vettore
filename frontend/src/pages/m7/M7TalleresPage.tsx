@@ -245,13 +245,12 @@ export function M7TalleresPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [filtroPatente, setFiltroPatente] = useState("");
-  const [filtroEmpresa, setFiltroEmpresa] = useState("");
-  const [filtroTaller, setFiltroTaller] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState<"abierta" | "cerrada">("abierta");
   const [talleres, setTalleres] = useState<TallerProveedor[]>([]);
   const [tipoTallerFiltro, setTipoTallerFiltro] = useState("");
   const [exportando, setExportando] = useState(false);
   const [comentarioTexto, setComentarioTexto] = useState("");
+  const puedeEditarTaller = isOps(rol);
 
   const [tallerId, setTallerId] = useState("");
   const [inhabilitar, setInhabilitar] = useState(false);
@@ -288,13 +287,43 @@ export function M7TalleresPage() {
 
   useEffect(() => {
     setSelectedId(null);
-    setFiltroPatente("");
-    setFiltroEmpresa("");
-    setFiltroTaller("");
+    setFiltroEstado("abierta");
     setTipoTallerFiltro("");
   }, [contextoAcceso]);
 
-  const ot = ots.find((o) => o.id === selectedId) ?? ots[0] ?? null;
+  function needsMyAction(o: OrdenTrabajo) {
+    if (o.cerradaAt) return false;
+    if (vistaChofer) return false;
+    return canAdvanceFromStep(rol, o.currentStep) || (isCierreStep(o.currentStep) && canCerrarOt(rol));
+  }
+
+  const visibleOts = useMemo(() => {
+    return ots.filter((o) => {
+      if (filtroEstado === "abierta" && o.cerradaAt) return false;
+      if (filtroEstado === "cerrada" && !o.cerradaAt) return false;
+      return true;
+    });
+  }, [ots, filtroEstado]);
+
+  useEffect(() => {
+    if (visibleOts.length === 0) {
+      if (selectedId) setSelectedId(null);
+      return;
+    }
+    if (!visibleOts.some((o) => o.id === selectedId)) {
+      setSelectedId(visibleOts[0].id);
+    }
+  }, [visibleOts, selectedId]);
+
+  const otCounts = useMemo(
+    () => ({
+      abiertas: ots.filter((o) => !o.cerradaAt).length,
+      cerradas: ots.filter((o) => !!o.cerradaAt).length,
+    }),
+    [ots]
+  );
+
+  const ot = visibleOts.find((o) => o.id === selectedId) ?? visibleOts[0] ?? null;
   useEffect(() => {
     if (ot && !selectedId) setSelectedId(ot.id);
   }, [ot, selectedId]);
@@ -304,40 +333,6 @@ export function M7TalleresPage() {
     setTallerId(ot.tallerProveedorId ?? "");
     setJustif(ot.incrementoJustificacion ?? "");
   }, [ot?.id]);
-
-  function needsMyAction(o: OrdenTrabajo) {
-    if (o.cerradaAt) return false;
-    if (vistaChofer) return false;
-    return canAdvanceFromStep(rol, o.currentStep) || (isCierreStep(o.currentStep) && canCerrarOt(rol));
-  }
-
-  const visibleOts = useMemo(() => {
-    const patenteQ = filtroPatente.trim().toLowerCase();
-    const empresaQ = filtroEmpresa.trim().toLowerCase();
-    const tallerQ = filtroTaller.trim().toLowerCase();
-    return ots.filter((o) => {
-      if (
-        patenteQ &&
-        !o.solicitud.camioneta.patente.toLowerCase().includes(patenteQ)
-      ) {
-        return false;
-      }
-      if (empresaQ && !otEmpresaNombre(o).toLowerCase().includes(empresaQ)) {
-        return false;
-      }
-      if (tallerQ && !otTallerNombre(o).toLowerCase().includes(tallerQ)) {
-        return false;
-      }
-      return true;
-    });
-  }, [ots, filtroPatente, filtroEmpresa, filtroTaller]);
-
-  const otCounts = useMemo(
-    () => ({
-      todas: ots.length,
-    }),
-    [ots]
-  );
 
   function replaceOt(updated: OrdenTrabajo) {
     setOts((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
@@ -426,55 +421,34 @@ export function M7TalleresPage() {
             <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
               <div className="space-y-3">
                 <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-2">
-                  <p className="text-[11px] font-semibold text-[var(--vl-text-muted)]">
-                    Órdenes ({otCounts.todas})
-                  </p>
-                  <input
-                    type="search"
-                    value={filtroPatente}
-                    onChange={(e) => setFiltroPatente(e.target.value)}
-                    placeholder="Buscar patente…"
-                    className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
-                  />
-                  {!(user?.esDuenoFlota && contextoAcceso === "EMPRESA") && (
-                    <input
-                      type="search"
-                      value={filtroEmpresa}
-                      onChange={(e) => setFiltroEmpresa(e.target.value)}
-                      placeholder="Buscar empresa de transporte…"
-                      className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
-                    />
-                  )}
-                  {isOps(rol) && (
-                    <input
-                      type="search"
-                      value={filtroTaller}
-                      onChange={(e) => setFiltroTaller(e.target.value)}
-                      placeholder="Buscar taller / proveedor…"
-                      className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
-                    />
-                  )}
-                  {(filtroPatente || filtroEmpresa || filtroTaller) && (
-                    <p className="text-[10px] text-[var(--vl-text-muted)]">
-                      {visibleOts.length} resultado{visibleOts.length === 1 ? "" : "s"}
-                      {" · "}
-                      <button
-                        type="button"
-                        className="underline"
-                        onClick={() => {
-                          setFiltroPatente("");
-                          setFiltroEmpresa("");
-                          setFiltroTaller("");
-                        }}
-                      >
-                        Limpiar filtros
-                      </button>
-                    </p>
-                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setFiltroEstado("abierta")}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        filtroEstado === "abierta"
+                          ? "border-amber-600 bg-amber-500/20 text-amber-900 dark:border-amber-400 dark:text-amber-100"
+                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                      }`}
+                    >
+                      Abiertas ({otCounts.abiertas})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltroEstado("cerrada")}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        filtroEstado === "cerrada"
+                          ? "border-emerald-600 bg-emerald-500/20 text-emerald-900 dark:border-emerald-400 dark:text-emerald-100"
+                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                      }`}
+                    >
+                      Cerradas ({otCounts.cerradas})
+                    </button>
+                  </div>
                 </div>
                 {visibleOts.length === 0 && (
                   <p className="rounded-lg border border-[var(--vl-card-border)] p-3 text-xs text-[var(--vl-text-muted)]">
-                    No hay órdenes con esos filtros.
+                    No hay órdenes {filtroEstado === "abierta" ? "abiertas" : "cerradas"}.
                   </p>
                 )}
                 {visibleOts.map((o) => (
@@ -579,9 +553,21 @@ export function M7TalleresPage() {
 
                         {isAsignacionOPresupuestoStep(ot.currentStep) && (
                           <div className="space-y-3">
-                            <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-3">
+                            {!puedeEditarTaller && (
+                              <div className="rounded-lg border border-slate-300 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200">
+                                <strong>Solo lectura.</strong> No podés editar taller ni presupuestos
+                                (campos en gris). En tu etapa usá Continuar / Volver.
+                              </div>
+                            )}
+                            <div
+                              className={`space-y-2 rounded-lg border border-[var(--vl-card-border)] p-3 ${
+                                !puedeEditarTaller
+                                  ? "bg-slate-50/80 opacity-80 dark:bg-slate-900/40"
+                                  : ""
+                              }`}
+                            >
                               <div className="text-xs font-semibold">Asignación de taller</div>
-                              {isOps(rol) && (
+                              {puedeEditarTaller && (
                                 <label className="text-xs">
                                   Tipo de taller
                                   <select
@@ -597,8 +583,21 @@ export function M7TalleresPage() {
                                 </label>
                               )}
                               <label className="text-xs">Taller
-                                <select className="mt-1 w-full rounded-md border p-2 text-sm" value={tallerId} onChange={(e) => setTallerId(e.target.value)}>
-                                  <option value="">Elegir taller…</option>
+                                <select
+                                  className={`mt-1 w-full rounded-md border p-2 text-sm ${
+                                    !puedeEditarTaller
+                                      ? "cursor-not-allowed bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                                      : ""
+                                  }`}
+                                  value={tallerId}
+                                  disabled={!puedeEditarTaller}
+                                  onChange={(e) => setTallerId(e.target.value)}
+                                >
+                                  <option value="">
+                                    {puedeEditarTaller
+                                      ? "Elegir taller…"
+                                      : ot.tallerAsignado || "Sin taller asignado"}
+                                  </option>
                                   {talleres
                                     .filter((t) => {
                                       if (!tipoTallerFiltro) return true;
@@ -616,33 +615,34 @@ export function M7TalleresPage() {
                                     ))}
                                 </select>
                               </label>
-                              {isOps(rol) && (
+                              {puedeEditarTaller ? (
                                 <label className="flex items-center gap-2 text-sm">
                                   <input type="checkbox" checked={inhabilitar} onChange={(e) => setInhabilitar(e.target.checked)} />
                                   Inhabilitar unidad (fuera de circulación)
                                 </label>
-                              )}
-                              {!isOps(rol) && (
+                              ) : (
                                 <p className="text-[11px] text-[var(--vl-text-muted)]">
                                   Solo Vettore puede inhabilitar la unidad.
                                 </p>
                               )}
-                              <button
-                                type="button"
-                                disabled={busy}
-                                className="rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900"
-                                onClick={() =>
-                                  void call(`/api/talleres/${ot.id}`, {
-                                    method: "PATCH",
-                                    body: JSON.stringify({
-                                      tallerProveedorId: tallerId || undefined,
-                                      inhabilitar: isOps(rol) ? inhabilitar : undefined,
-                                    }),
-                                  })
-                                }
-                              >
-                                Guardar
-                              </button>
+                              {puedeEditarTaller && (
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  className="rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900"
+                                  onClick={() =>
+                                    void call(`/api/talleres/${ot.id}`, {
+                                      method: "PATCH",
+                                      body: JSON.stringify({
+                                        tallerProveedorId: tallerId || undefined,
+                                        inhabilitar: inhabilitar,
+                                      }),
+                                    })
+                                  }
+                                >
+                                  Guardar
+                                </button>
+                              )}
                             </div>
 
                             <ItemsEditor
@@ -654,6 +654,7 @@ export function M7TalleresPage() {
                               showAprobado={false}
                               hideTotal
                               requireClasif
+                              readOnly={!puedeEditarTaller}
                               desc={itemDesc}
                               setDesc={setItemDesc}
                               imp={itemImp}
@@ -666,30 +667,37 @@ export function M7TalleresPage() {
                               onSaved={replaceOt}
                             />
 
-                            <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
-                              <p className="text-xs text-[var(--vl-text-muted)]">
-                                Guardá los ítems cuando quieras. Continuar avanza de etapa.
-                                Si marcás sin presupuesto, se saltea la aprobación de la empresa.
-                              </p>
-                              {ot.sinPresupuesto ? (
-                                <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                                  OT marcada sin presupuesto.
+                            {puedeEditarTaller && (
+                              <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
+                                <p className="text-xs text-[var(--vl-text-muted)]">
+                                  Guardá los ítems cuando quieras. Continuar avanza de etapa.
+                                  Si marcás sin presupuesto, se saltea la aprobación de la empresa.
                                 </p>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="mt-2 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-medium"
-                                  onClick={() =>
-                                    void call(`/api/talleres/${ot.id}/sin-presupuesto`, {
-                                      method: "POST",
-                                      body: JSON.stringify({ sinPresupuesto: true }),
-                                    })
-                                  }
-                                >
-                                  Marcar sin presupuesto
-                                </button>
-                              )}
-                            </div>
+                                {ot.sinPresupuesto ? (
+                                  <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                    OT marcada sin presupuesto.
+                                  </p>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="mt-2 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-medium"
+                                    onClick={() =>
+                                      void call(`/api/talleres/${ot.id}/sin-presupuesto`, {
+                                        method: "POST",
+                                        body: JSON.stringify({ sinPresupuesto: true }),
+                                      })
+                                    }
+                                  >
+                                    Marcar sin presupuesto
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {!puedeEditarTaller && ot.sinPresupuesto && (
+                              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                OT marcada sin presupuesto.
+                              </p>
+                            )}
                           </div>
                         )}
 
@@ -708,7 +716,7 @@ export function M7TalleresPage() {
                           />
                         )}
 
-                        {isFacturaStep(ot.currentStep) && (
+                        {isFacturaStep(ot.currentStep) && puedeEditarTaller && (
                           <PresupuestoChecklist
                             ot={ot}
                             token={token!}
@@ -716,7 +724,7 @@ export function M7TalleresPage() {
                           />
                         )}
 
-                        {isFacturaStep(ot.currentStep) && ot.sinPresupuesto && (
+                        {isFacturaStep(ot.currentStep) && ot.sinPresupuesto && puedeEditarTaller && (
                           <ItemsEditor
                             ot={ot}
                             token={token!}
@@ -738,7 +746,7 @@ export function M7TalleresPage() {
                           />
                         )}
 
-                        {isFacturaStep(ot.currentStep) && (
+                        {isFacturaStep(ot.currentStep) && puedeEditarTaller && (
                           <div>
                             <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
                               Con el checklist ya queda facturado. El PDF es optativo.
@@ -765,9 +773,11 @@ export function M7TalleresPage() {
                           <div>
                             <p className="text-sm">Presupuesto {money(totP)} vs facturado {money(totF)}</p>
                             <p className="mt-1 text-xs">{ot.incrementoJustificacion || "Sin nota extra"}</p>
-                            <button type="button" disabled={busy} className="mt-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs text-white" onClick={() => void call(`/api/talleres/${ot.id}`, { method: "PATCH", body: JSON.stringify({ incrementoAprobado: true }) })}>
-                              Confirmar incremento
-                            </button>
+                            {puedeEditarTaller && (
+                              <button type="button" disabled={busy} className="mt-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs text-white" onClick={() => void call(`/api/talleres/${ot.id}`, { method: "PATCH", body: JSON.stringify({ incrementoAprobado: true }) })}>
+                                Confirmar incremento
+                              </button>
+                            )}
                           </div>
                         )}
 
@@ -799,19 +809,40 @@ export function M7TalleresPage() {
                   </div>
                   )}
 
-                  {!vistaChofer && !ot.cerradaAt && (
+                  {!ot.cerradaAt && (
                     <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                      {ot.currentStep > 0 && (
+                      {ot.currentStep > 0 && !vistaChofer && (
                         <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/retroceder`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold">
                           <ChevronLeft size={18} /> Volver
                         </button>
                       )}
                       {ot.currentStep < OT_STEPS.length - 1 && (
-                        <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/avanzar`, { method: "POST", body: JSON.stringify({ incrementoJustificacion: justif }) })} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-5 text-sm font-semibold text-white">
+                        <button
+                          type="button"
+                          disabled={
+                            busy ||
+                            vistaChofer ||
+                            (!puedeEditarTaller &&
+                              !canAdvanceFromStep(rol, ot.currentStep) &&
+                              !(
+                                user?.esDuenoFlota &&
+                                contextoAcceso === "EMPRESA" &&
+                                isAprobacionEmpresaStep(ot.currentStep)
+                              ))
+                          }
+                          title={
+                            vistaChofer ||
+                            (!puedeEditarTaller && !canAdvanceFromStep(rol, ot.currentStep))
+                              ? "En esta etapa solo Vettore puede continuar"
+                              : undefined
+                          }
+                          onClick={() => void call(`/api/talleres/${ot.id}/avanzar`, { method: "POST", body: JSON.stringify({ incrementoJustificacion: justif }) })}
+                          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        >
                           Continuar <ChevronRight size={18} />
                         </button>
                       )}
-                      {isCierreStep(ot.currentStep) && (
+                      {isCierreStep(ot.currentStep) && puedeEditarTaller && (
                         <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/cerrar`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white">
                           <Check size={18} /> Cerrar OT
                         </button>
@@ -1313,7 +1344,7 @@ function PresupuestoChecklist({
 }
 
 function ItemsEditor({
-  ot, token, talleres, tipo, setTipo, lockTipo, hideTotal, requireClasif, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
+  ot, token, talleres, tipo, setTipo, lockTipo, hideTotal, requireClasif, readOnly, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
 }: {
   ot: OrdenTrabajo;
   token: string;
@@ -1324,6 +1355,7 @@ function ItemsEditor({
   showAprobado?: boolean;
   hideTotal?: boolean;
   requireClasif?: boolean;
+  readOnly?: boolean;
   desc: string; setDesc: (s: string) => void;
   imp: string; setImp: (s: string) => void;
   obs: string; setObs: (s: string) => void;
@@ -1380,11 +1412,15 @@ function ItemsEditor({
       (clasificacion && (clasificacion !== "OTRO" || clasificacionOtro.trim().length >= 2)));
 
   return (
-    <div>
+    <div className={readOnly ? "rounded-lg border border-slate-200 bg-slate-50/80 p-3 opacity-80 dark:border-slate-700 dark:bg-slate-900/40" : undefined}>
       <div className="mb-2 text-xs font-semibold">
         Ítems ({tipo.toLowerCase()})
         {!hideTotal ? ` — total ${money(total)}` : ""}
+        {readOnly ? " — solo lectura" : ""}
       </div>
+      {items.length === 0 && readOnly && (
+        <p className="mb-2 text-xs text-[var(--vl-text-muted)]">Sin ítems cargados todavía.</p>
+      )}
       {groupByTaller(items).map((g) => (
         <div key={g.nombre} className="mb-2">
           <div className="flex items-center justify-between text-[11px] font-semibold">
@@ -1397,7 +1433,7 @@ function ItemsEditor({
                 <th className="py-1">Descripción</th>
                 <th className="py-1">Mano obra / Materiales</th>
                 <th className="py-1">Importe</th>
-                <th className="py-1" />
+                {!readOnly && <th className="py-1" />}
               </tr>
             </thead>
             <tbody>
@@ -1406,13 +1442,17 @@ function ItemsEditor({
                   <td className="py-1">{i.descripcion}</td>
                   <td>{clasifLabel(i)}</td>
                   <td>{money(i.importe)}</td>
-                  <td><button type="button" className="underline" onClick={() => void remove(i.id)}>Quitar</button></td>
+                  {!readOnly && (
+                    <td><button type="button" className="underline" onClick={() => void remove(i.id)}>Quitar</button></td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ))}
+      {!readOnly && (
+      <>
       <div className="grid gap-2 sm:grid-cols-2">
         {!lockTipo && setTipo && (
           <select className="rounded-md border p-2 text-sm" value={tipo} onChange={(e) => setTipo(e.target.value as "PRESUPUESTO" | "FACTURA")}>
@@ -1458,6 +1498,8 @@ function ItemsEditor({
       <button type="button" disabled={busy || !puedeSumar} className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900" onClick={() => void add()}>
         Guardar ítem
       </button>
+      </>
+      )}
     </div>
   );
 }
