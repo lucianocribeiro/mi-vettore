@@ -14,7 +14,6 @@ import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import {
   currentAsignacion,
   isInternalOps,
-  TIPO_TALLER_LABEL,
   type Camioneta,
   type OtComentario,
   type Role,
@@ -246,13 +245,15 @@ export function M7TalleresPage() {
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState<"abierta" | "cerrada">("abierta");
+  const [filtroPatente, setFiltroPatente] = useState("");
+  const [filtroEmpresa, setFiltroEmpresa] = useState("");
+  const [filtroTaller, setFiltroTaller] = useState("");
   const [talleres, setTalleres] = useState<TallerProveedor[]>([]);
-  const [tipoTallerFiltro, setTipoTallerFiltro] = useState("");
   const [exportando, setExportando] = useState(false);
   const [comentarioTexto, setComentarioTexto] = useState("");
+  const [browseStep, setBrowseStep] = useState<number | null>(null);
   const puedeEditarTaller = isOps(rol);
 
-  const [tallerId, setTallerId] = useState("");
   const [inhabilitar, setInhabilitar] = useState(false);
   const [itemDesc, setItemDesc] = useState("");
   const [itemImp, setItemImp] = useState("");
@@ -288,7 +289,10 @@ export function M7TalleresPage() {
   useEffect(() => {
     setSelectedId(null);
     setFiltroEstado("abierta");
-    setTipoTallerFiltro("");
+    setFiltroPatente("");
+    setFiltroEmpresa("");
+    setFiltroTaller("");
+    setBrowseStep(null);
   }, [contextoAcceso]);
 
   function needsMyAction(o: OrdenTrabajo) {
@@ -298,12 +302,29 @@ export function M7TalleresPage() {
   }
 
   const visibleOts = useMemo(() => {
+    const patenteQ = filtroPatente.trim().toLowerCase();
+    const empresaQ = filtroEmpresa.trim().toLowerCase();
+    const tallerQ = filtroTaller.trim().toLowerCase();
     return ots.filter((o) => {
       if (filtroEstado === "abierta" && o.cerradaAt) return false;
       if (filtroEstado === "cerrada" && !o.cerradaAt) return false;
+      if (filtroEstado === "cerrada") {
+        if (
+          patenteQ &&
+          !o.solicitud.camioneta.patente.toLowerCase().includes(patenteQ)
+        ) {
+          return false;
+        }
+        if (empresaQ && !otEmpresaNombre(o).toLowerCase().includes(empresaQ)) {
+          return false;
+        }
+        if (tallerQ && !otTallerNombre(o).toLowerCase().includes(tallerQ)) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [ots, filtroEstado]);
+  }, [ots, filtroEstado, filtroPatente, filtroEmpresa, filtroTaller]);
 
   useEffect(() => {
     if (visibleOts.length === 0) {
@@ -330,9 +351,19 @@ export function M7TalleresPage() {
 
   useEffect(() => {
     if (!ot) return;
-    setTallerId(ot.tallerProveedorId ?? "");
     setJustif(ot.incrementoJustificacion ?? "");
+    setBrowseStep(null);
+    setInhabilitar(!!ot.solicitud?.inhabilitado);
   }, [ot?.id]);
+
+  const displayStep = vistaChofer
+    ? browseStep ?? ot?.currentStep ?? 0
+    : ot?.currentStep ?? 0;
+  const maxBrowseStep = ot
+    ? ot.cerradaAt
+      ? OT_STEPS.length - 1
+      : ot.currentStep
+    : 0;
 
   function replaceOt(updated: OrdenTrabajo) {
     setOts((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
@@ -424,7 +455,12 @@ export function M7TalleresPage() {
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setFiltroEstado("abierta")}
+                      onClick={() => {
+                        setFiltroEstado("abierta");
+                        setFiltroPatente("");
+                        setFiltroEmpresa("");
+                        setFiltroTaller("");
+                      }}
                       className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                         filtroEstado === "abierta"
                           ? "border-amber-600 bg-amber-500/20 text-amber-900 dark:border-amber-400 dark:text-amber-100"
@@ -445,6 +481,52 @@ export function M7TalleresPage() {
                       Cerradas ({otCounts.cerradas})
                     </button>
                   </div>
+                  {filtroEstado === "cerrada" && (
+                    <div className="space-y-1.5 pt-1">
+                      <input
+                        type="search"
+                        value={filtroPatente}
+                        onChange={(e) => setFiltroPatente(e.target.value)}
+                        placeholder="Buscar patente…"
+                        className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                      />
+                      {!(user?.esDuenoFlota && contextoAcceso === "EMPRESA") && (
+                        <input
+                          type="search"
+                          value={filtroEmpresa}
+                          onChange={(e) => setFiltroEmpresa(e.target.value)}
+                          placeholder="Buscar empresa de transporte…"
+                          className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                        />
+                      )}
+                      {isOps(rol) && (
+                        <input
+                          type="search"
+                          value={filtroTaller}
+                          onChange={(e) => setFiltroTaller(e.target.value)}
+                          placeholder="Buscar taller / proveedor…"
+                          className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                        />
+                      )}
+                      {(filtroPatente || filtroEmpresa || filtroTaller) && (
+                        <p className="text-[10px] text-[var(--vl-text-muted)]">
+                          {visibleOts.length} resultado{visibleOts.length === 1 ? "" : "s"}
+                          {" · "}
+                          <button
+                            type="button"
+                            className="underline"
+                            onClick={() => {
+                              setFiltroPatente("");
+                              setFiltroEmpresa("");
+                              setFiltroTaller("");
+                            }}
+                          >
+                            Limpiar
+                          </button>
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {visibleOts.length === 0 && (
                   <p className="rounded-lg border border-[var(--vl-card-border)] p-3 text-xs text-[var(--vl-text-muted)]">
@@ -486,44 +568,79 @@ export function M7TalleresPage() {
 
                   <div className="my-5 flex items-center">
                     {OT_STEPS.map((s, i) => {
+                      const reached = ot.cerradaAt || i <= ot.currentStep;
                       const done = ot.cerradaAt || i < ot.currentStep;
-                      const active = !ot.cerradaAt && i === ot.currentStep;
+                      const active = i === displayStep;
                       return (
                       <div key={s.label} className="flex flex-1 items-center last:flex-none">
-                        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${done ? "bg-emerald-500 text-white" : active ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`} title={s.label}>
-                          {done ? <Check size={13} /> : i + 1}
-                        </div>
-                        {i < OT_STEPS.length - 1 && <div className={`h-0.5 flex-1 ${done ? "bg-emerald-400" : "bg-slate-100"}`} />}
+                        <button
+                          type="button"
+                          disabled={!vistaChofer || !reached}
+                          title={s.label}
+                          onClick={() => {
+                            if (vistaChofer && reached) setBrowseStep(i);
+                          }}
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                            done && !active
+                              ? "bg-emerald-500 text-white"
+                              : active
+                                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                                : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                          } ${vistaChofer && reached ? "cursor-pointer" : ""}`}
+                        >
+                          {done && !active ? <Check size={13} /> : i + 1}
+                        </button>
+                        {i < OT_STEPS.length - 1 && <div className={`h-0.5 flex-1 ${done || (ot.cerradaAt && i < displayStep) ? "bg-emerald-400" : "bg-slate-100"}`} />}
                       </div>
                       );
                     })}
                   </div>
 
                   <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900/40">
-                    <div className="text-sm font-semibold">{OT_STEPS[ot.currentStep]?.label}</div>
-                    <p className="mt-1 text-sm text-[var(--vl-text-muted)]">{OT_STEPS[ot.currentStep]?.detail}</p>
-                    {OT_STEPS[ot.currentStep]?.owner && (
-                      <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">Habitual: {OT_STEPS[ot.currentStep].owner}</p>
+                    <div className="text-sm font-semibold">{OT_STEPS[displayStep]?.label}</div>
+                    <p className="mt-1 text-sm text-[var(--vl-text-muted)]">{OT_STEPS[displayStep]?.detail}</p>
+                    {OT_STEPS[displayStep]?.owner && (
+                      <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">Habitual: {OT_STEPS[displayStep].owner}</p>
                     )}
 
                     {vistaChofer ? (
                       <div className="mt-4 space-y-3">
                         <div className="rounded-xl border border-[var(--vl-card-border)] bg-slate-100/80 p-4 opacity-90 dark:bg-slate-900/50">
                           <p className="text-sm font-semibold text-[var(--vl-heading)]">
-                            Tu solicitud está siendo procesada
+                            Solo lectura · sin montos
                           </p>
                           <p className="mt-1 text-xs text-[var(--vl-text-muted)]">
-                            Ya no podés modificarla. Seguís el avance en los pasos de arriba.
-                            Etapa actual:{" "}
+                            Podés avanzar y volver para ver qué pasó en cada etapa.
+                            Etapa real de la OT:{" "}
                             <strong>
                               {ot.cerradaAt
                                 ? "Cerrada"
                                 : OT_STEPS[ot.currentStep]?.label ?? "—"}
                             </strong>
-                            .
+                            . Estás mirando:{" "}
+                            <strong>{OT_STEPS[displayStep]?.label ?? "—"}</strong>.
                           </p>
                         </div>
-                        {ot.urgente && !ot.cerradaAt && isGastoStep(ot.currentStep) && (
+                        {ot.tallerAsignado && (
+                          <p className="text-xs text-[var(--vl-text-muted)]">
+                            Taller referido: <strong>{ot.tallerAsignado}</strong>
+                          </p>
+                        )}
+                        {(ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO").length > 0 &&
+                          (isAsignacionOPresupuestoStep(displayStep) ||
+                            isAprobacionEmpresaStep(displayStep)) && (
+                          <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
+                            {(ot.items ?? [])
+                              .filter((i) => i.tipo === "PRESUPUESTO")
+                              .map((i) => (
+                                <li key={i.id}>
+                                  {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
+                                  {i.descripcion}
+                                </li>
+                              ))}
+                          </ul>
+                        )}
+                        {ot.urgente && !ot.cerradaAt && isGastoStep(ot.currentStep) && displayStep === ot.currentStep && (
                           <div className="rounded-lg border border-amber-200 p-3">
                             <div className="text-xs font-semibold">Rendición de gasto (24hs)</div>
                             <input className="mt-2 w-full rounded-md border p-2 text-sm" placeholder="Qué se reparó" value={rendDesc} onChange={(e) => setRendDesc(e.target.value)} />
@@ -555,77 +672,22 @@ export function M7TalleresPage() {
                           <div className="space-y-3">
                             {!puedeEditarTaller && (
                               <div className="rounded-lg border border-slate-300 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200">
-                                <strong>Solo lectura.</strong> No podés editar taller ni presupuestos
+                                <strong>Solo lectura.</strong> No podés editar presupuestos
                                 (campos en gris). En tu etapa usá Continuar / Volver.
                               </div>
                             )}
-                            <div
-                              className={`space-y-2 rounded-lg border border-[var(--vl-card-border)] p-3 ${
-                                !puedeEditarTaller
-                                  ? "bg-slate-50/80 opacity-80 dark:bg-slate-900/40"
-                                  : ""
-                              }`}
-                            >
-                              <div className="text-xs font-semibold">Asignación de taller</div>
-                              {puedeEditarTaller && (
-                                <label className="text-xs">
-                                  Tipo de taller
-                                  <select
-                                    className="mt-1 w-full rounded-md border p-2 text-sm"
-                                    value={tipoTallerFiltro}
-                                    onChange={(e) => setTipoTallerFiltro(e.target.value)}
-                                  >
-                                    <option value="">Todos los tipos…</option>
-                                    {Object.entries(TIPO_TALLER_LABEL).map(([k, lab]) => (
-                                      <option key={k} value={k}>{lab}</option>
-                                    ))}
-                                  </select>
-                                </label>
-                              )}
-                              <label className="text-xs">Taller
-                                <select
-                                  className={`mt-1 w-full rounded-md border p-2 text-sm ${
-                                    !puedeEditarTaller
-                                      ? "cursor-not-allowed bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                                      : ""
-                                  }`}
-                                  value={tallerId}
-                                  disabled={!puedeEditarTaller}
-                                  onChange={(e) => setTallerId(e.target.value)}
-                                >
-                                  <option value="">
-                                    {puedeEditarTaller
-                                      ? "Elegir taller…"
-                                      : ot.tallerAsignado || "Sin taller asignado"}
-                                  </option>
-                                  {talleres
-                                    .filter((t) => {
-                                      if (!tipoTallerFiltro) return true;
-                                      return (t.tipos ?? []).some(
-                                        (x) => x.tipo === tipoTallerFiltro
-                                      );
-                                    })
-                                    .map((t) => (
-                                      <option key={t.id} value={t.id}>
-                                        {t.razonSocial}
-                                        {t.tipos?.length
-                                          ? ` · ${t.tipos.map((x) => TIPO_TALLER_LABEL[x.tipo] ?? x.tipo).join(", ")}`
-                                          : ""}
-                                      </option>
-                                    ))}
-                                </select>
-                              </label>
-                              {puedeEditarTaller ? (
+                            {puedeEditarTaller && (
+                              <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-3">
+                                <div className="text-xs font-semibold">Estado de la unidad</div>
+                                {ot.tallerAsignado && (
+                                  <p className="text-[11px] text-[var(--vl-text-muted)]">
+                                    Proveedor en ítems / OT: {ot.tallerAsignado}
+                                  </p>
+                                )}
                                 <label className="flex items-center gap-2 text-sm">
                                   <input type="checkbox" checked={inhabilitar} onChange={(e) => setInhabilitar(e.target.checked)} />
                                   Inhabilitar unidad (fuera de circulación)
                                 </label>
-                              ) : (
-                                <p className="text-[11px] text-[var(--vl-text-muted)]">
-                                  Solo Vettore puede inhabilitar la unidad.
-                                </p>
-                              )}
-                              {puedeEditarTaller && (
                                 <button
                                   type="button"
                                   disabled={busy}
@@ -633,17 +695,14 @@ export function M7TalleresPage() {
                                   onClick={() =>
                                     void call(`/api/talleres/${ot.id}`, {
                                       method: "PATCH",
-                                      body: JSON.stringify({
-                                        tallerProveedorId: tallerId || undefined,
-                                        inhabilitar: inhabilitar,
-                                      }),
+                                      body: JSON.stringify({ inhabilitar }),
                                     })
                                   }
                                 >
                                   Guardar
                                 </button>
-                              )}
-                            </div>
+                              </div>
+                            )}
 
                             <ItemsEditor
                               ot={ot}
@@ -809,43 +868,71 @@ export function M7TalleresPage() {
                   </div>
                   )}
 
-                  {!ot.cerradaAt && (
+                  {(vistaChofer || !ot.cerradaAt) && (
                     <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                      {ot.currentStep > 0 && !vistaChofer && (
-                        <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/retroceder`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold">
-                          <ChevronLeft size={18} /> Volver
-                        </button>
-                      )}
-                      {ot.currentStep < OT_STEPS.length - 1 && (
-                        <button
-                          type="button"
-                          disabled={
-                            busy ||
-                            vistaChofer ||
-                            (!puedeEditarTaller &&
-                              !canAdvanceFromStep(rol, ot.currentStep) &&
-                              !(
-                                user?.esDuenoFlota &&
-                                contextoAcceso === "EMPRESA" &&
-                                isAprobacionEmpresaStep(ot.currentStep)
-                              ))
-                          }
-                          title={
-                            vistaChofer ||
-                            (!puedeEditarTaller && !canAdvanceFromStep(rol, ot.currentStep))
-                              ? "En esta etapa solo Vettore puede continuar"
-                              : undefined
-                          }
-                          onClick={() => void call(`/api/talleres/${ot.id}/avanzar`, { method: "POST", body: JSON.stringify({ incrementoJustificacion: justif }) })}
-                          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Continuar <ChevronRight size={18} />
-                        </button>
-                      )}
-                      {isCierreStep(ot.currentStep) && puedeEditarTaller && (
-                        <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/cerrar`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white">
-                          <Check size={18} /> Cerrar OT
-                        </button>
+                      {vistaChofer ? (
+                        <>
+                          {displayStep > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setBrowseStep(displayStep - 1)}
+                              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold"
+                            >
+                              <ChevronLeft size={18} /> Volver
+                            </button>
+                          )}
+                          {displayStep < maxBrowseStep && (
+                            <button
+                              type="button"
+                              onClick={() => setBrowseStep(displayStep + 1)}
+                              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-5 text-sm font-semibold text-white"
+                            >
+                              Continuar <ChevronRight size={18} />
+                            </button>
+                          )}
+                          {displayStep >= maxBrowseStep && displayStep > 0 && (
+                            <p className="self-center text-xs text-[var(--vl-text-muted)]">
+                              Llegaste a la etapa actual de la OT.
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {ot.currentStep > 0 && (
+                            <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/retroceder`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold">
+                              <ChevronLeft size={18} /> Volver
+                            </button>
+                          )}
+                          {ot.currentStep < OT_STEPS.length - 1 && (
+                            <button
+                              type="button"
+                              disabled={
+                                busy ||
+                                (!puedeEditarTaller &&
+                                  !canAdvanceFromStep(rol, ot.currentStep) &&
+                                  !(
+                                    user?.esDuenoFlota &&
+                                    contextoAcceso === "EMPRESA" &&
+                                    isAprobacionEmpresaStep(ot.currentStep)
+                                  ))
+                              }
+                              title={
+                                !puedeEditarTaller && !canAdvanceFromStep(rol, ot.currentStep)
+                                  ? "En esta etapa solo Vettore puede continuar"
+                                  : undefined
+                              }
+                              onClick={() => void call(`/api/talleres/${ot.id}/avanzar`, { method: "POST", body: JSON.stringify({ incrementoJustificacion: justif }) })}
+                              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Continuar <ChevronRight size={18} />
+                            </button>
+                          )}
+                          {isCierreStep(ot.currentStep) && puedeEditarTaller && (
+                            <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/cerrar`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white">
+                              <Check size={18} /> Cerrar OT
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   )}
