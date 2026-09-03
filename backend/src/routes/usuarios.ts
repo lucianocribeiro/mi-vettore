@@ -153,6 +153,12 @@ router.post("/", ...write, async (req, res) => {
       res.status(400).json({ error: "Rol inválido", rolesValidos: Object.values(Role) });
       return;
     }
+    if (rolRaw === "CLIENTE") {
+      res.status(400).json({
+        error: "El rol Cliente ya no se usa; los clientes no solicitan cambios por la app",
+      });
+      return;
+    }
     const passwordHash = await bcrypt.hash(password, 10);
     const item = await prisma.usuario.create({
       data: {

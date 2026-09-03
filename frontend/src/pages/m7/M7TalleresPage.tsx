@@ -14,6 +14,7 @@ import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import {
   currentAsignacion,
   isInternalOps,
+  TIPO_TALLER_LABEL,
   type Camioneta,
   type OtComentario,
   type Role,
@@ -40,17 +41,17 @@ const FALLAS_COMUNES = [
 ] as const;
 
 const OT_STEPS = [
-  { code: "solicitud", label: "Solicitud", owner: null as string | null, detail: "El chofer reporta patente, problema y si puede circular." },
-  { code: "asignacion", label: "Asignación", owner: "Facu", detail: "Facu evalúa la falla, asigna taller y decide si inhabilitar." },
-  { code: "presupuesto", label: "Presupuesto", owner: "Silvina", detail: "Cargá todos los presupuestos recibidos (varios talleres). No se suman entre sí." },
-  { code: "aprobacion_empresa", label: "Aprobación empresa", owner: "Empresa / Ops", detail: "La empresa (dueño flota) marca qué ítems/talleres aprueba. Ops también puede marcar." },
-  { code: "facturacion", label: "Facturación", owner: "Silvina", detail: "Silvina marca a facturar, edita importe y asigna concepto (3 niveles)." },
+  { code: "solicitud", label: "Solicitud", owner: null as string | null, detail: "Se reporta la unidad (patente), el problema y si puede circular." },
+  { code: "asignacion", label: "Asignación y presupuesto", owner: "Facu / Silvina", detail: "Asigná taller, cargá presupuestos e inhabilitá la unidad si hace falta (solo Vettore)." },
+  { code: "presupuesto", label: "Asignación y presupuesto", owner: "Facu / Silvina", detail: "Asigná taller y cargá presupuestos. Guardá sin necesidad de Continuar." },
+  { code: "aprobacion_empresa", label: "Aprobación empresa", owner: "Empresa de transporte", detail: "La empresa ve los presupuestos y sugiere dónde reparar por comentario. No edita montos." },
+  { code: "facturacion", label: "Facturación", owner: "Facu / Silvina", detail: "Marcá a facturar, editá importe y asigná concepto (3 niveles)." },
   { code: "incremento", label: "Incremento", owner: "Ops", detail: "Solo si el gasto supera lo presupuestado. Cualquier usuario interno puede confirmar." },
-  { code: "cierre", label: "Cierre", owner: "Silvina / Carla", detail: "Cerrar OT, reporte de salida y cuenta corriente del proveedor." },
+  { code: "cierre", label: "Cierre", owner: "Facu / Silvina / Carla", detail: "Cerrar OT, reporte de salida y cuenta corriente del proveedor." },
 ] as const;
 
-function isPresupuestoStep(step: number) {
-  return step === 2;
+function isAsignacionOPresupuestoStep(step: number) {
+  return step === 1 || step === 2;
 }
 
 function isAprobacionEmpresaStep(step: number) {
@@ -73,26 +74,28 @@ function isCierreStep(step: number) {
   return step === 6;
 }
 
+function isFacuOrSilvina(rol?: Role | null) {
+  return rol === "FACU" || rol === "SILVINA";
+}
+
 function roleActionHint(
   rol?: Role | null,
   opts?: { esDuenoEmpresa?: boolean }
 ): string {
   if (opts?.esDuenoEmpresa) {
-    return "Tu rol: ves todas las solicitudes de las unidades de tu empresa, creás pedidos y seguís el estado.";
+    return "Tu rol: ves las solicitudes de tu flota, aprobás en comentario y seguís el estado.";
   }
   switch (rol) {
     case "CHOFER":
-      return "Tu rol: crear solicitudes y seguir el estado. En urgencias, rendí el gasto en 24hs.";
+      return "Tu rol: crear solicitudes y seguir el estado. Una vez enviada, solo ves el progreso.";
     case "FACU":
-      return "Tu rol: asignar taller e inhabilitar si hace falta.";
     case "SILVINA":
-      return "Tu rol: primero presupuesto, después facturación con el checklist. El incremento lo puede confirmar cualquiera de ops.";
+      return "Tu rol: asignación, presupuesto, facturación y cierre (mismos permisos Facu/Silvina).";
     case "PATRICIO":
-      return "Tu rol: seguimiento de dirección. El incremento lo puede confirmar cualquier usuario interno.";
     case "JULIETA":
-      return "Tu rol: seguimiento de dirección. El incremento lo puede confirmar cualquier usuario interno.";
+      return "Tu rol: crear solicitudes y seguimiento de dirección.";
     case "PABLO":
-      return "Tu rol: quedás notificado al crear la OT (unidad fuera de circulación).";
+      return "Tu rol: crear solicitudes; quedás notificado al crear la OT.";
     case "CARLA":
       return "Tu rol: crear solicitudes y cerrar/avisar pago.";
     default:
@@ -177,26 +180,26 @@ type OrdenTrabajo = {
 };
 
 function canCreateSolicitud(rol?: Role | null) {
-  return rol === "CHOFER" || rol === "PABLO" || rol === "SILVINA" || rol === "FACU" || rol === "CARLA";
+  return rol === "CHOFER" || isInternalOps(rol);
 }
 
 function canAdvanceFromStep(rol: Role | undefined, step: number) {
   if (!rol) return false;
   if (step === 0) return canCreateSolicitud(rol);
-  if (step === 1) return rol === "FACU";
-  if (step === 2) return rol === "SILVINA";
+  if (step === 1) return isFacuOrSilvina(rol);
+  if (step === 2) return isFacuOrSilvina(rol);
   if (step === 3) return rol === "CHOFER" || isInternalOps(rol);
-  if (step === 4) return rol === "SILVINA";
+  if (step === 4) return isFacuOrSilvina(rol);
   if (step === 5) return isInternalOps(rol);
   return false;
 }
 
 function canCerrarOt(rol?: Role | null) {
-  return rol === "SILVINA" || rol === "CARLA";
+  return isFacuOrSilvina(rol) || rol === "CARLA";
 }
 
 function canReabrirOt(rol?: Role | null) {
-  return rol === "SILVINA" || rol === "CARLA" || isInternalOps(rol);
+  return isFacuOrSilvina(rol) || rol === "CARLA" || isInternalOps(rol);
 }
 
 function isOps(rol?: Role | null) {
@@ -242,12 +245,11 @@ export function M7TalleresPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [filter, setFilter] = useState<"todas" | "mia">("todas");
   const [filtroPatente, setFiltroPatente] = useState("");
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroTaller, setFiltroTaller] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState<"todas" | "abierta" | "cerrada">("todas");
   const [talleres, setTalleres] = useState<TallerProveedor[]>([]);
+  const [tipoTallerFiltro, setTipoTallerFiltro] = useState("");
   const [exportando, setExportando] = useState(false);
   const [comentarioTexto, setComentarioTexto] = useState("");
 
@@ -259,8 +261,6 @@ export function M7TalleresPage() {
   const [itemTallerId, setItemTallerId] = useState("");
   const [justif, setJustif] = useState("");
   const [facturaFile, setFacturaFile] = useState<File | null>(null);
-  const [sugText, setSugText] = useState("");
-  const [sugFile, setSugFile] = useState<File | null>(null);
   const [rendDesc, setRendDesc] = useState("");
   const [rendImp, setRendImp] = useState("");
   const [rendFile, setRendFile] = useState<File | null>(null);
@@ -288,11 +288,10 @@ export function M7TalleresPage() {
 
   useEffect(() => {
     setSelectedId(null);
-    setFilter("todas");
     setFiltroPatente("");
     setFiltroEmpresa("");
     setFiltroTaller("");
-    setFiltroEstado("todas");
+    setTipoTallerFiltro("");
   }, [contextoAcceso]);
 
   const ot = ots.find((o) => o.id === selectedId) ?? ots[0] ?? null;
@@ -308,7 +307,7 @@ export function M7TalleresPage() {
 
   function needsMyAction(o: OrdenTrabajo) {
     if (o.cerradaAt) return false;
-    if (vistaChofer) return !!o.urgente && isGastoStep(o.currentStep) && !(o.totales?.facturado);
+    if (vistaChofer) return false;
     return canAdvanceFromStep(rol, o.currentStep) || (isCierreStep(o.currentStep) && canCerrarOt(rol));
   }
 
@@ -317,9 +316,6 @@ export function M7TalleresPage() {
     const empresaQ = filtroEmpresa.trim().toLowerCase();
     const tallerQ = filtroTaller.trim().toLowerCase();
     return ots.filter((o) => {
-      if (filter === "mia" && !needsMyAction(o)) return false;
-      if (filtroEstado === "abierta" && o.cerradaAt) return false;
-      if (filtroEstado === "cerrada" && !o.cerradaAt) return false;
       if (
         patenteQ &&
         !o.solicitud.camioneta.patente.toLowerCase().includes(patenteQ)
@@ -334,18 +330,14 @@ export function M7TalleresPage() {
       }
       return true;
     });
-  }, [ots, filter, filtroPatente, filtroEmpresa, filtroTaller, filtroEstado, rol, vistaChofer]);
+  }, [ots, filtroPatente, filtroEmpresa, filtroTaller]);
 
   const otCounts = useMemo(
     () => ({
       todas: ots.length,
-      abiertas: ots.filter((o) => !o.cerradaAt).length,
-      cerradas: ots.filter((o) => !!o.cerradaAt).length,
     }),
     [ots]
   );
-
-  const actionCount = ots.filter(needsMyAction).length;
 
   function replaceOt(updated: OrdenTrabajo) {
     setOts((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
@@ -433,50 +425,10 @@ export function M7TalleresPage() {
           {!loading && (
             <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
               <div className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setFilter("todas")} className={`rounded-full border px-3 py-1 text-xs ${filter === "todas" ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900" : "border-[var(--vl-card-border)]"}`}>
-                    Todas ({ots.length})
-                  </button>
-                  <button type="button" onClick={() => setFilter("mia")} className={`rounded-full border px-3 py-1 text-xs ${filter === "mia" ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900" : "border-[var(--vl-card-border)]"}`}>
-                    Requieren mi acción ({actionCount})
-                  </button>
-                </div>
                 <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setFiltroEstado("todas")}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                        filtroEstado === "todas"
-                          ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
-                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-                      }`}
-                    >
-                      Todas ({otCounts.todas})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFiltroEstado("abierta")}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                        filtroEstado === "abierta"
-                          ? "border-amber-600 bg-amber-500/20 text-amber-900 dark:border-amber-400 dark:text-amber-100"
-                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-                      }`}
-                    >
-                      Abiertas ({otCounts.abiertas})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFiltroEstado("cerrada")}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                        filtroEstado === "cerrada"
-                          ? "border-emerald-600 bg-emerald-500/20 text-emerald-900 dark:border-emerald-400 dark:text-emerald-100"
-                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-                      }`}
-                    >
-                      Cerradas ({otCounts.cerradas})
-                    </button>
-                  </div>
+                  <p className="text-[11px] font-semibold text-[var(--vl-text-muted)]">
+                    Órdenes ({otCounts.todas})
+                  </p>
                   <input
                     type="search"
                     value={filtroPatente}
@@ -502,7 +454,7 @@ export function M7TalleresPage() {
                       className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
                     />
                   )}
-                  {(filtroPatente || filtroEmpresa || filtroTaller || filtroEstado !== "todas") && (
+                  {(filtroPatente || filtroEmpresa || filtroTaller) && (
                     <p className="text-[10px] text-[var(--vl-text-muted)]">
                       {visibleOts.length} resultado{visibleOts.length === 1 ? "" : "s"}
                       {" · "}
@@ -513,7 +465,6 @@ export function M7TalleresPage() {
                           setFiltroPatente("");
                           setFiltroEmpresa("");
                           setFiltroTaller("");
-                          setFiltroEstado("todas");
                         }}
                       >
                         Limpiar filtros
@@ -583,65 +534,26 @@ export function M7TalleresPage() {
 
                     {vistaChofer ? (
                       <div className="mt-4 space-y-3">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="rounded-lg border border-[var(--vl-card-border)] p-3">
-                            <div className="text-[11px] text-[var(--vl-text-muted)]">Presupuesto</div>
-                            <div className="font-bold">
-                              {totP > 0
-                                ? money(totP)
-                                : ot.sinPresupuesto
-                                  ? "Sin presupuesto"
-                                  : "—"}
-                            </div>
-                          </div>
-                          <div className="rounded-lg border border-[var(--vl-card-border)] p-3">
-                            <div className="text-[11px] text-[var(--vl-text-muted)]">Gasto real</div>
-                            <div className="font-bold">{totF > 0 ? money(totF) : "—"}</div>
-                          </div>
-                        </div>
-                        {(() => {
-                          const presupItems = (ot.items ?? []).filter(
-                            (i) => i.tipo === "PRESUPUESTO"
-                          );
-                          if (presupItems.length === 0) return null;
-                          return (
-                            <div className="rounded-lg border border-[var(--vl-card-border)] p-3">
-                              <div className="mb-2 text-xs font-semibold">
-                                Ítems de presupuesto
-                              </div>
-                              <ul className="space-y-1 text-xs">
-                                {presupItems.map((i) => (
-                                  <li
-                                    key={i.id}
-                                    className="flex justify-between gap-2 border-t border-[var(--vl-card-border)] pt-1 first:border-0 first:pt-0"
-                                  >
-                                    <span>{i.descripcion}</span>
-                                    <span className="shrink-0 font-medium">
-                                      {money(i.importe)}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          );
-                        })()}
-                        <div>
-                          <div className="text-xs font-medium">Sugerencia de taller (opcional)</div>
-                          <textarea rows={2} value={sugText} onChange={(e) => setSugText(e.target.value)} className="mt-1 w-full rounded-md border p-2 text-sm" placeholder="Conozco un taller que cobra menos…" />
-                          <input type="file" className="mt-1 text-xs" onChange={(e) => setSugFile(e.target.files?.[0] ?? null)} />
-                          <button type="button" disabled={busy || (!sugText.trim() && !sugFile)} className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900" onClick={() => {
-                            const fd = new FormData();
-                            fd.append("sugerenciaChofer", sugText);
-                            if (sugFile) fd.append("archivo", sugFile);
-                            void call(`/api/talleres/${ot.id}/sugerencia`, { method: "POST", body: fd });
-                          }}>Enviar sugerencia</button>
-                          {ot.sugerenciaChofer && <p className="mt-1 text-xs text-[var(--vl-text-muted)]">Enviada: {ot.sugerenciaChofer}</p>}
+                        <div className="rounded-xl border border-[var(--vl-card-border)] bg-slate-100/80 p-4 opacity-90 dark:bg-slate-900/50">
+                          <p className="text-sm font-semibold text-[var(--vl-heading)]">
+                            Tu solicitud está siendo procesada
+                          </p>
+                          <p className="mt-1 text-xs text-[var(--vl-text-muted)]">
+                            Ya no podés modificarla. Seguís el avance en los pasos de arriba.
+                            Etapa actual:{" "}
+                            <strong>
+                              {ot.cerradaAt
+                                ? "Cerrada"
+                                : OT_STEPS[ot.currentStep]?.label ?? "—"}
+                            </strong>
+                            .
+                          </p>
                         </div>
                         {ot.urgente && !ot.cerradaAt && isGastoStep(ot.currentStep) && (
                           <div className="rounded-lg border border-amber-200 p-3">
                             <div className="text-xs font-semibold">Rendición de gasto (24hs)</div>
                             <input className="mt-2 w-full rounded-md border p-2 text-sm" placeholder="Qué se reparó" value={rendDesc} onChange={(e) => setRendDesc(e.target.value)} />
-                            <input className="mt-2 w-full rounded-md border p-2 text-sm" placeholder="Importe" type="number" value={rendImp} onChange={(e) => setRendImp(e.target.value)} />
+                            <input className="mt-2 min-h-11 w-full rounded-md border p-2 text-base" placeholder="Importe" type="number" value={rendImp} onChange={(e) => setRendImp(e.target.value)} />
                             <label className="mt-2 flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed text-sm">
                               <Upload size={16} /> Foto / comprobante
                               <input type="file" accept="image/*,application/pdf" capture="environment" className="sr-only" onChange={(e) => setRendFile(e.target.files?.[0] ?? null)} />
@@ -665,72 +577,119 @@ export function M7TalleresPage() {
                           </div>
                         )}
 
-                        {ot.currentStep === 1 && (
-                          <div className="space-y-2">
-                            <label className="text-xs">Taller
-                              <select className="mt-1 w-full rounded-md border p-2 text-sm" value={tallerId} onChange={(e) => setTallerId(e.target.value)}>
-                                <option value="">Elegir taller…</option>
-                                {talleres.map((t) => (
-                                  <option key={t.id} value={t.id}>{t.razonSocial}</option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="flex items-center gap-2 text-sm">
-                              <input type="checkbox" checked={inhabilitar} onChange={(e) => setInhabilitar(e.target.checked)} />
-                              Inhabilitar unidad (fuera de circulación)
-                            </label>
-                            <button type="button" disabled={busy} className="rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900" onClick={() => void call(`/api/talleres/${ot.id}`, { method: "PATCH", body: JSON.stringify({ tallerProveedorId: tallerId || undefined, inhabilitar }) })}>
-                              Guardar asignación
-                            </button>
-                          </div>
-                        )}
-
-                        {isPresupuestoStep(ot.currentStep) && (
-                          <ItemsEditor
-                            ot={ot}
-                            token={token!}
-                            talleres={talleres}
-                            tipo="PRESUPUESTO"
-                            lockTipo
-                            showAprobado={false}
-                            desc={itemDesc}
-                            setDesc={setItemDesc}
-                            imp={itemImp}
-                            setImp={setItemImp}
-                            obs={itemObs}
-                            setObs={setItemObs}
-                            tallerId={itemTallerId}
-                            setTallerId={setItemTallerId}
-                            busy={busy}
-                            onSaved={replaceOt}
-                          />
-                        )}
-
-                        {isPresupuestoStep(ot.currentStep) && (
-                          <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
-                            <p className="text-xs text-[var(--vl-text-muted)]">
-                              El presupuesto es optativo. Podés cargar uno o más
-                              ítems y seguir. Después la empresa aprueba y en
-                              facturación marcás cuáles se facturan.
-                            </p>
-                            {ot.sinPresupuesto ? (
-                              <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                                OT marcada sin presupuesto.
-                              </p>
-                            ) : (
+                        {isAsignacionOPresupuestoStep(ot.currentStep) && (
+                          <div className="space-y-3">
+                            <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-3">
+                              <div className="text-xs font-semibold">Asignación de taller</div>
+                              {isOps(rol) && (
+                                <label className="text-xs">
+                                  Tipo de taller
+                                  <select
+                                    className="mt-1 w-full rounded-md border p-2 text-sm"
+                                    value={tipoTallerFiltro}
+                                    onChange={(e) => setTipoTallerFiltro(e.target.value)}
+                                  >
+                                    <option value="">Todos los tipos…</option>
+                                    {Object.entries(TIPO_TALLER_LABEL).map(([k, lab]) => (
+                                      <option key={k} value={k}>{lab}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              )}
+                              <label className="text-xs">Taller
+                                <select className="mt-1 w-full rounded-md border p-2 text-sm" value={tallerId} onChange={(e) => setTallerId(e.target.value)}>
+                                  <option value="">Elegir taller…</option>
+                                  {talleres
+                                    .filter((t) => {
+                                      if (!tipoTallerFiltro) return true;
+                                      return (t.tipos ?? []).some(
+                                        (x) => x.tipo === tipoTallerFiltro
+                                      );
+                                    })
+                                    .map((t) => (
+                                      <option key={t.id} value={t.id}>
+                                        {t.razonSocial}
+                                        {t.tipos?.length
+                                          ? ` · ${t.tipos.map((x) => TIPO_TALLER_LABEL[x.tipo] ?? x.tipo).join(", ")}`
+                                          : ""}
+                                      </option>
+                                    ))}
+                                </select>
+                              </label>
+                              {isOps(rol) && (
+                                <label className="flex items-center gap-2 text-sm">
+                                  <input type="checkbox" checked={inhabilitar} onChange={(e) => setInhabilitar(e.target.checked)} />
+                                  Inhabilitar unidad (fuera de circulación)
+                                </label>
+                              )}
+                              {!isOps(rol) && (
+                                <p className="text-[11px] text-[var(--vl-text-muted)]">
+                                  Solo Vettore puede inhabilitar la unidad.
+                                </p>
+                              )}
                               <button
                                 type="button"
-                                className="mt-2 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-medium"
+                                disabled={busy}
+                                className="rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900"
                                 onClick={() =>
-                                  void call(`/api/talleres/${ot.id}/sin-presupuesto`, {
-                                    method: "POST",
-                                    body: JSON.stringify({ sinPresupuesto: true }),
+                                  void call(`/api/talleres/${ot.id}`, {
+                                    method: "PATCH",
+                                    body: JSON.stringify({
+                                      tallerProveedorId: tallerId || undefined,
+                                      inhabilitar: isOps(rol) ? inhabilitar : undefined,
+                                    }),
                                   })
                                 }
                               >
-                                Continuar sin presupuesto
+                                Guardar
                               </button>
-                            )}
+                            </div>
+
+                            <ItemsEditor
+                              ot={ot}
+                              token={token!}
+                              talleres={talleres}
+                              tipo="PRESUPUESTO"
+                              lockTipo
+                              showAprobado={false}
+                              hideTotal
+                              requireClasif
+                              desc={itemDesc}
+                              setDesc={setItemDesc}
+                              imp={itemImp}
+                              setImp={setItemImp}
+                              obs={itemObs}
+                              setObs={setItemObs}
+                              tallerId={itemTallerId}
+                              setTallerId={setItemTallerId}
+                              busy={busy}
+                              onSaved={replaceOt}
+                            />
+
+                            <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
+                              <p className="text-xs text-[var(--vl-text-muted)]">
+                                Guardá los ítems cuando quieras. Continuar avanza de etapa.
+                                Si marcás sin presupuesto, se saltea la aprobación de la empresa.
+                              </p>
+                              {ot.sinPresupuesto ? (
+                                <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                  OT marcada sin presupuesto.
+                                </p>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="mt-2 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-medium"
+                                  onClick={() =>
+                                    void call(`/api/talleres/${ot.id}/sin-presupuesto`, {
+                                      method: "POST",
+                                      body: JSON.stringify({ sinPresupuesto: true }),
+                                    })
+                                  }
+                                >
+                                  Marcar sin presupuesto
+                                </button>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -739,6 +698,13 @@ export function M7TalleresPage() {
                             ot={ot}
                             token={token!}
                             onSaved={replaceOt}
+                            soloLecturaEmpresa={
+                              !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA") &&
+                              !isOps(rol)
+                            }
+                            esEmpresa={
+                              !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA")
+                            }
                           />
                         )}
 
@@ -757,6 +723,8 @@ export function M7TalleresPage() {
                             talleres={talleres}
                             tipo="PRESUPUESTO"
                             lockTipo
+                            hideTotal
+                            requireClasif
                             desc={itemDesc}
                             setDesc={setItemDesc}
                             imp={itemImp}
@@ -817,6 +785,7 @@ export function M7TalleresPage() {
                     )}
                   </div>
 
+                  {!vistaChofer && (
                   <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                     <div className="rounded-xl border p-3">
                       <div className="text-xs text-[var(--vl-text-muted)]">Facturado / gasto</div>
@@ -828,6 +797,7 @@ export function M7TalleresPage() {
                       )}
                     </div>
                   </div>
+                  )}
 
                   {!vistaChofer && !ot.cerradaAt && (
                     <div className="mt-5 flex flex-col gap-2 sm:flex-row">
@@ -947,20 +917,34 @@ function ComentariosOt({
         <p className="mb-2 text-xs text-[var(--vl-text-muted)]">Sin comentarios aún.</p>
       ) : (
         <ul className="mb-3 max-h-48 space-y-2 overflow-y-auto">
-          {comentarios.map((c) => (
+          {comentarios.map((c) => {
+            const esEmpresa =
+              c.user?.rol === "CHOFER" ||
+              (c.user?.nombre || "").toLowerCase().includes("empresa");
+            return (
             <li
               key={c.id}
-              className="rounded-md bg-slate-50 px-2.5 py-2 text-xs dark:bg-slate-900/40"
+              className={`rounded-md px-2.5 py-2 text-xs ${
+                esEmpresa
+                  ? "border border-red-300 bg-red-50 text-red-950 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100"
+                  : "bg-slate-50 dark:bg-slate-900/40"
+              }`}
             >
               <div className="font-medium text-[var(--vl-heading)]">
                 {c.user?.nombre || c.user?.email || "Usuario"}
+                {esEmpresa && (
+                  <span className="ml-1.5 rounded bg-red-600 px-1 py-0.5 text-[9px] font-bold uppercase text-white">
+                    Empresa
+                  </span>
+                )}
                 <span className="ml-1.5 font-normal text-[var(--vl-text-muted)]">
                   {new Date(c.createdAt).toLocaleString("es-AR")}
                 </span>
               </div>
               <p className="mt-0.5 whitespace-pre-wrap text-[var(--vl-text)]">{c.texto}</p>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
       <textarea
@@ -995,16 +979,19 @@ function groupByTaller<T extends { tallerNombre: string; importe: number }>(item
 }
 
 function AprobacionEmpresaChecklist({
-  ot, token, onSaved,
+  ot, token, onSaved, soloLecturaEmpresa, esEmpresa,
 }: {
   ot: OrdenTrabajo;
   token: string;
   onSaved: (ot: OrdenTrabajo) => void;
+  soloLecturaEmpresa?: boolean;
+  esEmpresa?: boolean;
 }) {
   const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
   const marcados = items.filter((i) => i.sugeridoEmpresa);
 
   async function setSugerido(id: string, sugeridoEmpresa: boolean) {
+    if (soloLecturaEmpresa) return;
     const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ sugeridoEmpresa }),
@@ -1014,21 +1001,35 @@ function AprobacionEmpresaChecklist({
 
   if (items.length === 0) {
     return (
-      <p className="text-xs text-[var(--vl-text-muted)]">
-        No hay ítems de presupuesto para aprobar. Podés continuar igual.
-      </p>
+      <div className="space-y-2">
+        <p className="text-xs text-[var(--vl-text-muted)]">
+          No hay ítems de presupuesto cargados aún.
+        </p>
+        {esEmpresa && (
+          <p className="text-xs text-red-700 dark:text-red-300">
+            Podés sugerir dónde reparar dejando un comentario abajo (en rojo para Silvina).
+          </p>
+        )}
+      </div>
     );
   }
 
   return (
     <div>
       <div className="mb-2 text-xs font-semibold">
-        Aprobación de la empresa (sugerencia) — {marcados.length}/{items.length} marcados
+        Presupuestos cargados
+        {!soloLecturaEmpresa && ` — sugeridos ${marcados.length}/${items.length}`}
       </div>
-      <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-        Marcá qué presupuestos / talleres aprueba la empresa. Silvina usará esto
-        como referencia en facturación. No se suman cotizaciones alternativas.
-      </p>
+      {esEmpresa ? (
+        <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
+          Solo lectura de montos. Para sugerir taller o reparación, usá un{" "}
+          <strong className="text-red-700 dark:text-red-300">comentario</strong> (queda marcado en rojo).
+        </p>
+      ) : (
+        <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
+          Marcá qué presupuestos / talleres aprueba la empresa. No se suman cotizaciones alternativas.
+        </p>
+      )}
       {ot.sugerenciaChofer && (
         <p className="mb-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-950 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
           <strong>Sugerencia del chofer:</strong> {ot.sugerenciaChofer}
@@ -1043,25 +1044,35 @@ function AprobacionEmpresaChecklist({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                <th className="w-8 py-1" />
+                {!soloLecturaEmpresa && <th className="w-8 py-1" />}
                 <th className="py-1">Ítem</th>
+                <th className="py-1">Concepto</th>
                 <th className="py-1 text-right">Importe $</th>
               </tr>
             </thead>
             <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
-                  <td className="w-8 py-1">
-                    <label className="inline-flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={!!i.sugeridoEmpresa}
-                        onChange={(e) => void setSugerido(i.id, e.target.checked)}
-                      />
-                      <span className="sr-only">Aprobar sugerencia empresa</span>
-                    </label>
-                  </td>
+                  {!soloLecturaEmpresa && (
+                    <td className="w-8 py-1">
+                      <label className="inline-flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={!!i.sugeridoEmpresa}
+                          onChange={(e) => void setSugerido(i.id, e.target.checked)}
+                        />
+                        <span className="sr-only">Aprobar sugerencia empresa</span>
+                      </label>
+                    </td>
+                  )}
                   <td className="py-1">{i.descripcion}</td>
+                  <td className="py-1 text-[var(--vl-text-muted)]">
+                    {i.clasificacion
+                      ? i.clasificacion === "OTRO"
+                        ? i.clasificacionOtro || "Otro"
+                        : CLASIFICACION_LABEL[i.clasificacion]
+                      : "—"}
+                  </td>
                   <td className="py-1 text-right">{money(i.importe)}</td>
                 </tr>
               ))}
@@ -1283,7 +1294,7 @@ function PresupuestoChecklist({
                       type="number"
                       min={0}
                       step="0.01"
-                      className="w-24 rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-1.5 py-1 text-right"
+                      className="min-h-11 w-32 rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-right text-base font-medium"
                       value={editImp[i.id] ?? String(i.importe)}
                       onChange={(e) =>
                         setEditImp((prev) => ({ ...prev, [i.id]: e.target.value }))
@@ -1302,7 +1313,7 @@ function PresupuestoChecklist({
 }
 
 function ItemsEditor({
-  ot, token, talleres, tipo, setTipo, lockTipo, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
+  ot, token, talleres, tipo, setTipo, lockTipo, hideTotal, requireClasif, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
 }: {
   ot: OrdenTrabajo;
   token: string;
@@ -1311,6 +1322,8 @@ function ItemsEditor({
   setTipo?: (t: "PRESUPUESTO" | "FACTURA") => void;
   lockTipo?: boolean;
   showAprobado?: boolean;
+  hideTotal?: boolean;
+  requireClasif?: boolean;
   desc: string; setDesc: (s: string) => void;
   imp: string; setImp: (s: string) => void;
   obs: string; setObs: (s: string) => void;
@@ -1325,7 +1338,7 @@ function ItemsEditor({
     tipo === "PRESUPUESTO" ? i.tipo === "PRESUPUESTO" : i.tipo !== "PRESUPUESTO"
   );
   const total = items.reduce((a, i) => a + i.importe, 0);
-  const gastoRequiereClasif = tipo === "FACTURA";
+  const gastoRequiereClasif = tipo === "FACTURA" || !!requireClasif;
   const proveedorObligatorio = tipo === "FACTURA";
 
   async function add() {
@@ -1368,14 +1381,25 @@ function ItemsEditor({
 
   return (
     <div>
-      <div className="mb-2 text-xs font-semibold">Ítems ({tipo.toLowerCase()}) — total {money(total)}</div>
+      <div className="mb-2 text-xs font-semibold">
+        Ítems ({tipo.toLowerCase()})
+        {!hideTotal ? ` — total ${money(total)}` : ""}
+      </div>
       {groupByTaller(items).map((g) => (
         <div key={g.nombre} className="mb-2">
           <div className="flex items-center justify-between text-[11px] font-semibold">
             <span>{g.nombre}</span>
-            <span>Subtotal {money(g.subtotal)}</span>
+            {!hideTotal && <span>Subtotal {money(g.subtotal)}</span>}
           </div>
           <table className="mb-1 w-full text-left text-xs">
+            <thead>
+              <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
+                <th className="py-1">Descripción</th>
+                <th className="py-1">Mano obra / Materiales</th>
+                <th className="py-1">Importe</th>
+                <th className="py-1" />
+              </tr>
+            </thead>
             <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
@@ -1401,7 +1425,7 @@ function ItemsEditor({
           {talleres.map((t) => <option key={t.id} value={t.id}>{t.razonSocial}</option>)}
         </select>
         <input className="rounded-md border p-2 text-sm" placeholder="Descripción" value={desc} onChange={(e) => setDesc(e.target.value)} />
-        <input className="rounded-md border p-2 text-sm" placeholder="Importe" type="number" value={imp} onChange={(e) => setImp(e.target.value)} />
+        <input className="min-h-11 rounded-md border p-2 text-base font-medium" placeholder="Importe $" type="number" value={imp} onChange={(e) => setImp(e.target.value)} />
         <label className="text-xs text-[var(--vl-text-muted)] sm:col-span-2">
           Fecha
           <input
@@ -1416,7 +1440,7 @@ function ItemsEditor({
           value={clasificacion}
           onChange={(e) => setClasificacion(e.target.value as ClasificacionGasto | "")}
         >
-          <option value="">{gastoRequiereClasif ? "Clasificación (obligatoria)" : "Clasificación (opcional)"}</option>
+          <option value="">{gastoRequiereClasif ? "Clasificación: Mano de obra / Materiales (obligatoria)" : "Clasificación (opcional)"}</option>
           {(Object.keys(CLASIFICACION_LABEL) as ClasificacionGasto[]).map((k) => (
             <option key={k} value={k}>{CLASIFICACION_LABEL[k]}</option>
           ))}
@@ -1432,7 +1456,7 @@ function ItemsEditor({
         <input className="sm:col-span-2 rounded-md border p-2 text-sm" placeholder="Observación (proveedor / n° factura)" value={obs} onChange={(e) => setObs(e.target.value)} />
       </div>
       <button type="button" disabled={busy || !puedeSumar} className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900" onClick={() => void add()}>
-        Sumar ítem
+        Guardar ítem
       </button>
     </div>
   );
@@ -1442,7 +1466,6 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
   const { token, user } = useAuth();
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);
   const [empresaId, setEmpresaId] = useState("");
-  const [choferId, setChoferId] = useState("");
   const [camionetaId, setCamionetaId] = useState("");
   const [falla, setFalla] = useState(user?.rol === "CHOFER" ? "" : FALLAS_COMUNES[0]);
   const [detalle, setDetalle] = useState("");
@@ -1461,8 +1484,8 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
     const map = new Map<string, string>();
     for (const c of camionetas) {
       const a = currentAsignacion(c);
-      const id = a?.empresaId || a?.empresa?.id;
-      const nombre = a?.empresa?.nombre;
+      const id = a?.empresaId || a?.empresa?.id || c.empresaId || c.empresa?.id;
+      const nombre = a?.empresa?.nombre || c.empresa?.nombre;
       if (id && nombre) map.set(id, nombre);
     }
     return [...map.entries()]
@@ -1474,25 +1497,14 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
     if (!empresaId) return [];
     return camionetas.filter((c) => {
       const a = currentAsignacion(c);
-      return a?.empresaId === empresaId || a?.empresa?.id === empresaId;
+      return (
+        a?.empresaId === empresaId ||
+        a?.empresa?.id === empresaId ||
+        c.empresaId === empresaId ||
+        c.empresa?.id === empresaId
+      );
     });
   }, [camionetas, empresaId]);
-
-  const choferesOpts = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const c of unidadesDeEmpresa) {
-      const a = currentAsignacion(c);
-      if (a?.choferId && a.chofer?.nombre) map.set(a.choferId, a.chofer.nombre);
-    }
-    return [...map.entries()]
-      .map(([id, nombre]) => ({ id, nombre }))
-      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  }, [unidadesDeEmpresa]);
-
-  const unidadesDeChofer = useMemo(() => {
-    if (!choferId) return [];
-    return unidadesDeEmpresa.filter((c) => currentAsignacion(c)?.choferId === choferId);
-  }, [unidadesDeEmpresa, choferId]);
 
   useEffect(() => {
     if (!token) return;
@@ -1511,26 +1523,11 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
   }, [selected?.id]);
 
   useEffect(() => {
-    if (!opsInterno || !empresaId) return;
-    if (choferesOpts.length === 1) {
-      setChoferId(choferesOpts[0].id);
-      return;
-    }
-    if (choferId && !choferesOpts.some((c) => c.id === choferId)) {
-      setChoferId("");
-    }
-  }, [opsInterno, empresaId, choferesOpts, choferId]);
-
-  useEffect(() => {
     if (!opsInterno) return;
-    if (unidadesDeChofer.length === 1) {
-      setCamionetaId(unidadesDeChofer[0].id);
-      return;
-    }
-    if (camionetaId && !unidadesDeChofer.some((c) => c.id === camionetaId)) {
+    if (camionetaId && !unidadesDeEmpresa.some((c) => c.id === camionetaId)) {
       setCamionetaId("");
     }
-  }, [opsInterno, choferId, unidadesDeChofer, camionetaId]);
+  }, [opsInterno, empresaId, unidadesDeEmpresa, camionetaId]);
 
   async function submit() {
     if (!token || !camionetaId) return;
@@ -1559,7 +1556,6 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
         method: "POST",
         body: JSON.stringify({
           camionetaId,
-          choferId: opsInterno ? choferId || undefined : undefined,
           falla: problema,
           detalle: detalle.trim(),
           km,
@@ -1579,7 +1575,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
 
   const puedeEnviar =
     !!camionetaId &&
-    (!opsInterno || (!!empresaId && !!choferId)) &&
+    (!opsInterno || !!empresaId) &&
     !!(esChofer ? detalle.trim() : falla === "Otros" ? detalle.trim() : falla) &&
     Number.isFinite(Number(kmDraft)) &&
     Number(kmDraft) >= 0 &&
@@ -1603,7 +1599,6 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
                 value={empresaId}
                 onChange={(e) => {
                   setEmpresaId(e.target.value);
-                  setChoferId("");
                   setCamionetaId("");
                 }}
               >
@@ -1616,56 +1611,23 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
               </select>
             </label>
             <label className="text-xs text-[var(--vl-text-muted)]">
-              Chofer
+              Unidad (patente)
               <select
                 className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)] disabled:opacity-50"
-                value={choferId}
+                value={camionetaId}
                 disabled={!empresaId}
-                onChange={(e) => {
-                  setChoferId(e.target.value);
-                  setCamionetaId("");
-                }}
+                onChange={(e) => setCamionetaId(e.target.value)}
               >
                 <option value="">
-                  {empresaId ? "Elegí el chofer…" : "Primero elegí la empresa"}
+                  {empresaId ? "Elegí la patente…" : "Primero elegí la empresa"}
                 </option>
-                {choferesOpts.map((ch) => (
-                  <option key={ch.id} value={ch.id}>
-                    {ch.nombre}
+                {unidadesDeEmpresa.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.patente}
                   </option>
                 ))}
               </select>
             </label>
-            {choferId && unidadesDeChofer.length === 0 && (
-              <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
-                Ese chofer no tiene unidad asignada en esta empresa.
-              </p>
-            )}
-            {choferId && unidadesDeChofer.length === 1 && selected && (
-              <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm font-semibold text-[var(--vl-heading)]">
-                {selected.patente}
-                <div className="mt-0.5 text-xs font-normal text-[var(--vl-text-muted)]">
-                  Unidad asignada
-                </div>
-              </div>
-            )}
-            {unidadesDeChofer.length > 1 && (
-              <label className="text-xs text-[var(--vl-text-muted)]">
-                Unidad
-                <select
-                  className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]"
-                  value={camionetaId}
-                  onChange={(e) => setCamionetaId(e.target.value)}
-                >
-                  <option value="">Elegí la patente…</option>
-                  {unidadesDeChofer.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.patente}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
           </>
         ) : unaSolaUnidad && selected ? (
           <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2.5 text-sm font-semibold text-[var(--vl-heading)]">
@@ -1676,16 +1638,11 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
           </div>
         ) : (
           <label className="text-xs text-[var(--vl-text-muted)]">
-            {esChofer
-              ? user?.esDuenoFlota
-                ? "Unidad (toda tu flota)"
-                : "Unidad (tu patente asignada)"
-              : "Unidad"}
+            Unidad (patente)
             <select className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" value={camionetaId} onChange={(e) => setCamionetaId(e.target.value)}>
-              {camionetas.map((c) => {
-                const asg = currentAsignacion(c);
-                return <option key={c.id} value={c.id}>{[c.patente, asg?.chofer?.nombre].filter(Boolean).join(" · ")}</option>;
-              })}
+              {camionetas.map((c) => (
+                <option key={c.id} value={c.id}>{c.patente}</option>
+              ))}
             </select>
           </label>
         )}

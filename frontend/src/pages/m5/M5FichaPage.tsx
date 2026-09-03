@@ -881,6 +881,7 @@ export function M5FichaPage() {
   const usuariosFiltrados = useMemo(() => {
     const q = userQuery.trim().toLowerCase();
     return usuarios.filter((u) => {
+      if (u.rol === "CLIENTE") return false;
       if (userEmpresaId && u.empresaId !== userEmpresaId) return false;
       if (userRol && u.rol !== userRol) return false;
       if (!q) return true;
@@ -2168,7 +2169,7 @@ export function M5FichaPage() {
                   value={fRol}
                   onChange={(e) => setFRol(e.target.value as Role)}
                 >
-                  {ALL_ROLES.filter((r) => r !== "CLIENTE" || form.item?.rol === "CLIENTE").map(
+                  {ALL_ROLES.filter((r) => r !== "CLIENTE").map(
                     (r) => (
                       <option key={r} value={r}>
                         {ROLE_LABELS[r]}

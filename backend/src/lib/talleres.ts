@@ -27,8 +27,10 @@ export const FALLAS_COMUNES = [
 
 /**
  * Circuito OT.
- * 0 se completa al crear (notif automática). Urgente salta a presupuesto (2).
- * 2 Presupuesto → 3 Aprobación empresa → 4 Facturación → 5 Incremento si hay desvío → 6 Cierre.
+ * 0 se completa al crear. Urgente / no-circular salta a presupuesto (2).
+ * Pasos 1+2 (asignación + presupuesto) se trabajan juntos; avanzar desde 1 salta a 3
+ * (o a 4 si sin presupuesto).
+ * 3 Aprobación empresa → 4 Facturación → 5 Incremento si hay desvío → 6 Cierre.
  */
 export const OT_STEPS = [
   {
@@ -41,13 +43,13 @@ export const OT_STEPS = [
     key: 1,
     code: "asignacion",
     label: "Asignación",
-    ownerRoles: [Role.FACU] as Role[] | null,
+    ownerRoles: [Role.FACU, Role.SILVINA] as Role[] | null,
   },
   {
     key: 2,
     code: "presupuesto",
     label: "Presupuesto",
-    ownerRoles: [Role.SILVINA],
+    ownerRoles: [Role.FACU, Role.SILVINA],
   },
   {
     key: 3,
@@ -59,7 +61,7 @@ export const OT_STEPS = [
     key: 4,
     code: "facturacion",
     label: "Facturación",
-    ownerRoles: [Role.SILVINA],
+    ownerRoles: [Role.FACU, Role.SILVINA],
   },
   {
     key: 5,
@@ -78,14 +80,24 @@ export const OT_STEPS = [
     key: 6,
     code: "cierre",
     label: "Cierre",
-    ownerRoles: [Role.SILVINA, Role.CARLA],
+    ownerRoles: [Role.FACU, Role.SILVINA, Role.CARLA],
   },
 ] as const;
 
 export const OT_STEP_LAST = OT_STEPS.length - 1;
 
+/** Facu y Silvina tienen los mismos permisos de OT. */
+export function isFacuOrSilvina(rol: Role | string | null | undefined): boolean {
+  return rol === Role.FACU || rol === Role.SILVINA || rol === "FACU" || rol === "SILVINA";
+}
+
 export function isPresupuestoStep(step: number): boolean {
   return step === 2;
+}
+
+/** Asignación (1) y presupuesto (2) unificados en la UI. */
+export function isAsignacionOPresupuestoStep(step: number): boolean {
+  return step === 1 || step === 2;
 }
 
 export function isAprobacionEmpresaStep(step: number): boolean {
@@ -109,49 +121,40 @@ export function isCierreStep(step: number): boolean {
   return step === 6;
 }
 
+/** Todos los usuarios internos de Vettore + choferes pueden crear OT. */
 export function canCreateSolicitud(rol: Role): boolean {
   return (
     rol === Role.CHOFER ||
-    rol === Role.PABLO ||
-    rol === Role.SILVINA ||
-    rol === Role.FACU ||
-    rol === Role.CARLA
+    isInternalOpsRole(rol)
   );
 }
 
 /** Quién es el “dueño” habitual de avanzar DESDE currentStep. Ops pueden igual (log silencioso). */
 export function canAdvanceFromStep(rol: Role, currentStep: number): boolean {
   if (currentStep === 0) return canCreateSolicitud(rol);
-  if (currentStep === 1) return rol === Role.FACU;
-  if (currentStep === 2) return rol === Role.SILVINA;
+  if (currentStep === 1) return isFacuOrSilvina(rol);
+  if (currentStep === 2) return isFacuOrSilvina(rol);
   // Dueño flota (rol CHOFER en contexto EMPRESA) u ops internos
   if (currentStep === 3) return rol === Role.CHOFER || isInternalOpsRole(rol);
-  if (currentStep === 4) return rol === Role.SILVINA;
+  if (currentStep === 4) return isFacuOrSilvina(rol);
   if (currentStep === 5) return isInternalOpsRole(rol);
   if (currentStep === 6) return false;
   return false;
 }
 
 export function canCerrarOt(rol: Role): boolean {
-  return rol === Role.SILVINA || rol === Role.CARLA;
+  return isFacuOrSilvina(rol) || rol === Role.CARLA;
 }
 
 /** Aviso al crear la solicitud: Pablo y Silvina (notif automática, reunión 12/08). */
-export const NOTIF_OPS_ROLES: Role[] = [Role.PABLO, Role.SILVINA];
+export const NOTIF_OPS_ROLES: Role[] = [Role.PABLO, Role.SILVINA, Role.FACU];
 
 /** Notificación final de pago. */
-export const CIERRE_AVISO_ROLES: Role[] = [Role.SILVINA, Role.CARLA];
+export const CIERRE_AVISO_ROLES: Role[] = [Role.SILVINA, Role.FACU, Role.CARLA];
 
 /** Retroceder: solo staff interno, nunca el chofer. */
 export function canRetreat(rol: Role): boolean {
-  return (
-    rol === Role.PABLO ||
-    rol === Role.FACU ||
-    rol === Role.SILVINA ||
-    rol === Role.PATRICIO ||
-    rol === Role.JULIETA ||
-    rol === Role.CARLA
-  );
+  return isInternalOpsRole(rol);
 }
 
 export const MARCAS_CAMIONETA = [

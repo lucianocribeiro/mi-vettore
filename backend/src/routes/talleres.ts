@@ -36,8 +36,9 @@ import {
   fechaAplicacionCambio,
   NOTIF_OPS_ROLES,
   OT_STEPS,
+  isAsignacionOPresupuestoStep,
+  isFacuOrSilvina,
   isGastoStep,
-  isPresupuestoStep,
   isAprobacionEmpresaStep,
   isFacturaStep,
   isIncrementoStep,
@@ -876,8 +877,9 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
         });
         return;
       }
-    } else if (!choferId) {
-      choferId = camioneta.asignaciones[0]?.choferId ?? null;
+    } else {
+      // Ops: la OT es por unidad, no exige vínculo con chofer.
+      choferId = req.body?.choferId ? String(req.body.choferId) : null;
     }
 
     const solicitante =
@@ -1060,18 +1062,26 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
     const overrideComentario = parseOverrideComentario(req.body);
     const data: Record<string, unknown> = {};
 
-    // Facu: asigna taller y decide inhabilitar (paso 1)
+    // Facu/Silvina (ops): asigna taller; solo ops puede inhabilitar (paso 1 o 2 unificados)
     if (
       req.body?.tallerProveedorId !== undefined ||
       req.body?.inhabilitar !== undefined
     ) {
-      if (ot.currentStep !== 1) {
+      if (!isAsignacionOPresupuestoStep(ot.currentStep)) {
         res.status(400).json({ error: "La asignación de taller es en esa etapa" });
+        return;
+      }
+      const quiereInhabilitar =
+        req.body?.inhabilitar === true || req.body?.inhabilitar === "true";
+      if (quiereInhabilitar && !isInternalOpsRole(rol)) {
+        res.status(403).json({
+          error: "Solo Vettore puede inhabilitar la unidad",
+        });
         return;
       }
       const gate = await gateOrOverride({
         rol,
-        allowed: rol === "FACU" || Boolean(empresaModo),
+        allowed: isFacuOrSilvina(rol) || isInternalOpsRole(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Asignar taller / inhabilitar unidad",
@@ -1092,7 +1102,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
         data.tallerProveedorId = tp.id;
         data.tallerAsignado = tp.razonSocial;
       }
-      if (req.body?.inhabilitar === true || req.body?.inhabilitar === "true") {
+      if (quiereInhabilitar) {
         await prisma.solicitudTaller.update({
           where: { id: ot.solicitudTallerId },
           data: { habilitadaCircular: false, inhabilitado: true },
@@ -1115,7 +1125,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
           data: NOTIF_OPS_ROLES.map((rolDestino) => ({
             rolDestino,
             titulo: `OT ${ot.numeroOT}: unidad fuera de circulación`,
-            mensaje: `Facu inhabilitó ${ot.solicitud.camioneta.patente}.`,
+            mensaje: `Se inhabilitó ${ot.solicitud.camioneta.patente}.`,
             otId: ot.id,
           })),
         });
@@ -1130,7 +1140,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       }
       const gate = await gateOrOverride({
         rol,
-        allowed: rol === "SILVINA",
+        allowed: isFacuOrSilvina(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Ajustar monto autorizado",
@@ -1165,7 +1175,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       }
       const gate = await gateOrOverride({
         rol,
-        allowed: rol === "SILVINA",
+        allowed: isFacuOrSilvina(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Justificar incremento de taller",
@@ -1245,7 +1255,7 @@ router.post(
         where: { id: req.params.id },
         include: { presupuestos: true },
       });
-      if (!ot || !isPresupuestoStep(ot.currentStep)) {
+      if (!ot || !isAsignacionOPresupuestoStep(ot.currentStep)) {
         res.status(400).json({ error: "Los presupuestos se cargan en la etapa de presupuesto" });
         return;
       }
@@ -1254,7 +1264,7 @@ router.post(
       const overrideComentario = parseOverrideComentario(req.body);
       const gate = await gateOrOverride({
         rol,
-        allowed: rol === "SILVINA",
+        allowed: isFacuOrSilvina(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Cargar presupuesto",
@@ -1334,7 +1344,7 @@ router.delete(
       const ot = await prisma.ordenTrabajo.findUnique({
         where: { id: req.params.id },
       });
-      if (!ot || !isPresupuestoStep(ot.currentStep)) {
+      if (!ot || !isAsignacionOPresupuestoStep(ot.currentStep)) {
         res.status(400).json({ error: "Solo en etapa de presupuesto" });
         return;
       }
@@ -1343,7 +1353,7 @@ router.delete(
       const overrideComentario = parseOverrideComentario(req.body);
       const gate = await gateOrOverride({
         rol,
-        allowed: rol === "SILVINA",
+        allowed: isFacuOrSilvina(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Eliminar presupuesto",
@@ -1385,7 +1395,7 @@ router.post("/:id/sin-presupuesto", authenticate, async (req: AuthedRequest, res
       res.status(404).json({ error: "OT no encontrada" });
       return;
     }
-    if (!isPresupuestoStep(ot.currentStep)) {
+    if (!isAsignacionOPresupuestoStep(ot.currentStep)) {
       res.status(400).json({ error: "Solo aplica en etapa de presupuesto" });
       return;
     }
@@ -1398,7 +1408,7 @@ router.post("/:id/sin-presupuesto", authenticate, async (req: AuthedRequest, res
     const overrideComentario = parseOverrideComentario(req.body);
     const gate = await gateOrOverride({
       rol,
-      allowed: rol === "SILVINA",
+      allowed: isFacuOrSilvina(rol),
       userId: req.user!.id,
       otId: ot.id,
       accion: "Marcar sin presupuesto",
@@ -1463,7 +1473,7 @@ router.post(
       const overrideComentario = parseOverrideComentario(req.body);
       const gate = await gateOrOverride({
         rol,
-        allowed: rol === "SILVINA" || rol === "CARLA",
+        allowed: isFacuOrSilvina(rol) || rol === "CARLA",
         userId: req.user!.id,
         otId: ot.id,
         accion: "Cargar factura",
@@ -1567,12 +1577,15 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       nextStep = ot.urgente ? 2 : 1;
     }
 
-    if (isPresupuestoStep(ot.currentStep)) {
+    // Pasos 1 y 2 unificados: asignación + presupuesto → aprobación (o facturación si sin presupuesto)
+    if (isAsignacionOPresupuestoStep(ot.currentStep)) {
       const tot = otTotales(ot);
       extra.valorAprobado = tot.presupuesto || ot.valorAprobado || ot.montoAutorizado || null;
       extra.montoAutorizado = tot.presupuesto || ot.montoAutorizado || null;
-      extra.sinPresupuesto = ot.sinPresupuesto || tot.presupuesto <= 0;
-      nextStep = 3; // → Aprobación empresa
+      const sinPresu = ot.sinPresupuesto || tot.presupuesto <= 0;
+      extra.sinPresupuesto = sinPresu;
+      // Sin presupuesto saltea aprobación empresa (paso 4 en numeración de negocio = step 3)
+      nextStep = sinPresu ? 4 : 3;
     }
 
     if (isAprobacionEmpresaStep(ot.currentStep)) {
@@ -1764,7 +1777,7 @@ router.post("/:id/reabrir", authenticate, async (req: AuthedRequest, res) => {
     const rol = req.user!.rol;
     const gate = await gateOrOverride({
       rol,
-      allowed: rol === "SILVINA" || rol === "CARLA",
+      allowed: isFacuOrSilvina(rol) || rol === "CARLA",
       userId: req.user!.id,
       otId: ot.id,
       accion: "Reabrir OT",
@@ -1930,7 +1943,7 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
     const rol = req.user!.rol as Role;
     const gate = await gateOrOverride({
       rol,
-      allowed: rol === "SILVINA",
+      allowed: isFacuOrSilvina(rol),
       userId: req.user!.id,
       otId: ot.id,
       accion: "Agregar ítem OT",
@@ -1945,7 +1958,7 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "Tipo de ítem inválido" });
       return;
     }
-    if (tipoRaw === "PRESUPUESTO" && !isPresupuestoStep(ot.currentStep) && !(isFacturaStep(ot.currentStep) && ot.sinPresupuesto)) {
+    if (tipoRaw === "PRESUPUESTO" && !isAsignacionOPresupuestoStep(ot.currentStep) && !(isFacturaStep(ot.currentStep) && ot.sinPresupuesto)) {
       res.status(400).json({ error: "Los presupuestos se cargan en la etapa de presupuesto" });
       return;
     }
@@ -2049,13 +2062,13 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
     // Sugerencia empresa: dueño (CHOFER) u ops — en presupuesto o aprobación.
     const sugeridoAllowed =
       wantsSugerido &&
-      (isPresupuestoStep(ot.currentStep) || isAprobacionEmpresaStep(ot.currentStep)) &&
+      (isAsignacionOPresupuestoStep(ot.currentStep) || isAprobacionEmpresaStep(ot.currentStep)) &&
       (rol === "CHOFER" || isInternalOpsRole(rol));
-    // A facturar + importe/concepto: Silvina/ops en facturación.
+    // A facturar + importe/concepto: Silvina/Facu/ops en facturación.
     const facturaAllowed =
       (wantsAprobado || wantsCategoria || wantsOtherEdit) &&
-      (rol === "SILVINA" || isInternalOpsRole(rol));
-    const silvinaEdit = rol === "SILVINA" || isInternalOpsRole(rol);
+      (isFacuOrSilvina(rol) || isInternalOpsRole(rol));
+    const silvinaEdit = isFacuOrSilvina(rol) || isInternalOpsRole(rol);
 
     const gate = await gateOrOverride({
       rol,
@@ -2094,7 +2107,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       data.clasificacionOtro = clasif.clasificacionOtro;
     }
     if (wantsSugerido) {
-      if (!isPresupuestoStep(ot.currentStep) && !isAprobacionEmpresaStep(ot.currentStep)) {
+      if (!isAsignacionOPresupuestoStep(ot.currentStep) && !isAprobacionEmpresaStep(ot.currentStep)) {
         res.status(400).json({
           error: "La sugerencia de la empresa se marca en aprobación empresa",
         });
@@ -2192,7 +2205,7 @@ router.delete("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res
     const rol = req.user!.rol as Role;
     const gate = await gateOrOverride({
       rol,
-      allowed: rol === "SILVINA",
+      allowed: isFacuOrSilvina(rol),
       userId: req.user!.id,
       otId: ot.id,
       accion: "Eliminar ítem OT",
@@ -2292,7 +2305,7 @@ router.post(
       if (!scope) {
         const gate = await gateOrOverride({
           rol: req.user!.rol as Role,
-          allowed: req.user!.rol === "SILVINA",
+          allowed: isFacuOrSilvina(req.user!.rol),
           userId: req.user!.id,
           otId: ot.id,
           accion: "Cargar rendición urgente",
