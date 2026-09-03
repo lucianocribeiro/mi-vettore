@@ -447,8 +447,6 @@ export function M7TalleresPage() {
         : ot?.presupuestoMonto != null && ot.presupuestoMonto > 0
           ? ot.presupuestoMonto
           : totTodosPresupuestos;
-  const totP = totTildados > 0 ? totTildados : 0;
-  const totF = totFacturadoFijo;
 
   return (
     <div>

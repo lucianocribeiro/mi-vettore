@@ -52,7 +52,6 @@ import {
 import { applyKmUpdate } from "../lib/km.js";
 import { avisarChoferReparacion } from "../lib/aviso-chofer.js";
 import {
-  hayIncrementoSobrePresupuesto,
   totalFacturado,
   totalPresupuesto,
   totalPresupuestosCargados,
