@@ -41,11 +41,11 @@ const FALLAS_COMUNES = [
 
 const OT_STEPS = [
   { code: "solicitud", label: "Solicitud", owner: null as string | null, detail: "Se reporta la unidad (patente), el problema y si puede circular." },
-  { code: "asignacion", label: "Asignación y presupuesto", owner: "Facu / Silvina", detail: "Asigná taller, cargá presupuestos e inhabilitá la unidad si hace falta (solo Vettore)." },
-  { code: "presupuesto", label: "Asignación y presupuesto", owner: "Facu / Silvina", detail: "Asigná taller y cargá presupuestos. Guardá sin necesidad de Continuar." },
-  { code: "aprobacion_empresa", label: "Aprobación empresa", owner: "Empresa de transporte", detail: "La empresa ve montos y sugiere dónde reparar por comentario. El chofer no ve montos; ambos pueden enviar sugerencias." },
-  { code: "facturacion", label: "Facturación", owner: "Facu / Silvina", detail: "Marcá a facturar, editá importe y asigná concepto (3 niveles)." },
-  { code: "incremento", label: "Incremento", owner: "Ops", detail: "Solo si el gasto supera lo presupuestado. Cualquier usuario interno puede confirmar." },
+  { code: "asignacion", label: "Asignación y presupuesto", owner: "Facu / Silvina", detail: "Cargá presupuestos (se suman los subtotales), verificá si la unidad queda habilitada o inhabilitada. Guardá sin Continuar." },
+  { code: "presupuesto", label: "Asignación y presupuesto", owner: "Facu / Silvina", detail: "Cargá presupuestos (suma de subtotales) e inhabilitá la unidad si hace falta (solo Vettore)." },
+  { code: "aprobacion_empresa", label: "Aprobación empresa", owner: "Empresa de transporte", detail: "La empresa ve montos y sugiere dónde reparar por comentario. El chofer no ve montos." },
+  { code: "facturacion", label: "Facturación", owner: "Facu / Silvina", detail: "Seleccioná los ítems a facturar, editá importes si hace falta y podés agregar gasto. Concepto en 3 niveles." },
+  { code: "incremento", label: "Comparación", owner: "Ops", detail: "Antes del cierre: solo ítems tildados vs facturado/gasto pactado, para comparar." },
   { code: "cierre", label: "Cierre", owner: "Facu / Silvina / Carla", detail: "Cerrar OT, reporte de salida y cuenta corriente del proveedor." },
 ] as const;
 
@@ -890,14 +890,107 @@ export function M7TalleresPage() {
                         )}
 
                         {isIncrementoStep(ot.currentStep) && (
-                          <div>
-                            <p className="text-sm">Presupuesto {money(totP)} vs facturado {money(totF)}</p>
-                            <p className="mt-1 text-xs">{ot.incrementoJustificacion || "Sin nota extra"}</p>
+                          <div className="space-y-3">
+                            <div className="rounded-lg border border-[var(--vl-card-border)] p-4">
+                              <p className="text-xs font-semibold text-[var(--vl-heading)]">
+                                Comparación antes del cierre
+                              </p>
+                              <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                                Facturado/gasto es la suma fija de todos los presupuestos pactados.
+                                Abajo solo entran los ítems tildados / seleccionados.
+                              </p>
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
+                                  <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
+                                    Facturado / gasto (fijo)
+                                  </div>
+                                  <div className="mt-1 text-lg font-bold">
+                                    {totFacturadoFijo > 0 ? money(totFacturadoFijo) : "—"}
+                                  </div>
+                                </div>
+                                <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
+                                  <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
+                                    Ítems tildados
+                                  </div>
+                                  <div className="mt-1 text-lg font-bold">
+                                    {totTildados > 0 ? money(totTildados) : "—"}
+                                  </div>
+                                </div>
+                              </div>
+                              {totFacturadoFijo > 0 && totTildados > 0 && (
+                                <p className="mt-3 text-sm">
+                                  Diferencia:{" "}
+                                  <strong>
+                                    {money(totFacturadoFijo - totTildados)}
+                                  </strong>
+                                  {totFacturadoFijo - totTildados > 0
+                                    ? " (pactado − seleccionado)"
+                                    : totFacturadoFijo - totTildados < 0
+                                      ? " (seleccionado supera lo pactado)"
+                                      : " (coinciden)"}
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <div className="mb-1 text-xs font-semibold">Solo ítems tildados</div>
+                              {itemsPresupuesto.filter(
+                                (i) => i.sugeridoEmpresa || i.aprobado
+                              ).length === 0 ? (
+                                <p className="text-xs text-[var(--vl-text-muted)]">
+                                  No hay ítems tildados todavía.
+                                </p>
+                              ) : (
+                                <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
+                                  {itemsPresupuesto
+                                    .filter((i) => i.sugeridoEmpresa || i.aprobado)
+                                    .map((i) => (
+                                      <li
+                                        key={i.id}
+                                        className="flex justify-between gap-2 border-b border-[var(--vl-card-border)] py-1 last:border-0"
+                                      >
+                                        <span>
+                                          {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
+                                          {i.descripcion}
+                                        </span>
+                                        <span className="shrink-0 font-medium">
+                                          {money(i.importe)}
+                                        </span>
+                                      </li>
+                                    ))}
+                                </ul>
+                              )}
+                            </div>
+                            {ot.incrementoJustificacion && (
+                              <p className="text-xs text-[var(--vl-text-muted)]">
+                                Nota: {ot.incrementoJustificacion}
+                              </p>
+                            )}
                             {puedeEditarTaller && (
-                              <button type="button" disabled={busy} className="mt-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs text-white" onClick={() => void call(`/api/talleres/${ot.id}`, { method: "PATCH", body: JSON.stringify({ incrementoAprobado: true }) })}>
-                                Confirmar incremento
+                              <button
+                                type="button"
+                                disabled={busy}
+                                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs text-white"
+                                onClick={() =>
+                                  void call(`/api/talleres/${ot.id}`, {
+                                    method: "PATCH",
+                                    body: JSON.stringify({ incrementoAprobado: true }),
+                                  })
+                                }
+                              >
+                                Confirmar y seguir a cierre
                               </button>
                             )}
+                          </div>
+                        )}
+
+                        {isCierreStep(ot.currentStep) && !vistaChofer && (
+                          <div className="rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
+                            <p className="font-semibold text-[var(--vl-heading)]">Resumen confirmado</p>
+                            <p className="mt-1 text-[var(--vl-text-muted)]">
+                              Facturado/gasto pactado: <strong>{money(totFacturadoFijo)}</strong>
+                              {" · "}
+                              Ítems tildados: <strong>{money(totTildados)}</strong>
+                            </p>
                           </div>
                         )}
 

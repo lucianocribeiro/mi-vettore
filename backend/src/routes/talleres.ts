@@ -1651,7 +1651,8 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       if (req.body?.incrementoJustificacion) {
         extra.incrementoJustificacion = String(req.body.incrementoJustificacion).trim();
       }
-      nextStep = hayIncrementoSobrePresupuesto(aprobado, facturado) ? 5 : 6;
+      // Siempre pasa por Comparación (tildados vs facturado) antes del cierre.
+      nextStep = 5;
     }
 
     if (isIncrementoStep(ot.currentStep)) {
