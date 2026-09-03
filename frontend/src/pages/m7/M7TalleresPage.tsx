@@ -172,7 +172,7 @@ type OrdenTrabajo = {
   items?: OtItem[];
   facturas?: OtFactura[];
   presupuestos?: { id: string; taller: string; monto: number; descripcion?: string | null; archivo: string | null }[];
-  totales?: { presupuesto: number; facturado: number };
+  totales?: { presupuesto: number; facturado: number; presupuestoTodos?: number };
   resumenChofer?: { presupuestoTotal: number; gastoReal: number };
   comentarios?: OtComentario[];
   auditorias?: { id: string; accion: string; createdAt: string; user?: { nombre: string | null; email: string } | null }[];
@@ -393,8 +393,20 @@ export function M7TalleresPage() {
     }
   }
 
-  const totP = ot?.totales?.presupuesto ?? ot?.resumenChofer?.presupuestoTotal ?? 0;
+  const itemsPresupuesto = (ot?.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
+  const totTodosPresupuestos =
+    ot?.totales?.presupuestoTodos ??
+    itemsPresupuesto.reduce((a, i) => a + (i.importe || 0), 0);
+  const totTildados = itemsPresupuesto
+    .filter((i) => i.sugeridoEmpresa || i.aprobado)
+    .reduce((a, i) => a + (i.importe || 0), 0);
+  const totP =
+    totTildados > 0
+      ? totTildados
+      : ot?.totales?.presupuesto ?? ot?.resumenChofer?.presupuestoTotal ?? 0;
   const totF = ot?.totales?.facturado ?? ot?.resumenChofer?.gastoReal ?? 0;
+  /** En etapas tempranas: suma de todas las cotizaciones; si ya hay factura, el gasto real. */
+  const totFacturadoOCargado = totF > 0 ? totF : totTodosPresupuestos;
 
   return (
     <div>
@@ -858,12 +870,25 @@ export function M7TalleresPage() {
                   <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                     <div className="rounded-xl border p-3">
                       <div className="text-xs text-[var(--vl-text-muted)]">Facturado / gasto</div>
-                      <div className="font-bold">{totF > 0 ? money(totF) : "—"}</div>
-                      {totP > 0 && (
-                        <div className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                          Referencia presupuestada (ítems tildados): {money(totP)}
+                      <div className="text-base font-bold">
+                        {totFacturadoOCargado > 0 ? money(totFacturadoOCargado) : "—"}
+                      </div>
+                      <p className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
+                        {totF > 0
+                          ? "Gasto / factura cargada"
+                          : "Suma de todos los presupuestos (antes de tildar)"}
+                      </p>
+                      <div className="mt-3 border-t border-[var(--vl-card-border)] pt-3">
+                        <div className="text-sm font-semibold text-[var(--vl-heading)]">
+                          Referencia presupuestada (ítems tildados)
                         </div>
-                      )}
+                        <div className="mt-1 text-xl font-bold tracking-tight text-[var(--vl-heading)]">
+                          {totP > 0 ? money(totP) : "—"}
+                        </div>
+                        <p className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
+                          Queda como importe final al continuar desde aprobación
+                        </p>
+                      </div>
                     </div>
                   </div>
                   )}

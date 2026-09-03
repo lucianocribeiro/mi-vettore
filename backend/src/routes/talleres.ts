@@ -55,6 +55,7 @@ import {
   hayIncrementoSobrePresupuesto,
   totalFacturado,
   totalPresupuesto,
+  totalPresupuestosCargados,
 } from "../lib/ot-totales.js";
 
 const router = Router();
@@ -225,7 +226,12 @@ type OtLoaded = Prisma.OrdenTrabajoGetPayload<{
 }>;
 
 function otTotales(ot: {
-  items?: { tipo: TipoOtItem; importe: number; aprobado?: boolean }[];
+  items?: {
+    tipo: TipoOtItem;
+    importe: number;
+    aprobado?: boolean;
+    sugeridoEmpresa?: boolean;
+  }[];
   presupuestos?: { monto: number }[];
   valorAprobado?: number | null;
   montoAutorizado?: number | null;
@@ -239,7 +245,8 @@ function otTotales(ot: {
     montoAutorizado: ot.montoAutorizado,
   });
   const facturado = totalFacturado({ items, valorFinal: ot.valorFinal });
-  return { presupuesto, facturado };
+  const presupuestoTodos = totalPresupuestosCargados(items);
+  return { presupuesto, facturado, presupuestoTodos };
 }
 
 /** Chofer ve totales + comentarios + ítems de presupuesto (solo lectura).
@@ -1580,15 +1587,47 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
     // Pasos 1 y 2 unificados: asignación + presupuesto → aprobación (o facturación si sin presupuesto)
     if (isAsignacionOPresupuestoStep(ot.currentStep)) {
       const tot = otTotales(ot);
-      extra.valorAprobado = tot.presupuesto || ot.valorAprobado || ot.montoAutorizado || null;
-      extra.montoAutorizado = tot.presupuesto || ot.montoAutorizado || null;
-      const sinPresu = ot.sinPresupuesto || tot.presupuesto <= 0;
+      const sinPresu = ot.sinPresupuesto || tot.presupuestoTodos <= 0;
       extra.sinPresupuesto = sinPresu;
-      // Sin presupuesto saltea aprobación empresa (paso 4 en numeración de negocio = step 3)
-      nextStep = sinPresu ? 4 : 3;
+      // Sin selección aún: no fijar importe final. Si no hay presupuesto, saltea aprobación.
+      if (sinPresu) {
+        extra.valorAprobado = null;
+        extra.montoAutorizado = null;
+        nextStep = 4;
+      } else {
+        nextStep = 3;
+      }
     }
 
     if (isAprobacionEmpresaStep(ot.currentStep)) {
+      // Ítems tildados (sugeridoEmpresa) quedan como importe final para facturación.
+      const seleccionados = (ot.items ?? []).filter(
+        (i) => i.tipo === "PRESUPUESTO" && i.sugeridoEmpresa
+      );
+      const totalSel = seleccionados.reduce(
+        (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
+        0
+      );
+      if (seleccionados.length > 0) {
+        await prisma.otItem.updateMany({
+          where: {
+            otId: ot.id,
+            tipo: "PRESUPUESTO",
+            id: { in: seleccionados.map((i) => i.id) },
+          },
+          data: { aprobado: true },
+        });
+        await prisma.otItem.updateMany({
+          where: {
+            otId: ot.id,
+            tipo: "PRESUPUESTO",
+            id: { notIn: seleccionados.map((i) => i.id) },
+          },
+          data: { aprobado: false },
+        });
+        extra.valorAprobado = totalSel;
+        extra.montoAutorizado = totalSel;
+      }
       nextStep = 4; // → Facturación
     }
 

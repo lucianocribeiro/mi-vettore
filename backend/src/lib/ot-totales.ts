@@ -58,6 +58,13 @@ export function totalPresupuesto(opts: {
   return roundMoney(opts.valorAprobado ?? opts.montoAutorizado ?? 0);
 }
 
+/** Suma de todas las cotizaciones / ítems de presupuesto (antes de tildar). */
+export function totalPresupuestosCargados(
+  items: Pick<OtItem, "tipo" | "importe">[]
+): number {
+  return sumItems(items ?? [], TIPOS_PRESUPUESTO);
+}
+
 export function totalFacturado(opts: {
   items: ItemTotales[];
   valorFinal?: number | null;
