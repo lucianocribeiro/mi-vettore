@@ -393,20 +393,30 @@ export function M7TalleresPage() {
     }
   }
 
-  const itemsPresupuesto = (ot?.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
-  const totTodosPresupuestos =
-    ot?.totales?.presupuestoTodos ??
-    itemsPresupuesto.reduce((a, i) => a + (i.importe || 0), 0);
+  const itemsAll = ot?.items ?? [];
+  const itemsPresupuesto = itemsAll.filter((i) => i.tipo === "PRESUPUESTO");
+  const itemsFacturaReal = itemsAll.filter(
+    (i) => i.tipo === "FACTURA" || i.tipo === "RENDICION"
+  );
+  /** Suma de TODAS las cotizaciones cargadas (sin filtrar por tilde). */
+  const totTodosPresupuestos = itemsPresupuesto.reduce(
+    (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
+    0
+  );
+  /** Solo ítems con el check de aprobación (sugeridoEmpresa). */
   const totTildados = itemsPresupuesto
-    .filter((i) => i.sugeridoEmpresa || i.aprobado)
-    .reduce((a, i) => a + (i.importe || 0), 0);
-  const totP =
-    totTildados > 0
-      ? totTildados
-      : ot?.totales?.presupuesto ?? ot?.resumenChofer?.presupuestoTotal ?? 0;
-  const totF = ot?.totales?.facturado ?? ot?.resumenChofer?.gastoReal ?? 0;
-  /** En etapas tempranas: suma de todas las cotizaciones; si ya hay factura, el gasto real. */
-  const totFacturadoOCargado = totF > 0 ? totF : totTodosPresupuestos;
+    .filter((i) => i.sugeridoEmpresa === true)
+    .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0);
+  const totFacturaReal = itemsFacturaReal.reduce(
+    (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
+    0
+  );
+  /** Arriba: factura real si existe; si no, TODO el presupuesto cargado. */
+  const totFacturadoOCargado =
+    totFacturaReal > 0 ? totFacturaReal : totTodosPresupuestos;
+  /** Compat: incremento / otros bloques que usan totP / totF */
+  const totP = totTildados > 0 ? totTildados : 0;
+  const totF = totFacturaReal > 0 ? totFacturaReal : totFacturadoOCargado;
 
   return (
     <div>
@@ -874,19 +884,19 @@ export function M7TalleresPage() {
                         {totFacturadoOCargado > 0 ? money(totFacturadoOCargado) : "—"}
                       </div>
                       <p className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
-                        {totF > 0
+                        {totFacturaReal > 0
                           ? "Gasto / factura cargada"
-                          : "Suma de todos los presupuestos (antes de tildar)"}
+                          : "Suma de todos los presupuestos cargados"}
                       </p>
                       <div className="mt-3 border-t border-[var(--vl-card-border)] pt-3">
                         <div className="text-sm font-semibold text-[var(--vl-heading)]">
                           Referencia presupuestada (ítems tildados)
                         </div>
                         <div className="mt-1 text-xl font-bold tracking-tight text-[var(--vl-heading)]">
-                          {totP > 0 ? money(totP) : "—"}
+                          {totTildados > 0 ? money(totTildados) : "—"}
                         </div>
                         <p className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
-                          Queda como importe final al continuar desde aprobación
+                          Solo lo marcado con el check · importe final al continuar
                         </p>
                       </div>
                     </div>
