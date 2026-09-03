@@ -92,13 +92,6 @@ const NAV: NavItem[] = [
     roles: ["SUGERENCIAS"],
   },
   {
-    to: "/m2",
-    label: "Formulario de cambios",
-    sub: "M2",
-    icon: FileText,
-    roles: ["CLIENTE"],
-  },
-  {
     to: "/m5",
     label: "Ficha integral (ABM)",
     sub: "Flota",

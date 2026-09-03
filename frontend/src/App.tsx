@@ -6,7 +6,6 @@ import { AppLayout } from "./components/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { M4AlertasPage } from "./pages/m4/M4AlertasPage";
 import { M5FichaPage } from "./pages/m5/M5FichaPage";
-import { M2CambiosPage } from "./pages/m2/M2CambiosPage";
 import { M3ComunicacionesPage } from "./pages/m3/M3ComunicacionesPage";
 import { M6MantenimientoPage } from "./pages/m6/M6MantenimientoPage";
 import { M7TalleresPage } from "./pages/m7/M7TalleresPage";
@@ -17,7 +16,7 @@ import { SugerenciasPage } from "./pages/SugerenciasPage";
 function HomeRedirect() {
   const { user } = useAuth();
   if (user?.rol === "SUGERENCIAS") return <Navigate to="/sugerencias" replace />;
-  if (user?.rol === "CLIENTE") return <Navigate to="/m2" replace />;
+  if (user?.rol === "CLIENTE") return <Navigate to="/login" replace />;
   if (user?.rol === "CHOFER") return <Navigate to={user.esDuenoFlota ? "/documentacion" : "/m7"} replace />;
   return <Navigate to="/m7" replace />;
 }
@@ -40,14 +39,7 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route index element={<HomeRedirect />} />
             <Route path="/m1" element={<Navigate to="/" replace />} />
-            <Route
-              path="/m2"
-              element={
-                <SugerenciasOnlyGate>
-                  <M2CambiosPage />
-                </SugerenciasOnlyGate>
-              }
-            />
+            <Route path="/m2" element={<Navigate to="/" replace />} />
             <Route
               path="/m3"
               element={

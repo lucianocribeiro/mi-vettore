@@ -45,13 +45,6 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
     openPicker: "dueno",
   },
   {
-    email: "cliente@vettore.test",
-    rol: "CLIENTE",
-    label: "Cliente",
-    home: "/m2",
-    note: "Formulario de cambios",
-  },
-  {
     email: "facu@vettore.test",
     rol: "FACU",
     label: "Facu · Ops / taller",
