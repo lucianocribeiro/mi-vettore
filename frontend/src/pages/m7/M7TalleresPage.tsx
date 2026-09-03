@@ -61,10 +61,6 @@ function isFacturaStep(step: number) {
   return step === 4;
 }
 
-function isGastoStep(step: number) {
-  return step === 2 || step === 4;
-}
-
 function isIncrementoStep(step: number) {
   return step === 5;
 }
@@ -264,9 +260,6 @@ export function M7TalleresPage() {
   const [itemTallerId, setItemTallerId] = useState("");
   const [justif, setJustif] = useState("");
   const [facturaFile, setFacturaFile] = useState<File | null>(null);
-  const [rendDesc, setRendDesc] = useState("");
-  const [rendImp, setRendImp] = useState("");
-  const [rendFile, setRendFile] = useState<File | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -693,25 +686,6 @@ export function M7TalleresPage() {
                                 </li>
                               ))}
                           </ul>
-                        )}
-                        {ot.urgente && !ot.cerradaAt && isGastoStep(ot.currentStep) && displayStep === ot.currentStep && (
-                          <div className="rounded-lg border border-amber-200 p-3">
-                            <div className="text-xs font-semibold">Rendición de gasto (24hs)</div>
-                            <input className="mt-2 w-full rounded-md border p-2 text-sm" placeholder="Qué se reparó" value={rendDesc} onChange={(e) => setRendDesc(e.target.value)} />
-                            <input className="mt-2 min-h-11 w-full rounded-md border p-2 text-base" placeholder="Importe" type="number" value={rendImp} onChange={(e) => setRendImp(e.target.value)} />
-                            <label className="mt-2 flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed text-sm">
-                              <Upload size={16} /> Foto / comprobante
-                              <input type="file" accept="image/*,application/pdf" capture="environment" className="sr-only" onChange={(e) => setRendFile(e.target.files?.[0] ?? null)} />
-                            </label>
-                            {rendFile && <p className="mt-1 text-xs">{rendFile.name}</p>}
-                            <button type="button" disabled={busy || !rendImp} className="mt-2 w-full rounded-md bg-[#1e4080] py-2 text-sm text-white" onClick={() => {
-                              const fd = new FormData();
-                              fd.append("descripcion", rendDesc || "Rendición urgente");
-                              fd.append("importe", rendImp);
-                              if (rendFile) fd.append("archivo", rendFile);
-                              void call(`/api/talleres/${ot.id}/rendicion`, { method: "POST", body: fd });
-                            }}>Enviar rendición</button>
-                          </div>
                         )}
                       </div>
                     ) : (
