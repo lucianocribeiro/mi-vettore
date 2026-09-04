@@ -312,8 +312,7 @@ model SolicitudTaller {
 
 /// 0 Solicitud · 1 Asignación Facu · 2 Presupuestos · 3 Facturación · 4 Incremento · 5 Cierre/pago
 /// TODO (miércoles): proceso de reactivación de unidad/chofer post-reparación.
-/// TODO (reunión 12/08): qué facturas (si alguna) siguen pidiendo OK de Patricio
-/// además del incremento sobre presupuesto. Hoy: solo el paso 4 (incremento).
+/// Circuito OT 5 pasos: 0 solicitud, 1 presupuesto, 2 selección, 3 ajuste, 4 comparación/cierre.
 model OrdenTrabajo {
   id                      String    @id @default(cuid())
   solicitudTallerId       String    @unique

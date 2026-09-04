@@ -642,7 +642,7 @@ async function main() {
       data: {
         solicitudTallerId: sol.id,
         numeroOT: "OT-0201",
-        currentStep: 2,
+        currentStep: 1,
       },
     });
   }

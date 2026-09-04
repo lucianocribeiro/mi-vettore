@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Download,
   Plus,
-  Upload,
   X,
 } from "../../components/icons";
 import { apiFetch, apiDownload, ApiError } from "../../lib/api";
@@ -40,33 +39,27 @@ const FALLAS_COMUNES = [
 ] as const;
 
 const OT_STEPS = [
-  { code: "solicitud", label: "Solicitud", owner: null as string | null, detail: "Se reporta la unidad (patente), el problema y si puede circular." },
-  { code: "asignacion", label: "Asignación y presupuesto", owner: "Facu / Silvina", detail: "Cargá presupuestos (se suman los subtotales), verificá si la unidad queda habilitada o inhabilitada. Guardá sin Continuar." },
-  { code: "presupuesto", label: "Asignación y presupuesto", owner: "Facu / Silvina", detail: "Cargá presupuestos (suma de subtotales) e inhabilitá la unidad si hace falta (solo Vettore)." },
-  { code: "aprobacion_empresa", label: "Aprobación empresa", owner: "Empresa de transporte", detail: "La empresa ve montos y sugiere dónde reparar por comentario. El chofer no ve montos." },
-  { code: "facturacion", label: "Facturación", owner: "Facu / Silvina", detail: "Seleccioná los ítems a facturar, editá importes si hace falta y podés agregar gasto. Concepto en 3 niveles." },
-  { code: "incremento", label: "Comparación", owner: "Ops", detail: "Antes del cierre: solo ítems tildados vs facturado/gasto pactado, para comparar." },
-  { code: "cierre", label: "Cierre", owner: "Facu / Silvina / Carla", detail: "Cerrar OT, reporte de salida y cuenta corriente del proveedor." },
+  { code: "solicitud", label: "Solicitud", owner: null as string | null, detail: "Ingreso de la orden de trabajo: unidad, problema y si puede circular." },
+  { code: "presupuesto", label: "Presupuesto", owner: "Facu / Silvina", detail: "Cargá presupuestos por proveedor. Solo se muestran los subtotales por proveedor." },
+  { code: "seleccion", label: "Selección", owner: "Facu / Silvina", detail: "Tildá los presupuestos aprobados. El importe no se edita. El total es el presupuesto aprobado." },
+  { code: "ajuste", label: "Ajuste de importes", owner: "Facu / Silvina", detail: "Solo ítems tildados: editá importes y concepto. Se actualiza el presupuesto aprobado." },
+  { code: "cierre", label: "Comparación y cierre", owner: "Facu / Silvina / Carla", detail: "Compará presupuesto aprobado vs importes editados y cerrá la OT." },
 ] as const;
 
 function isAsignacionOPresupuestoStep(step: number) {
-  return step === 1 || step === 2;
+  return step === 1;
 }
 
-function isAprobacionEmpresaStep(step: number) {
+function isSeleccionStep(step: number) {
+  return step === 2;
+}
+
+function isAjusteStep(step: number) {
   return step === 3;
 }
 
-function isFacturaStep(step: number) {
-  return step === 4;
-}
-
-function isIncrementoStep(step: number) {
-  return step === 5;
-}
-
 function isCierreStep(step: number) {
-  return step === 6;
+  return step === 4;
 }
 
 function isFacuOrSilvina(rol?: Role | null) {
@@ -185,9 +178,7 @@ function canAdvanceFromStep(rol: Role | undefined, step: number) {
   if (step === 0) return canCreateSolicitud(rol);
   if (step === 1) return isFacuOrSilvina(rol);
   if (step === 2) return isFacuOrSilvina(rol);
-  if (step === 3) return rol === "CHOFER" || isInternalOps(rol);
-  if (step === 4) return isFacuOrSilvina(rol);
-  if (step === 5) return isInternalOps(rol);
+  if (step === 3) return isFacuOrSilvina(rol);
   return false;
 }
 
@@ -253,13 +244,11 @@ export function M7TalleresPage() {
   const [importeDrafts, setImporteDrafts] = useState<Record<string, number>>({});
   const puedeEditarTaller = isOps(rol);
 
-  const [inhabilitar, setInhabilitar] = useState(false);
   const [itemDesc, setItemDesc] = useState("");
   const [itemImp, setItemImp] = useState("");
   const [itemObs, setItemObs] = useState("");
   const [itemTallerId, setItemTallerId] = useState("");
   const [justif, setJustif] = useState("");
-  const [facturaFile, setFacturaFile] = useState<File | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -349,7 +338,6 @@ export function M7TalleresPage() {
     if (!ot) return;
     setJustif(ot.incrementoJustificacion ?? "");
     setBrowseStep(null);
-    setInhabilitar(!!ot.solicitud?.inhabilitado);
     setImporteDrafts({});
   }, [ot?.id]);
 
@@ -395,20 +383,6 @@ export function M7TalleresPage() {
 
   const itemsAll = ot?.items ?? [];
   const itemsPresupuesto = itemsAll.filter((i) => i.tipo === "PRESUPUESTO");
-  const itemsFacturaReal = itemsAll.filter(
-    (i) => i.tipo === "FACTURA" || i.tipo === "RENDICION"
-  );
-  /** Suma viva de cotizaciones (solo mientras se cargan). */
-  const totTodosPresupuestos = itemsPresupuesto.reduce((a, i) => {
-    const draft = importeDrafts[i.id];
-    const val =
-      draft !== undefined && Number.isFinite(draft)
-        ? draft
-        : Number.isFinite(i.importe)
-          ? i.importe
-          : 0;
-    return a + val;
-  }, 0);
   /** Solo ítems tildados — cambia al marcar / editar. */
   const totTildados = itemsPresupuesto
     .filter((i) => i.sugeridoEmpresa === true || i.aprobado === true)
@@ -422,24 +396,19 @@ export function M7TalleresPage() {
             : 0;
       return a + val;
     }, 0);
-  const totFacturaReal = itemsFacturaReal.reduce(
-    (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
-    0
-  );
   /**
-   * Facturado/gasto: fijo una vez pactada la carga de presupuestos.
-   * En pasos 1–2 se actualiza en vivo; después usa presupuestoMonto congelado.
-   * Si ya hay factura real, esa manda.
+   * Presupuesto aprobado: en selección = suma tildados en vivo;
+   * después del avance queda en valorAprobado (congelado).
+   * En ajuste, el total editado es totTildados (importes actuales).
    */
-  const cargaPresupuestoAbierta = isAsignacionOPresupuestoStep(ot?.currentStep ?? -1);
-  const totFacturadoFijo =
-    totFacturaReal > 0
-      ? totFacturaReal
-      : cargaPresupuestoAbierta
-        ? totTodosPresupuestos
-        : ot?.presupuestoMonto != null && ot.presupuestoMonto > 0
-          ? ot.presupuestoMonto
-          : totTodosPresupuestos;
+  const presupuestoAprobadoFijo =
+    ot?.valorAprobado != null && ot.valorAprobado > 0
+      ? ot.valorAprobado
+      : totTildados;
+  const enSeleccion = isSeleccionStep(ot?.currentStep ?? -1);
+  const enAjuste = isAjusteStep(ot?.currentStep ?? -1);
+  const enCierre = isCierreStep(ot?.currentStep ?? -1);
+  const enPresupuesto = isAsignacionOPresupuestoStep(ot?.currentStep ?? -1);
 
   return (
     <div>
@@ -451,7 +420,7 @@ export function M7TalleresPage() {
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
             {esChofer
               ? "Seguí el estado de tu solicitud. El detalle interno lo ve solo el equipo de Vettore."
-              : "Solicitud → asignación → presupuesto → aprobación empresa → factura → incremento si hay desvío → cierre."}
+              : "Solicitud → presupuesto → selección → ajuste de importes → comparación y cierre."}
           </p>
           <p className="mt-1 text-xs font-medium text-[#1e4080] dark:text-sky-300">
             {roleActionHint(rol, {
@@ -675,7 +644,7 @@ export function M7TalleresPage() {
                         )}
                         {(ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO").length > 0 &&
                           (isAsignacionOPresupuestoStep(displayStep) ||
-                            isAprobacionEmpresaStep(displayStep)) && (
+                            isSeleccionStep(displayStep)) && (
                           <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
                             {(ot.items ?? [])
                               .filter((i) => i.tipo === "PRESUPUESTO")
@@ -704,33 +673,6 @@ export function M7TalleresPage() {
                                 (campos en gris). En tu etapa usá Continuar / Volver.
                               </div>
                             )}
-                            {puedeEditarTaller && (
-                              <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-3">
-                                <div className="text-xs font-semibold">Estado de la unidad</div>
-                                {ot.tallerAsignado && (
-                                  <p className="text-[11px] text-[var(--vl-text-muted)]">
-                                    Proveedor en ítems / OT: {ot.tallerAsignado}
-                                  </p>
-                                )}
-                                <label className="flex items-center gap-2 text-sm">
-                                  <input type="checkbox" checked={inhabilitar} onChange={(e) => setInhabilitar(e.target.checked)} />
-                                  Inhabilitar unidad (fuera de circulación)
-                                </label>
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  className="rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900"
-                                  onClick={() =>
-                                    void call(`/api/talleres/${ot.id}`, {
-                                      method: "PATCH",
-                                      body: JSON.stringify({ inhabilitar }),
-                                    })
-                                  }
-                                >
-                                  Guardar
-                                </button>
-                              </div>
-                            )}
 
                             <ItemsEditor
                               ot={ot}
@@ -740,6 +682,7 @@ export function M7TalleresPage() {
                               lockTipo
                               showAprobado={false}
                               hideTotal
+                              showSubtotales
                               requireClasif
                               readOnly={!puedeEditarTaller}
                               desc={itemDesc}
@@ -757,8 +700,8 @@ export function M7TalleresPage() {
                             {puedeEditarTaller && (
                               <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
                                 <p className="text-xs text-[var(--vl-text-muted)]">
-                                  Guardá los ítems cuando quieras. Continuar avanza de etapa.
-                                  Si marcás sin presupuesto, se saltea la aprobación de la empresa.
+                                  Guardá los ítems cuando quieras. Continuar avanza a la selección
+                                  de presupuestos aprobados.
                                 </p>
                                 {ot.sinPresupuesto ? (
                                   <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
@@ -788,26 +731,20 @@ export function M7TalleresPage() {
                           </div>
                         )}
 
-                        {isAprobacionEmpresaStep(ot.currentStep) && (
-                          <AprobacionEmpresaChecklist
+                        {isSeleccionStep(ot.currentStep) && (
+                          <SeleccionChecklist
                             ot={ot}
                             token={token!}
                             onSaved={replaceOt}
-                            soloLecturaEmpresa={
-                              !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA") &&
-                              !isOps(rol)
-                            }
+                            soloLectura={!puedeEditarTaller}
                             esEmpresa={
                               !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA")
                             }
-                            puedeEditarImporte={puedeEditarTaller}
-                            importeDrafts={importeDrafts}
-                            setImporteDraft={setImporteDrafts}
                           />
                         )}
 
-                        {isFacturaStep(ot.currentStep) && puedeEditarTaller && (
-                          <PresupuestoChecklist
+                        {isAjusteStep(ot.currentStep) && puedeEditarTaller && (
+                          <AjusteImportesChecklist
                             ot={ot}
                             token={token!}
                             onSaved={replaceOt}
@@ -816,105 +753,64 @@ export function M7TalleresPage() {
                           />
                         )}
 
-                        {isFacturaStep(ot.currentStep) && ot.sinPresupuesto && puedeEditarTaller && (
-                          <ItemsEditor
-                            ot={ot}
-                            token={token!}
-                            talleres={talleres}
-                            tipo="PRESUPUESTO"
-                            lockTipo
-                            hideTotal
-                            requireClasif
-                            desc={itemDesc}
-                            setDesc={setItemDesc}
-                            imp={itemImp}
-                            setImp={setItemImp}
-                            obs={itemObs}
-                            setObs={setItemObs}
-                            tallerId={itemTallerId}
-                            setTallerId={setItemTallerId}
-                            busy={busy}
-                            onSaved={replaceOt}
-                          />
-                        )}
-
-                        {isFacturaStep(ot.currentStep) && puedeEditarTaller && (
-                          <div>
-                            <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-                              Con el checklist ya queda facturado. El PDF es optativo.
-                            </p>
-                            <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed text-sm">
-                              <Upload size={16} /> {facturaFile ? facturaFile.name : "Adjuntar PDF (optativo)"}
-                              <input type="file" accept="application/pdf,image/*" className="sr-only" onChange={(e) => setFacturaFile(e.target.files?.[0] ?? null)} />
-                            </label>
-                            <button type="button" disabled={!facturaFile || busy} className="mt-2 rounded-md bg-[#1e4080] px-3 py-1.5 text-xs text-white" onClick={() => {
-                              const fd = new FormData();
-                              if (facturaFile) fd.append("archivo", facturaFile);
-                              if (itemTallerId) fd.append("tallerProveedorId", itemTallerId);
-                              void call(`/api/talleres/${ot.id}/factura`, { method: "POST", body: fd });
-                              setFacturaFile(null);
-                            }}>Subir archivo</button>
-                            {(ot.facturas ?? []).map((f) => (
-                              <div key={f.id} className="mt-1 text-xs">{f.tallerNombre || "Factura"} · {f.archivo}</div>
-                            ))}
-                            <textarea className="mt-2 w-full rounded-md border p-2 text-sm" rows={2} placeholder="Nota si el taller cobró de más (optativo)" value={justif} onChange={(e) => setJustif(e.target.value)} />
-                          </div>
-                        )}
-
-                        {isIncrementoStep(ot.currentStep) && (
+                        {isCierreStep(ot.currentStep) && !vistaChofer && (
                           <div className="space-y-3">
                             <div className="rounded-lg border border-[var(--vl-card-border)] p-4">
                               <p className="text-xs font-semibold text-[var(--vl-heading)]">
-                                Comparación antes del cierre
+                                Comparación y cierre
                               </p>
                               <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                                Facturado/gasto es la suma fija de todos los presupuestos pactados.
-                                Abajo solo entran los ítems tildados / seleccionados.
+                                Presupuesto aprobado (fijo al seleccionar) vs suma de importes
+                                editados. Verde si el presupuesto supera el gasto; rojo al revés.
                               </p>
                               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                                 <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
                                   <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                                    Facturado / gasto (fijo)
+                                    Presupuesto aprobado
                                   </div>
                                   <div className="mt-1 text-lg font-bold">
-                                    {totFacturadoFijo > 0 ? money(totFacturadoFijo) : "—"}
+                                    {presupuestoAprobadoFijo > 0
+                                      ? money(presupuestoAprobadoFijo)
+                                      : "—"}
                                   </div>
                                 </div>
                                 <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
                                   <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                                    Ítems tildados
+                                    Importes editados
                                   </div>
                                   <div className="mt-1 text-lg font-bold">
                                     {totTildados > 0 ? money(totTildados) : "—"}
                                   </div>
                                 </div>
                               </div>
-                              {totFacturadoFijo > 0 && totTildados > 0 && (
-                                <p className="mt-3 text-sm">
+                              {presupuestoAprobadoFijo > 0 && totTildados > 0 && (
+                                <p
+                                  className={`mt-3 text-sm font-semibold ${
+                                    presupuestoAprobadoFijo >= totTildados
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-red-600 dark:text-red-400"
+                                  }`}
+                                >
                                   Diferencia:{" "}
-                                  <strong>
-                                    {money(totFacturadoFijo - totTildados)}
-                                  </strong>
-                                  {totFacturadoFijo - totTildados > 0
-                                    ? " (pactado − seleccionado)"
-                                    : totFacturadoFijo - totTildados < 0
-                                      ? " (seleccionado supera lo pactado)"
+                                  {money(presupuestoAprobadoFijo - totTildados)}
+                                  {presupuestoAprobadoFijo > totTildados
+                                    ? " (presupuesto mayor al gasto)"
+                                    : presupuestoAprobadoFijo < totTildados
+                                      ? " (gasto supera el presupuesto)"
                                       : " (coinciden)"}
                                 </p>
                               )}
                             </div>
                             <div>
-                              <div className="mb-1 text-xs font-semibold">Solo ítems tildados</div>
-                              {itemsPresupuesto.filter(
-                                (i) => i.sugeridoEmpresa || i.aprobado
-                              ).length === 0 ? (
+                              <div className="mb-1 text-xs font-semibold">Ítems aprobados</div>
+                              {itemsPresupuesto.filter((i) => i.aprobado).length === 0 ? (
                                 <p className="text-xs text-[var(--vl-text-muted)]">
-                                  No hay ítems tildados todavía.
+                                  No hay ítems aprobados.
                                 </p>
                               ) : (
                                 <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
                                   {itemsPresupuesto
-                                    .filter((i) => i.sugeridoEmpresa || i.aprobado)
+                                    .filter((i) => i.aprobado)
                                     .map((i) => (
                                       <li
                                         key={i.id}
@@ -932,37 +828,6 @@ export function M7TalleresPage() {
                                 </ul>
                               )}
                             </div>
-                            {ot.incrementoJustificacion && (
-                              <p className="text-xs text-[var(--vl-text-muted)]">
-                                Nota: {ot.incrementoJustificacion}
-                              </p>
-                            )}
-                            {puedeEditarTaller && (
-                              <button
-                                type="button"
-                                disabled={busy}
-                                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs text-white"
-                                onClick={() =>
-                                  void call(`/api/talleres/${ot.id}`, {
-                                    method: "PATCH",
-                                    body: JSON.stringify({ incrementoAprobado: true }),
-                                  })
-                                }
-                              >
-                                Confirmar y seguir a cierre
-                              </button>
-                            )}
-                          </div>
-                        )}
-
-                        {isCierreStep(ot.currentStep) && !vistaChofer && (
-                          <div className="rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
-                            <p className="font-semibold text-[var(--vl-heading)]">Resumen confirmado</p>
-                            <p className="mt-1 text-[var(--vl-text-muted)]">
-                              Facturado/gasto pactado: <strong>{money(totFacturadoFijo)}</strong>
-                              {" · "}
-                              Ítems tildados: <strong>{money(totTildados)}</strong>
-                            </p>
                           </div>
                         )}
 
@@ -980,31 +845,37 @@ export function M7TalleresPage() {
                     )}
                   </div>
 
-                  {!vistaChofer && (
+                  {!vistaChofer && !enPresupuesto && (
                   <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                     <div className="rounded-xl border p-3">
-                      <div className="text-xs text-[var(--vl-text-muted)]">Facturado / gasto</div>
+                      <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
                       <div className="text-base font-bold">
-                        {totFacturadoFijo > 0 ? money(totFacturadoFijo) : "—"}
+                        {(enSeleccion ? totTildados : presupuestoAprobadoFijo) > 0
+                          ? money(enSeleccion ? totTildados : presupuestoAprobadoFijo)
+                          : "—"}
                       </div>
                       <p className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
-                        {totFacturaReal > 0
-                          ? "Gasto / factura cargada"
-                          : cargaPresupuestoAbierta
-                            ? "Suma de todos los presupuestos (se fija al Continuar)"
-                            : "Suma fija de todos los presupuestos pactados"}
+                        {enSeleccion
+                          ? "Suma de ítems tildados (importe bloqueado)"
+                          : enAjuste
+                            ? "Fijo al salir de selección · abajo el total editado"
+                            : "Fijo al seleccionar · se compara con importes editados"}
                       </p>
-                      <div className="mt-3 border-t border-[var(--vl-card-border)] pt-3">
-                        <div className="text-sm font-semibold text-[var(--vl-heading)]">
-                          Referencia presupuestada (ítems tildados)
+                      {(enAjuste || enCierre) && (
+                        <div className="mt-3 border-t border-[var(--vl-card-border)] pt-3">
+                          <div className="text-sm font-semibold text-[var(--vl-heading)]">
+                            {enAjuste ? "Presupuesto aprobado (editado)" : "Importes editados"}
+                          </div>
+                          <div className="mt-1 text-xl font-bold tracking-tight text-[var(--vl-heading)]">
+                            {totTildados > 0 ? money(totTildados) : "—"}
+                          </div>
+                          <p className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
+                            {enAjuste
+                              ? "Se actualiza al editar importes"
+                              : "Suma actual de ítems aprobados"}
+                          </p>
                         </div>
-                        <div className="mt-1 text-xl font-bold tracking-tight text-[var(--vl-heading)]">
-                          {totTildados > 0 ? money(totTildados) : "—"}
-                        </div>
-                        <p className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
-                          Cambia al tildar o editar · se compara con lo facturado
-                        </p>
-                      </div>
+                      )}
                     </div>
                   </div>
                   )}
@@ -1050,12 +921,7 @@ export function M7TalleresPage() {
                               disabled={
                                 busy ||
                                 (!puedeEditarTaller &&
-                                  !canAdvanceFromStep(rol, ot.currentStep) &&
-                                  !(
-                                    user?.esDuenoFlota &&
-                                    contextoAcceso === "EMPRESA" &&
-                                    isAprobacionEmpresaStep(ot.currentStep)
-                                  ))
+                                  !canAdvanceFromStep(rol, ot.currentStep))
                               }
                               title={
                                 !puedeEditarTaller && !canAdvanceFromStep(rol, ot.currentStep)
@@ -1237,38 +1103,27 @@ function groupByTaller<T extends { tallerNombre: string; importe: number }>(item
   return [...map.values()];
 }
 
-function AprobacionEmpresaChecklist({
-  ot, token, onSaved, soloLecturaEmpresa, esEmpresa, puedeEditarImporte, importeDrafts, setImporteDraft,
+function SeleccionChecklist({
+  ot, token, onSaved, soloLectura, esEmpresa,
 }: {
   ot: OrdenTrabajo;
   token: string;
   onSaved: (ot: OrdenTrabajo) => void;
-  soloLecturaEmpresa?: boolean;
+  soloLectura?: boolean;
   esEmpresa?: boolean;
-  puedeEditarImporte?: boolean;
-  importeDrafts: Record<string, number>;
-  setImporteDraft: Dispatch<SetStateAction<Record<string, number>>>;
 }) {
   const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
-  const marcados = items.filter((i) => i.sugeridoEmpresa);
+  const marcados = items.filter((i) => i.aprobado || i.sugeridoEmpresa);
+  const totalAprobado = marcados.reduce(
+    (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
+    0
+  );
 
-  async function setSugerido(id: string, sugeridoEmpresa: boolean) {
-    if (soloLecturaEmpresa) return;
+  async function setAprobado(id: string, aprobado: boolean) {
+    if (soloLectura) return;
     const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ sugeridoEmpresa }),
-    }, token);
-    onSaved(updated);
-  }
-
-  async function guardarImporte(id: string) {
-    if (!puedeEditarImporte) return;
-    const draft = importeDrafts[id];
-    if (draft === undefined) return;
-    if (!Number.isFinite(draft) || draft < 0) return;
-    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ importe: draft }),
+      body: JSON.stringify({ aprobado }),
     }, token);
     onSaved(updated);
   }
@@ -1290,22 +1145,19 @@ function AprobacionEmpresaChecklist({
 
   return (
     <div>
-      <div className="mb-2 text-xs font-semibold">
-        Presupuestos cargados
-        {!soloLecturaEmpresa && ` — sugeridos ${marcados.length}/${items.length}`}
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+        <div className="text-xs font-semibold">
+          Selección de presupuestos aprobados
+          {!soloLectura && ` — ${marcados.length}/${items.length}`}
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
+          <div className="text-base font-bold">{totalAprobado > 0 ? money(totalAprobado) : "—"}</div>
+        </div>
       </div>
-      {esEmpresa ? (
-        <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-          Ves los montos. No los editás: para sugerir taller o reparación usá un{" "}
-          <strong className="text-red-700 dark:text-red-300">comentario</strong>{" "}
-          (queda marcado en rojo) o el botón «Sugerencia».
-        </p>
-      ) : (
-        <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-          Marcá qué presupuestos / talleres aprueba la empresa. Si editás un importe tildado,
-          la referencia presupuestada se actualiza al salir del campo.
-        </p>
-      )}
+      <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
+        Tildá los presupuestos / proveedores aprobados. El importe no se edita en este paso.
+      </p>
       {ot.sugerenciaChofer && (
         <p className="mb-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-950 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
           <strong>Sugerencia del chofer:</strong> {ot.sugerenciaChofer}
@@ -1320,7 +1172,7 @@ function AprobacionEmpresaChecklist({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                {!soloLecturaEmpresa && <th className="w-8 py-1" />}
+                {!soloLectura && <th className="w-8 py-1" />}
                 <th className="py-1">Descripción</th>
                 <th className="py-1">Concepto</th>
                 <th className="py-1 text-right">Importe $</th>
@@ -1329,15 +1181,15 @@ function AprobacionEmpresaChecklist({
             <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
-                  {!soloLecturaEmpresa && (
+                  {!soloLectura && (
                     <td className="w-8 py-1">
                       <label className="inline-flex items-center">
                         <input
                           type="checkbox"
-                          checked={!!i.sugeridoEmpresa}
-                          onChange={(e) => void setSugerido(i.id, e.target.checked)}
+                          checked={!!(i.aprobado || i.sugeridoEmpresa)}
+                          onChange={(e) => void setAprobado(i.id, e.target.checked)}
                         />
-                        <span className="sr-only">Aprobar sugerencia empresa</span>
+                        <span className="sr-only">Aprobar presupuesto</span>
                       </label>
                     </td>
                   )}
@@ -1349,31 +1201,7 @@ function AprobacionEmpresaChecklist({
                         : CLASIFICACION_LABEL[i.clasificacion]
                       : "—"}
                   </td>
-                  <td className="py-1 text-right">
-                    {puedeEditarImporte ? (
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="min-h-10 w-32 rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1 text-right text-sm font-medium"
-                        value={
-                          importeDrafts[i.id] !== undefined
-                            ? String(importeDrafts[i.id])
-                            : String(i.importe)
-                        }
-                        onChange={(e) => {
-                          const n = Number(e.target.value);
-                          setImporteDraft((prev) => ({
-                            ...prev,
-                            [i.id]: e.target.value === "" ? NaN : n,
-                          }));
-                        }}
-                        onBlur={() => void guardarImporte(i.id)}
-                      />
-                    ) : (
-                      money(i.importe)
-                    )}
-                  </td>
+                  <td className="py-1 text-right font-medium">{money(i.importe)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1439,7 +1267,7 @@ function ConceptoCascada({
           onPick(null);
         }}
       >
-        <option value="">Nivel 1…</option>
+        <option value="">Seleccionar…</option>
         {nivel1.map((c) => (
           <option key={c.id} value={c.id}>{c.nombre}</option>
         ))}
@@ -1454,7 +1282,7 @@ function ConceptoCascada({
           onPick(null);
         }}
       >
-        <option value="">Nivel 2…</option>
+        <option value="">Seleccionar…</option>
         {nivel2.map((c) => (
           <option key={c.id} value={c.id}>{c.nombre}</option>
         ))}
@@ -1469,7 +1297,7 @@ function ConceptoCascada({
           onPick(id || null);
         }}
       >
-        <option value="">Nivel 3…</option>
+        <option value="">Seleccionar…</option>
         {nivel3.map((c) => (
           <option key={c.id} value={c.id}>{c.nombre}</option>
         ))}
@@ -1478,7 +1306,7 @@ function ConceptoCascada({
   );
 }
 
-function PresupuestoChecklist({
+function AjusteImportesChecklist({
   ot, token, onSaved, importeDrafts, setImporteDraft,
 }: {
   ot: OrdenTrabajo;
@@ -1487,9 +1315,10 @@ function PresupuestoChecklist({
   importeDrafts: Record<string, number>;
   setImporteDraft: Dispatch<SetStateAction<Record<string, number>>>;
 }) {
-  const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
-  const marcados = items.filter((i) => i.aprobado);
-  const total = marcados.reduce((a, i) => {
+  const items = (ot.items ?? []).filter(
+    (i) => i.tipo === "PRESUPUESTO" && (i.aprobado || i.sugeridoEmpresa)
+  );
+  const total = items.reduce((a, i) => {
     const draft = importeDrafts[i.id];
     const val =
       draft !== undefined && Number.isFinite(draft) ? draft : i.importe;
@@ -1502,14 +1331,6 @@ function PresupuestoChecklist({
       .then(setCats)
       .catch(() => setCats([]));
   }, [token]);
-
-  async function setAFacturar(id: string, aprobado: boolean) {
-    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ aprobado }),
-    }, token);
-    onSaved(updated);
-  }
 
   async function guardarImporte(id: string) {
     const draft = importeDrafts[id];
@@ -1533,55 +1354,50 @@ function PresupuestoChecklist({
   if (items.length === 0) {
     return (
       <p className="text-xs text-[var(--vl-text-muted)]">
-        No hay ítems de presupuesto. Podés cargar la factura igual.
+        No hay ítems aprobados. Volvé a selección y tildá presupuestos.
       </p>
     );
   }
 
   return (
     <div>
-      <div className="mb-2 text-xs font-semibold">
-        Aprobación / facturación — {marcados.length}/{items.length} marcados
-        {marcados.length > 0 ? ` · facturado ${money(total)}` : ""}
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+        <div className="text-xs font-semibold">
+          Ajuste de importes — {items.length} ítem{items.length === 1 ? "" : "s"}
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
+          <div className="text-base font-bold">{total > 0 ? money(total) : "—"}</div>
+        </div>
       </div>
       <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-        Marcá qué ítems se aprueban y, si hace falta, editá el importe facturado
-        y el concepto (3 niveles). Al cambiar el importe, la referencia presupuestada se actualiza.
+        Solo los tildados del paso anterior. Acá podés editar el importe y el concepto.
       </p>
-      {groupByTaller(items).map((g) => (
+      {groupByTaller(items).map((g) => {
+        const subtotal = g.items.reduce((a, i) => {
+          const draft = importeDrafts[i.id];
+          const val =
+            draft !== undefined && Number.isFinite(draft) ? draft : i.importe;
+          return a + val;
+        }, 0);
+        return (
         <div key={g.nombre} className="mb-3">
           <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
             <span>{g.nombre}</span>
-            <span>Subtotal taller {money(g.subtotal)}</span>
+            <span>Subtotal taller {money(subtotal)}</span>
           </div>
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                <th className="w-8 py-1" />
                 <th className="py-1">Descripción</th>
-                <th className="py-1 text-right">Facturado $</th>
+                <th className="py-1 text-right">Importe $</th>
               </tr>
             </thead>
             <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
-                  <td className="w-8 py-1 align-top">
-                    <label className="inline-flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={!!i.aprobado}
-                        onChange={(e) => void setAFacturar(i.id, e.target.checked)}
-                      />
-                      <span className="sr-only">Aprobar / facturar</span>
-                    </label>
-                  </td>
                   <td className="py-1">
                     <div>{i.descripcion}</div>
-                    {i.sugeridoEmpresa && (
-                      <div className="mt-0.5 text-[10px] text-emerald-700 dark:text-emerald-300">
-                        Sugerido por empresa
-                      </div>
-                    )}
                     <ConceptoCascada
                       cats={cats}
                       valueId={i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id}
@@ -1614,13 +1430,14 @@ function PresupuestoChecklist({
             </tbody>
           </table>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 function ItemsEditor({
-  ot, token, talleres, tipo, setTipo, lockTipo, hideTotal, requireClasif, readOnly, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
+  ot, token, talleres, tipo, setTipo, lockTipo, hideTotal, showSubtotales, requireClasif, readOnly, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
 }: {
   ot: OrdenTrabajo;
   token: string;
@@ -1630,6 +1447,7 @@ function ItemsEditor({
   lockTipo?: boolean;
   showAprobado?: boolean;
   hideTotal?: boolean;
+  showSubtotales?: boolean;
   requireClasif?: boolean;
   readOnly?: boolean;
   desc: string; setDesc: (s: string) => void;
@@ -1648,6 +1466,7 @@ function ItemsEditor({
   const total = items.reduce((a, i) => a + i.importe, 0);
   const gastoRequiereClasif = tipo === "FACTURA" || !!requireClasif;
   const proveedorObligatorio = tipo === "FACTURA";
+  const verSubtotal = showSubtotales || !hideTotal;
 
   async function add() {
     const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items`, {
@@ -1701,14 +1520,14 @@ function ItemsEditor({
         <div key={g.nombre} className="mb-2">
           <div className="flex items-center justify-between text-[11px] font-semibold">
             <span>{g.nombre}</span>
-            {!hideTotal && <span>Subtotal {money(g.subtotal)}</span>}
+            {verSubtotal && <span>Subtotal {money(g.subtotal)}</span>}
           </div>
           <table className="mb-1 w-full text-left text-xs">
             <thead>
               <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
                 <th className="py-1">Descripción</th>
                 <th className="py-1">Mano obra / Materiales</th>
-                <th className="py-1">Importe</th>
+                {!showSubtotales && <th className="py-1">Importe</th>}
                 {!readOnly && <th className="py-1" />}
               </tr>
             </thead>
@@ -1717,7 +1536,7 @@ function ItemsEditor({
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
                   <td className="py-1">{i.descripcion}</td>
                   <td>{clasifLabel(i)}</td>
-                  <td>{money(i.importe)}</td>
+                  {!showSubtotales && <td>{money(i.importe)}</td>}
                   {!readOnly && (
                     <td><button type="button" className="underline" onClick={() => void remove(i.id)}>Quitar</button></td>
                   )}
@@ -1779,6 +1598,7 @@ function ItemsEditor({
     </div>
   );
 }
+
 
 function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCreated: (ot: OrdenTrabajo) => void }) {
   const { token, user } = useAuth();

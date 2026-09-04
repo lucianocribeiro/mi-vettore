@@ -39,10 +39,12 @@ import {
   isAsignacionOPresupuestoStep,
   isFacuOrSilvina,
   isGastoStep,
-  isAprobacionEmpresaStep,
+  isSeleccionStep,
+  isAjusteStep,
   isFacturaStep,
   isIncrementoStep,
   isCierreStep,
+  migrateLegacyOtStep,
 } from "../lib/talleres.js";
 import {
   assertRoleOrOverride,
@@ -949,7 +951,8 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
           sugerenciaChofer: req.body?.sugerenciaChofer
             ? String(req.body.sugerenciaChofer).trim() || null
             : null,
-          currentStep: !habilitadaCircular ? 2 : 1,
+          // Tras crear, la solicitud (paso 0) quedó cargada → arranca en presupuesto.
+          currentStep: 1,
         },
         include: includeOTFor(req.user!.id),
       });
@@ -1588,30 +1591,26 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
     let nextStep = ot.currentStep + 1;
 
     if (ot.currentStep === 0) {
-      nextStep = ot.urgente ? 2 : 1;
+      nextStep = 1;
     }
 
-    // Pasos 1 y 2 unificados: asignación + presupuesto → aprobación (o facturación si sin presupuesto)
+    // 1 Presupuesto → 2 Selección (nunca saltea). Congela suma de todos los cargados.
     if (isAsignacionOPresupuestoStep(ot.currentStep)) {
       const tot = otTotales(ot);
       const sinPresu = ot.sinPresupuesto || tot.presupuestoTodos <= 0;
       extra.sinPresupuesto = sinPresu;
-      // Congela la suma de TODOS los presupuestos cargados (Facturado/gasto fijo).
       extra.presupuestoMonto = tot.presupuestoTodos > 0 ? tot.presupuestoTodos : null;
-      // Sin selección aún: no fijar importe final. Si no hay presupuesto, saltea aprobación.
       if (sinPresu) {
         extra.valorAprobado = null;
         extra.montoAutorizado = null;
-        nextStep = 4;
-      } else {
-        nextStep = 3;
       }
+      nextStep = 2;
     }
 
-    if (isAprobacionEmpresaStep(ot.currentStep)) {
-      // Ítems tildados (sugeridoEmpresa) quedan como importe final para facturación.
+    // 2 Selección → 3 Ajuste. Congela "presupuesto aprobado" = suma de tildados.
+    if (isSeleccionStep(ot.currentStep)) {
       const seleccionados = (ot.items ?? []).filter(
-        (i) => i.tipo === "PRESUPUESTO" && i.sugeridoEmpresa
+        (i) => i.tipo === "PRESUPUESTO" && (i.aprobado || i.sugeridoEmpresa)
       );
       const totalSel = seleccionados.reduce(
         (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
@@ -1634,29 +1633,22 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
           },
           data: { aprobado: false },
         });
-        extra.valorAprobado = totalSel;
-        extra.montoAutorizado = totalSel;
       }
-      nextStep = 4; // → Facturación
+      extra.valorAprobado = totalSel > 0 ? totalSel : null;
+      extra.montoAutorizado = totalSel > 0 ? totalSel : null;
+      nextStep = 3;
     }
 
-    if (isFacturaStep(ot.currentStep)) {
+    // 3 Ajuste → 4 Comparación/cierre. valorFinal = suma editada de tildados.
+    if (isAjusteStep(ot.currentStep)) {
       const tot = otTotales(ot);
-      const aprobado = tot.presupuesto;
-      const facturado = tot.facturado;
-      extra.valorAprobado = aprobado || ot.valorAprobado || ot.montoAutorizado || null;
-      extra.valorFinal = facturado || ot.valorFinal || null;
-      extra.montoAutorizado = aprobado || ot.montoAutorizado || null;
+      const editado = tot.presupuesto;
+      extra.valorFinal = editado > 0 ? editado : ot.valorFinal || null;
       if (req.body?.incrementoJustificacion) {
         extra.incrementoJustificacion = String(req.body.incrementoJustificacion).trim();
       }
-      // Siempre pasa por Comparación (tildados vs facturado) antes del cierre.
-      nextStep = 5;
-    }
-
-    if (isIncrementoStep(ot.currentStep)) {
       extra.incrementoAprobadoAt = ot.incrementoAprobadoAt ?? new Date();
-      nextStep = 6;
+      nextStep = 4;
     }
 
     const updated = await prisma.ordenTrabajo.update({
@@ -1843,7 +1835,7 @@ router.post("/:id/reabrir", authenticate, async (req: AuthedRequest, res) => {
       });
       await tx.ordenTrabajo.update({
         where: { id: ot.id },
-        data: { cerradaAt: null, currentStep: 6 },
+        data: { cerradaAt: null, currentStep: 4 },
       });
       await tx.otAuditoria.create({
         data: {
@@ -1976,12 +1968,21 @@ async function reloadOt(id: string, userId: string, rol: Role, req?: AuthedReque
     where: { id },
     include: includeOTFor(userId),
   });
+  // Remapeo defensivo si quedó un índice del flujo de 7 pasos.
+  if (ot && ot.currentStep > 4) {
+    const next = migrateLegacyOtStep(ot.currentStep);
+    ot = await prisma.ordenTrabajo.update({
+      where: { id },
+      data: { currentStep: next },
+      include: includeOTFor(userId),
+    });
+  }
   // Congela suma de todos los presupuestos si ya pasó la carga y aún no estaba guardada.
   if (
     ot &&
     ot.presupuestoMonto == null &&
     !isAsignacionOPresupuestoStep(ot.currentStep) &&
-    ot.currentStep >= 3
+    ot.currentStep >= 2
   ) {
     const todos = totalPresupuestosCargados(ot.items ?? []);
     if (todos > 0) {
@@ -2026,16 +2027,16 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "Tipo de ítem inválido" });
       return;
     }
-    if (tipoRaw === "PRESUPUESTO" && !isAsignacionOPresupuestoStep(ot.currentStep) && !(isFacturaStep(ot.currentStep) && ot.sinPresupuesto)) {
+    if (tipoRaw === "PRESUPUESTO" && !isAsignacionOPresupuestoStep(ot.currentStep)) {
       res.status(400).json({ error: "Los presupuestos se cargan en la etapa de presupuesto" });
       return;
     }
     if (
       (tipoRaw === "FACTURA" || tipoRaw === "RENDICION") &&
-      !isFacturaStep(ot.currentStep) &&
+      !isAjusteStep(ot.currentStep) &&
       !isCierreStep(ot.currentStep)
     ) {
-      res.status(400).json({ error: "Las facturas se cargan en la etapa de facturación" });
+      res.status(400).json({ error: "Las facturas se cargan en el ajuste o cierre" });
       return;
     }
     const descripcion = String(req.body?.descripcion ?? "").trim();
@@ -2141,20 +2142,34 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       req.body?.observacion !== undefined ||
       req.body?.clasificacion !== undefined;
 
-    // Sugerencia empresa: dueño (CHOFER) u ops — en presupuesto o aprobación.
+    // Sugerencia empresa: dueño (CHOFER) u ops — en presupuesto o selección.
     const sugeridoAllowed =
       wantsSugerido &&
-      (isAsignacionOPresupuestoStep(ot.currentStep) || isAprobacionEmpresaStep(ot.currentStep)) &&
+      (isAsignacionOPresupuestoStep(ot.currentStep) || isSeleccionStep(ot.currentStep)) &&
       (rol === "CHOFER" || isInternalOpsRole(rol));
-    // A facturar + importe/concepto: Silvina/Facu/ops en facturación.
-    const facturaAllowed =
-      (wantsAprobado || wantsCategoria || wantsOtherEdit) &&
+    // Tildar en selección; importe/concepto en ajuste.
+    const seleccionAllowed =
+      wantsAprobado &&
+      isSeleccionStep(ot.currentStep) &&
+      (isFacuOrSilvina(rol) || isInternalOpsRole(rol));
+    const ajusteAllowed =
+      (wantsCategoria || wantsOtherEdit) &&
+      isAjusteStep(ot.currentStep) &&
+      (isFacuOrSilvina(rol) || isInternalOpsRole(rol));
+    const cargaImporteAllowed =
+      wantsOtherEdit &&
+      isAsignacionOPresupuestoStep(ot.currentStep) &&
       (isFacuOrSilvina(rol) || isInternalOpsRole(rol));
     const silvinaEdit = isFacuOrSilvina(rol) || isInternalOpsRole(rol);
 
     const gate = await gateOrOverride({
       rol,
-      allowed: sugeridoAllowed || (silvinaEdit && (facturaAllowed || wantsOtherEdit || wantsSugerido)),
+      allowed:
+        sugeridoAllowed ||
+        seleccionAllowed ||
+        ajusteAllowed ||
+        cargaImporteAllowed ||
+        (silvinaEdit && wantsSugerido),
       userId: req.user!.id,
       otId: ot.id,
       accion: "Editar ítem OT",
@@ -2169,6 +2184,16 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       data.descripcion = String(req.body.descripcion).trim();
     }
     if (req.body?.importe !== undefined) {
+      if (isSeleccionStep(ot.currentStep)) {
+        res.status(400).json({
+          error: "En selección el importe queda bloqueado; se edita en el paso siguiente",
+        });
+        return;
+      }
+      if (!isAsignacionOPresupuestoStep(ot.currentStep) && !isAjusteStep(ot.currentStep)) {
+        res.status(400).json({ error: "El importe no se edita en esta etapa" });
+        return;
+      }
       const importe = Number(req.body.importe);
       if (!Number.isFinite(importe) || importe < 0) {
         res.status(400).json({ error: "Importe inválido" });
@@ -2189,9 +2214,9 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       data.clasificacionOtro = clasif.clasificacionOtro;
     }
     if (wantsSugerido) {
-      if (!isAsignacionOPresupuestoStep(ot.currentStep) && !isAprobacionEmpresaStep(ot.currentStep)) {
+      if (!isAsignacionOPresupuestoStep(ot.currentStep) && !isSeleccionStep(ot.currentStep)) {
         res.status(400).json({
-          error: "La sugerencia de la empresa se marca en aprobación empresa",
+          error: "La sugerencia se marca en presupuesto o selección",
         });
         return;
       }
@@ -2215,9 +2240,9 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       data.sugeridoEmpresa = Boolean(req.body.sugeridoEmpresa);
     }
     if (wantsAprobado) {
-      if (!isFacturaStep(ot.currentStep)) {
+      if (!isSeleccionStep(ot.currentStep)) {
         res.status(400).json({
-          error: "Qué presupuesto se factura se marca en la etapa de facturación",
+          error: "Los presupuestos aprobados se tildan en la etapa de selección",
         });
         return;
       }
@@ -2230,16 +2255,16 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       }
       if (item.tipo !== "PRESUPUESTO") {
         res.status(400).json({
-          error: "Solo se marca como facturado un ítem de presupuesto",
+          error: "Solo se marca un ítem de presupuesto",
         });
         return;
       }
       data.aprobado = Boolean(req.body.aprobado);
     }
     if (wantsCategoria) {
-      if (!isFacturaStep(ot.currentStep)) {
+      if (!isAjusteStep(ot.currentStep)) {
         res.status(400).json({
-          error: "El concepto se asigna en la etapa de facturación",
+          error: "El concepto se asigna en el ajuste de importes",
         });
         return;
       }
@@ -2266,21 +2291,25 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       where: { id: req.params.itemId },
       data,
     });
-    // Si cambió el importe de un ítem tildado/aprobado, recalcular importe final de la OT.
-    // No tocar presupuestoMonto (Facturado/gasto fijo) fuera de la etapa de carga.
+    // En selección: actualizar presupuesto aprobado (suma tildados) sin tocar importes.
+    // En carga: actualizar presupuestoMonto (todos).
+    // En ajuste: NO tocar valorAprobado (queda congelado al salir de selección).
     if (req.body?.importe !== undefined || wantsSugerido || wantsAprobado) {
       const items = await prisma.otItem.findMany({
         where: { otId: ot.id, tipo: "PRESUPUESTO" },
         select: { importe: true, sugeridoEmpresa: true, aprobado: true },
       });
-      const totalSel = items
-        .filter((i) => i.sugeridoEmpresa || i.aprobado)
-        .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0);
-      const dataOt: { valorAprobado?: number; montoAutorizado?: number; presupuestoMonto?: number | null } =
-        {};
-      if (totalSel > 0) {
-        dataOt.valorAprobado = totalSel;
-        dataOt.montoAutorizado = totalSel;
+      const dataOt: {
+        valorAprobado?: number | null;
+        montoAutorizado?: number | null;
+        presupuestoMonto?: number | null;
+      } = {};
+      if (isSeleccionStep(ot.currentStep) && (wantsAprobado || wantsSugerido)) {
+        const totalSel = items
+          .filter((i) => i.sugeridoEmpresa || i.aprobado)
+          .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0);
+        dataOt.valorAprobado = totalSel > 0 ? totalSel : null;
+        dataOt.montoAutorizado = totalSel > 0 ? totalSel : null;
       }
       if (
         req.body?.importe !== undefined &&
