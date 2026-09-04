@@ -1610,7 +1610,7 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
     // 2 Selección → 3 Ajuste. Congela "presupuesto aprobado" = suma de tildados.
     if (isSeleccionStep(ot.currentStep)) {
       const seleccionados = (ot.items ?? []).filter(
-        (i) => i.tipo === "PRESUPUESTO" && (i.aprobado || i.sugeridoEmpresa)
+        (i) => i.tipo === "PRESUPUESTO" && i.aprobado
       );
       const totalSel = seleccionados.reduce(
         (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
@@ -2142,11 +2142,11 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       req.body?.observacion !== undefined ||
       req.body?.clasificacion !== undefined;
 
-    // Sugerencia empresa: dueño (CHOFER) u ops — en presupuesto o selección.
+    // En selección, ops puede tildar/destildar y alinear sugeridoEmpresa.
     const sugeridoAllowed =
       wantsSugerido &&
       (isAsignacionOPresupuestoStep(ot.currentStep) || isSeleccionStep(ot.currentStep)) &&
-      (rol === "CHOFER" || isInternalOpsRole(rol));
+      (rol === "CHOFER" || isFacuOrSilvina(rol) || isInternalOpsRole(rol));
     // Tildar en selección; importe/concepto en ajuste.
     const seleccionAllowed =
       wantsAprobado &&
@@ -2220,7 +2220,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
         });
         return;
       }
-      if (!(rol === "CHOFER" || isInternalOpsRole(rol))) {
+      if (!(rol === "CHOFER" || isFacuOrSilvina(rol) || isInternalOpsRole(rol))) {
         res.status(403).json({ error: "Sin permiso para sugerir aprobación" });
         return;
       }
@@ -2306,7 +2306,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       } = {};
       if (isSeleccionStep(ot.currentStep) && (wantsAprobado || wantsSugerido)) {
         const totalSel = items
-          .filter((i) => i.sugeridoEmpresa || i.aprobado)
+          .filter((i) => i.aprobado)
           .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0);
         dataOt.valorAprobado = totalSel > 0 ? totalSel : null;
         dataOt.montoAutorizado = totalSel > 0 ? totalSel : null;

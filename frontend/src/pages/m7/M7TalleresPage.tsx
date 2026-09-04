@@ -383,9 +383,9 @@ export function M7TalleresPage() {
 
   const itemsAll = ot?.items ?? [];
   const itemsPresupuesto = itemsAll.filter((i) => i.tipo === "PRESUPUESTO");
-  /** Solo ítems tildados — cambia al marcar / editar. */
+  /** Solo ítems tildados (aprobado) — cambia al marcar / editar. */
   const totTildados = itemsPresupuesto
-    .filter((i) => i.sugeridoEmpresa === true || i.aprobado === true)
+    .filter((i) => i.aprobado === true)
     .reduce((a, i) => {
       const draft = importeDrafts[i.id];
       const val =
@@ -1113,19 +1113,26 @@ function SeleccionChecklist({
   esEmpresa?: boolean;
 }) {
   const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
-  const marcados = items.filter((i) => i.aprobado || i.sugeridoEmpresa);
+  const marcados = items.filter((i) => i.aprobado);
   const totalAprobado = marcados.reduce(
     (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
     0
   );
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function setAprobado(id: string, aprobado: boolean) {
-    if (soloLectura) return;
-    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ aprobado }),
-    }, token);
-    onSaved(updated);
+    if (soloLectura || busyId) return;
+    setBusyId(id);
+    try {
+      const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
+        method: "PATCH",
+        // Destildar limpia también sugeridoEmpresa para que el checkbox responda.
+        body: JSON.stringify({ aprobado, sugeridoEmpresa: aprobado }),
+      }, token);
+      onSaved(updated);
+    } finally {
+      setBusyId(null);
+    }
   }
 
   if (items.length === 0) {
@@ -1156,7 +1163,7 @@ function SeleccionChecklist({
         </div>
       </div>
       <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-        Tildá los presupuestos / proveedores aprobados. El importe no se edita en este paso.
+        Tildá o destildá los presupuestos / proveedores aprobados. El importe no se edita en este paso.
       </p>
       {ot.sugerenciaChofer && (
         <p className="mb-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-950 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
@@ -1172,7 +1179,7 @@ function SeleccionChecklist({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                {!soloLectura && <th className="w-8 py-1" />}
+                <th className="w-8 py-1" />
                 <th className="py-1">Descripción</th>
                 <th className="py-1">Concepto</th>
                 <th className="py-1 text-right">Importe $</th>
@@ -1181,18 +1188,17 @@ function SeleccionChecklist({
             <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
-                  {!soloLectura && (
-                    <td className="w-8 py-1">
-                      <label className="inline-flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={!!(i.aprobado || i.sugeridoEmpresa)}
-                          onChange={(e) => void setAprobado(i.id, e.target.checked)}
-                        />
-                        <span className="sr-only">Aprobar presupuesto</span>
-                      </label>
-                    </td>
-                  )}
+                  <td className="w-8 py-1">
+                    <label className="inline-flex items-center">
+                      <input
+                        type="checkbox"
+                        disabled={!!soloLectura || busyId === i.id}
+                        checked={!!i.aprobado}
+                        onChange={(e) => void setAprobado(i.id, e.target.checked)}
+                      />
+                      <span className="sr-only">Aprobar presupuesto</span>
+                    </label>
+                  </td>
                   <td className="py-1">{i.descripcion}</td>
                   <td className="py-1 text-[var(--vl-text-muted)]">
                     {i.clasificacion
@@ -1316,7 +1322,7 @@ function AjusteImportesChecklist({
   setImporteDraft: Dispatch<SetStateAction<Record<string, number>>>;
 }) {
   const items = (ot.items ?? []).filter(
-    (i) => i.tipo === "PRESUPUESTO" && (i.aprobado || i.sugeridoEmpresa)
+    (i) => i.tipo === "PRESUPUESTO" && i.aprobado
   );
   const total = items.reduce((a, i) => {
     const draft = importeDrafts[i.id];
