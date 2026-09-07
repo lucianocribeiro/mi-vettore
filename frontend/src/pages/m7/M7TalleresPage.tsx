@@ -825,13 +825,13 @@ export function M7TalleresPage() {
                                   Comparación y cierre
                                 </p>
                                 <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                                  Presupuesto aprobado (fijo al seleccionar) vs suma de importes
-                                  editados. Verde si el presupuesto supera el gasto; rojo al revés.
+                                  Presupuesto original (fijo al seleccionar) vs presupuesto total
+                                  general. Verde si el original supera el gasto; rojo al revés.
                                 </p>
                                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                                   <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
                                     <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                                      Presupuesto aprobado
+                                      Presupuesto original
                                     </div>
                                     <div className="mt-1 text-lg font-bold">
                                       {presupuestoAprobadoFijo > 0
@@ -841,7 +841,7 @@ export function M7TalleresPage() {
                                   </div>
                                   <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
                                     <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                                      Importes editados
+                                      Presupuesto total general
                                     </div>
                                     <div className="mt-1 text-lg font-bold">
                                       {totTildados > 0 ? money(totTildados) : "—"}
@@ -916,7 +916,7 @@ export function M7TalleresPage() {
                   {!vistaBrowse && !enPresupuesto && !ot.sinPresupuesto && (
                   <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                     <div className="rounded-xl border p-3">
-                      <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
+                      <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto original</div>
                       <div className="text-base font-bold">
                         {(enSeleccion ? totTildados : presupuestoAprobadoFijo) > 0
                           ? money(enSeleccion ? totTildados : presupuestoAprobadoFijo)
@@ -932,7 +932,7 @@ export function M7TalleresPage() {
                       {(enAjuste || enCierre) && (
                         <div className="mt-3 border-t border-[var(--vl-card-border)] pt-3">
                           <div className="text-sm font-semibold text-[var(--vl-heading)]">
-                            {enAjuste ? "Presupuesto aprobado (editado)" : "Importes editados"}
+                            Presupuesto total general
                           </div>
                           <div className="mt-1 text-xl font-bold tracking-tight text-[var(--vl-heading)]">
                             {totTildados > 0 ? money(totTildados) : "—"}
@@ -949,7 +949,7 @@ export function M7TalleresPage() {
                   )}
 
                   {(vistaBrowse || !ot.cerradaAt) && (
-                    <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
                       {vistaBrowse ? (
                         <>
                           {displayStep > 0 && (
@@ -957,7 +957,7 @@ export function M7TalleresPage() {
                               type="button"
                               aria-label="Anterior"
                               onClick={() => setBrowseStep(displayStep - 1)}
-                              className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-xl border-2 px-4"
+                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] text-sm font-semibold"
                             >
                               <ChevronLeft size={22} />
                             </button>
@@ -967,7 +967,7 @@ export function M7TalleresPage() {
                               type="button"
                               aria-label="Siguiente"
                               onClick={() => setBrowseStep(displayStep + 1)}
-                              className="inline-flex min-h-12 min-w-12 flex-1 items-center justify-center rounded-xl bg-[#1e4080] px-5 text-white"
+                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] text-sm font-semibold text-white"
                             >
                               <ChevronRight size={22} />
                             </button>
@@ -981,10 +981,10 @@ export function M7TalleresPage() {
                               disabled={busy}
                               aria-label="Volver"
                               onClick={() => void call(`/api/talleres/${ot.id}/retroceder`, { method: "POST", body: "{}" })}
-                              className="inline-flex min-h-12 min-w-12 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold"
+                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 text-sm font-semibold disabled:opacity-50"
                             >
                               <ChevronLeft size={18} />
-                              <span className="hidden sm:inline">Volver</span>
+                              Volver
                             </button>
                           )}
                           {puedeEditarTaller && !isCierreStep(ot.currentStep) && (
@@ -1024,7 +1024,7 @@ export function M7TalleresPage() {
                                   window.setTimeout(() => setGuardadoOk(false), 2000);
                                 })();
                               }}
-                              className="inline-flex min-h-12 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] px-4 text-sm font-semibold"
+                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 text-sm font-semibold disabled:opacity-50"
                             >
                               {guardadoOk ? "Guardado" : "Guardar"}
                             </button>
@@ -1044,14 +1044,31 @@ export function M7TalleresPage() {
                               }
                               aria-label="Continuar"
                               onClick={() => void call(`/api/talleres/${ot.id}/avanzar`, { method: "POST", body: JSON.stringify({ incrementoJustificacion: justif }) })}
-                              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[#1e4080] bg-[#1e4080] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              <span className="hidden sm:inline">Continuar</span>
+                              Continuar
                               <ChevronRight size={18} />
                             </button>
                           )}
                           {isCierreStep(ot.currentStep) && puedeEditarTaller && (
-                            <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/cerrar`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                if (
+                                  !window.confirm(
+                                    "¿Está seguro de cerrar esta OT? Esta acción finaliza la orden de trabajo."
+                                  )
+                                ) {
+                                  return;
+                                }
+                                void call(`/api/talleres/${ot.id}/cerrar`, {
+                                  method: "POST",
+                                  body: "{}",
+                                });
+                              }}
+                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-emerald-600 bg-emerald-600 px-3 text-sm font-semibold text-white disabled:opacity-50"
+                            >
                               <Check size={18} /> Cerrar OT
                             </button>
                           )}
@@ -1274,7 +1291,7 @@ function SeleccionChecklist({
           {!soloLectura && ` — ${marcados.length}/${items.length}`}
         </div>
         <div className="text-right">
-          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
+          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto original</div>
           <div className="text-base font-bold">{totalAprobado > 0 ? money(totalAprobado) : "—"}</div>
         </div>
       </div>
@@ -1290,7 +1307,7 @@ function SeleccionChecklist({
         <div key={g.nombre} className="mb-3">
           <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
             <span>{g.nombre}</span>
-            <span>Subtotal taller {money(g.subtotal)}</span>
+            <span>Presupuesto original {money(g.subtotal)}</span>
           </div>
           <table className="w-full text-left text-xs">
             <thead>
@@ -1446,7 +1463,19 @@ function AjusteImportesChecklist({
       draft !== undefined && Number.isFinite(draft) ? draft : i.importe;
     return a + val;
   }, 0);
+  const original =
+    ot.valorAprobado != null && ot.valorAprobado > 0 ? ot.valorAprobado : total;
   const [cats, setCats] = useState<CatDiag[]>([]);
+  const [conceptoBusy, setConceptoBusy] = useState(false);
+  /** Concepto compartido: si todos tienen el mismo, lo mostramos. */
+  const sharedConceptoId = (() => {
+    const ids = items
+      .map((i) => i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null)
+      .filter(Boolean) as string[];
+    if (ids.length === 0 || ids.length !== items.length) return null;
+    const first = ids[0];
+    return ids.every((id) => id === first) ? first : null;
+  })();
 
   useEffect(() => {
     void apiFetch<CatDiag[]>("/api/diagnostico/categorias", {}, token)
@@ -1465,12 +1494,21 @@ function AjusteImportesChecklist({
     onSaved(updated);
   }
 
-  async function setConcepto(id: string, categoriaDiagnosticoId: string | null) {
-    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ categoriaDiagnosticoId }),
-    }, token);
-    onSaved(updated);
+  async function setConceptoTodos(categoriaDiagnosticoId: string | null) {
+    if (conceptoBusy || items.length === 0) return;
+    setConceptoBusy(true);
+    try {
+      let last: OrdenTrabajo | null = null;
+      for (const i of items) {
+        last = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${i.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ categoriaDiagnosticoId }),
+        }, token);
+      }
+      if (last) onSaved(last);
+    } finally {
+      setConceptoBusy(false);
+    }
   }
 
   if (items.length === 0) {
@@ -1488,13 +1526,27 @@ function AjusteImportesChecklist({
           Ajuste de importes — {items.length} ítem{items.length === 1 ? "" : "s"}
         </div>
         <div className="text-right">
-          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
-          <div className="text-base font-bold">{total > 0 ? money(total) : "—"}</div>
+          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto original</div>
+          <div className="text-base font-bold">{original > 0 ? money(original) : "—"}</div>
         </div>
       </div>
       <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-        Solo los tildados del paso anterior. Acá podés editar el importe y el concepto.
+        Solo los tildados del paso anterior. Editá importes abajo. El concepto se aplica a todos
+        los ítems.
       </p>
+      <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] p-3">
+        <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
+          Concepto (para todos los ítems)
+        </div>
+        <ConceptoCascada
+          cats={cats}
+          valueId={sharedConceptoId}
+          onPick={(leafId) => void setConceptoTodos(leafId)}
+        />
+        {conceptoBusy && (
+          <p className="mt-1 text-[10px] text-[var(--vl-text-muted)]">Aplicando concepto…</p>
+        )}
+      </div>
       {groupByTaller(items).map((g) => {
         const subtotal = g.items.reduce((a, i) => {
           const draft = importeDrafts[i.id];
@@ -1506,7 +1558,7 @@ function AjusteImportesChecklist({
         <div key={g.nombre} className="mb-3">
           <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
             <span>{g.nombre}</span>
-            <span>Subtotal taller {money(subtotal)}</span>
+            <span>Presupuesto original {money(subtotal)}</span>
           </div>
           <table className="w-full text-left text-xs">
             <thead>
@@ -1518,14 +1570,7 @@ function AjusteImportesChecklist({
             <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
-                  <td className="py-1">
-                    <div>{i.descripcion}</div>
-                    <ConceptoCascada
-                      cats={cats}
-                      valueId={i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id}
-                      onPick={(leafId) => void setConcepto(i.id, leafId)}
-                    />
-                  </td>
+                  <td className="py-1">{i.descripcion}</td>
                   <td className="py-1 text-right align-top">
                     <input
                       type="number"
@@ -1554,6 +1599,10 @@ function AjusteImportesChecklist({
         </div>
         );
       })}
+      <div className="mt-3 rounded-xl border border-[var(--vl-card-border)] p-3 text-right">
+        <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto total general</div>
+        <div className="text-xl font-bold tracking-tight">{total > 0 ? money(total) : "—"}</div>
+      </div>
     </div>
   );
 }
@@ -1676,7 +1725,7 @@ function ItemsEditor({
                   <td>{clasifLabel(i)}</td>
                   {!showSubtotales && <td>{money(i.importe)}</td>}
                   {!readOnly && (
-                    <td><button type="button" className="underline" onClick={() => void remove(i.id)}>Quitar</button></td>
+                    <td><button type="button" className="underline" onClick={() => void remove(i.id)}>Eliminar</button></td>
                   )}
                 </tr>
               ))}
