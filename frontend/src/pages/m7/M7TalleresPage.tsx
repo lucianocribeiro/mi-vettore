@@ -246,6 +246,7 @@ export function M7TalleresPage() {
   const [browseStep, setBrowseStep] = useState<number | null>(null);
   const [importeDrafts, setImporteDrafts] = useState<Record<string, number>>({});
   const [guardadoOk, setGuardadoOk] = useState(false);
+  const [confirmCerrar, setConfirmCerrar] = useState(false);
   const puedeEditarTaller = isOps(rol);
 
   const [itemDesc, setItemDesc] = useState("");
@@ -1045,19 +1046,7 @@ export function M7TalleresPage() {
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => {
-                                if (
-                                  !window.confirm(
-                                    "¿Está seguro de cerrar esta OT? Esta acción finaliza la orden de trabajo."
-                                  )
-                                ) {
-                                  return;
-                                }
-                                void call(`/api/talleres/${ot.id}/cerrar`, {
-                                  method: "POST",
-                                  body: "{}",
-                                });
-                              }}
+                              onClick={() => setConfirmCerrar(true)}
                               className="inline-flex h-12 min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-emerald-600 bg-emerald-600 px-3 text-sm font-semibold text-white disabled:opacity-50"
                             >
                               <Check size={18} /> Cerrar OT
@@ -1115,6 +1104,70 @@ export function M7TalleresPage() {
             setShowForm(false);
           }}
         />
+      )}
+
+      {confirmCerrar && ot && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cerrar-ot-title"
+          onClick={() => !busy && setConfirmCerrar(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600/15 text-emerald-600 dark:text-emerald-400">
+                <Check size={22} />
+              </div>
+              <div>
+                <h3
+                  id="cerrar-ot-title"
+                  className="text-base font-bold text-[var(--vl-heading)]"
+                >
+                  ¿Cerrar esta OT?
+                </h3>
+                <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
+                  Vas a finalizar{" "}
+                  <strong className="text-[var(--vl-heading)]">{ot.numeroOT}</strong>
+                  {ot.solicitud?.camioneta?.patente
+                    ? ` · ${ot.solicitud.camioneta.patente}`
+                    : ""}
+                  . Esta acción cierra la orden de trabajo.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirmCerrar(false)}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-4 text-sm font-semibold text-[var(--vl-heading)] disabled:opacity-50 sm:flex-none sm:min-w-[7.5rem]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  void (async () => {
+                    await call(`/api/talleres/${ot.id}/cerrar`, {
+                      method: "POST",
+                      body: "{}",
+                    });
+                    setConfirmCerrar(false);
+                  })();
+                }}
+                className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-emerald-600 bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none sm:min-w-[7.5rem]"
+              >
+                <Check size={16} />
+                {busy ? "Cerrando…" : "Sí, cerrar"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
