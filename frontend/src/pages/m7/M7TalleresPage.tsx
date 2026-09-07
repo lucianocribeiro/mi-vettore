@@ -344,6 +344,7 @@ export function M7TalleresPage() {
     setJustif(ot.incrementoJustificacion ?? "");
     setBrowseStep(null);
     setImporteDrafts({});
+    setConfirmCerrar(false);
   }, [ot?.id]);
 
   const displayStep = vistaBrowse
