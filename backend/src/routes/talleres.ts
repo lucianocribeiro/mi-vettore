@@ -1594,7 +1594,7 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       nextStep = 1;
     }
 
-    // 1 Presupuesto → 2 Selección (nunca saltea). Congela suma de todos los cargados.
+    // 1 Presupuesto → 2 Selección, o 3 Ajuste si sin presupuesto (salta selección).
     if (isAsignacionOPresupuestoStep(ot.currentStep)) {
       const tot = otTotales(ot);
       const sinPresu = ot.sinPresupuesto || tot.presupuestoTodos <= 0;
@@ -1603,12 +1603,17 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       if (sinPresu) {
         extra.valorAprobado = null;
         extra.montoAutorizado = null;
+        nextStep = 3; // ajuste: cargar importe sin comparar vs 0
+      } else {
+        nextStep = 2;
       }
-      nextStep = 2;
     }
 
     // 2 Selección → 3 Ajuste. Congela "presupuesto aprobado" = suma de tildados.
     if (isSeleccionStep(ot.currentStep)) {
+      if (ot.sinPresupuesto) {
+        nextStep = 3;
+      } else {
       const seleccionados = (ot.items ?? []).filter(
         (i) => i.tipo === "PRESUPUESTO" && i.aprobado
       );
@@ -1637,13 +1642,21 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       extra.valorAprobado = totalSel > 0 ? totalSel : null;
       extra.montoAutorizado = totalSel > 0 ? totalSel : null;
       nextStep = 3;
+      }
     }
 
-    // 3 Ajuste → 4 Comparación/cierre. valorFinal = suma editada de tildados.
+    // 3 Ajuste → 4 Comparación/cierre.
     if (isAjusteStep(ot.currentStep)) {
       const tot = otTotales(ot);
-      const editado = tot.presupuesto;
-      extra.valorFinal = editado > 0 ? editado : ot.valorFinal || null;
+      if (ot.sinPresupuesto) {
+        // Gasto cargado (factura/rendición); sin comparar contra presupuesto 0.
+        extra.valorFinal = tot.facturado > 0 ? tot.facturado : ot.valorFinal || null;
+        extra.valorAprobado = null;
+        extra.montoAutorizado = null;
+      } else {
+        const editado = tot.presupuesto;
+        extra.valorFinal = editado > 0 ? editado : ot.valorFinal || null;
+      }
       if (req.body?.incrementoJustificacion) {
         extra.incrementoJustificacion = String(req.body.incrementoJustificacion).trim();
       }
@@ -1949,7 +1962,11 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
       return;
     }
 
-    const prevStep = ot.currentStep - 1;
+    let prevStep = ot.currentStep - 1;
+    // Sin presupuesto no usa selección: desde ajuste vuelve a presupuesto.
+    if (ot.sinPresupuesto && isAjusteStep(ot.currentStep) && prevStep === 2) {
+      prevStep = 1;
+    }
 
     const updated = await prisma.ordenTrabajo.update({
       where: { id: ot.id },
@@ -2012,7 +2029,7 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
     const rol = req.user!.rol as Role;
     const gate = await gateOrOverride({
       rol,
-      allowed: isFacuOrSilvina(rol),
+      allowed: isFacuOrSilvina(rol) || isInternalOpsRole(rol),
       userId: req.user!.id,
       otId: ot.id,
       accion: "Agregar ítem OT",
@@ -2027,7 +2044,11 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "Tipo de ítem inválido" });
       return;
     }
-    if (tipoRaw === "PRESUPUESTO" && !isAsignacionOPresupuestoStep(ot.currentStep)) {
+    if (
+      tipoRaw === "PRESUPUESTO" &&
+      !isAsignacionOPresupuestoStep(ot.currentStep) &&
+      !(isAjusteStep(ot.currentStep) && ot.sinPresupuesto)
+    ) {
       res.status(400).json({ error: "Los presupuestos se cargan en la etapa de presupuesto" });
       return;
     }

@@ -225,6 +225,9 @@ export function M7TalleresPage() {
   const esChofer = rol === "CHOFER";
   const vistaChofer =
     esChofer && !(user?.esDuenoFlota && contextoAcceso === "EMPRESA");
+  /** Chofer y empresa: navegan con flechas (browse local). */
+  const vistaBrowse =
+    vistaChofer || !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA");
 
   const [pageTab, setPageTab] = useState<"ots" | "proveedores" | "cc">("ots");
   const [ots, setOts] = useState<OrdenTrabajo[]>([]);
@@ -242,6 +245,7 @@ export function M7TalleresPage() {
   const [comentarioTexto, setComentarioTexto] = useState("");
   const [browseStep, setBrowseStep] = useState<number | null>(null);
   const [importeDrafts, setImporteDrafts] = useState<Record<string, number>>({});
+  const [guardadoOk, setGuardadoOk] = useState(false);
   const puedeEditarTaller = isOps(rol);
 
   const [itemDesc, setItemDesc] = useState("");
@@ -341,7 +345,7 @@ export function M7TalleresPage() {
     setImporteDrafts({});
   }, [ot?.id]);
 
-  const displayStep = vistaChofer
+  const displayStep = vistaBrowse
     ? browseStep ?? ot?.currentStep ?? 0
     : ot?.currentStep ?? 0;
   const maxBrowseStep = ot
@@ -589,10 +593,10 @@ export function M7TalleresPage() {
                       <div key={s.label} className="flex flex-1 items-center last:flex-none">
                         <button
                           type="button"
-                          disabled={!vistaChofer || !reached}
+                          disabled={!vistaBrowse || !reached}
                           title={s.label}
                           onClick={() => {
-                            if (vistaChofer && reached) setBrowseStep(i);
+                            if (vistaBrowse && reached) setBrowseStep(i);
                           }}
                           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                             done && !active
@@ -600,7 +604,7 @@ export function M7TalleresPage() {
                               : active
                                 ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
                                 : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                          } ${vistaChofer && reached ? "cursor-pointer" : ""}`}
+                          } ${vistaBrowse && reached ? "cursor-pointer" : ""}`}
                         >
                           {done && !active ? <Check size={13} /> : i + 1}
                         </button>
@@ -617,16 +621,18 @@ export function M7TalleresPage() {
                       <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">Habitual: {OT_STEPS[displayStep].owner}</p>
                     )}
 
-                    {vistaChofer ? (
+                    {vistaBrowse ? (
                       <div className="mt-4 space-y-3">
                         <div className="rounded-xl border border-[var(--vl-card-border)] bg-slate-100/80 p-4 opacity-90 dark:bg-slate-900/50">
                           <p className="text-sm font-semibold text-[var(--vl-heading)]">
-                            Solo lectura · sin montos
+                            {vistaChofer ? "Solo lectura · sin montos" : "Solo lectura"}
                           </p>
                           <p className="mt-1 text-xs text-[var(--vl-text-muted)]">
-                            Podés avanzar y volver para ver cada etapa. Los importes no se muestran
-                            a choferes (la empresa de transporte sí los ve). Podés dejar un
-                            comentario o usar el botón «Sugerencia».
+                            Podés avanzar y volver para ver cada etapa
+                            {vistaChofer
+                              ? " (sin montos; la empresa de transporte sí los ve)"
+                              : " (ves montos de tu flota)"}
+                            . Podés dejar un comentario o sugerencia.
                             Etapa real de la OT:{" "}
                             <strong>
                               {ot.cerradaAt
@@ -670,7 +676,7 @@ export function M7TalleresPage() {
                             {!puedeEditarTaller && (
                               <div className="rounded-lg border border-slate-300 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200">
                                 <strong>Solo lectura.</strong> No podés editar presupuestos
-                                (campos en gris). En tu etapa usá Continuar / Volver.
+                                (campos en gris). Usá las flechas para moverte entre etapas.
                               </div>
                             )}
 
@@ -695,13 +701,15 @@ export function M7TalleresPage() {
                               setTallerId={setItemTallerId}
                               busy={busy}
                               onSaved={replaceOt}
+                              onError={setError}
                             />
 
                             {puedeEditarTaller && (
                               <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
                                 <p className="text-xs text-[var(--vl-text-muted)]">
-                                  Guardá los ítems cuando quieras. Continuar avanza a la selección
-                                  de presupuestos aprobados.
+                                  Guardá cada ítem con «Guardar ítem». La flecha / Continuar avanza
+                                  de etapa. Si marcás sin presupuesto, se saltea la selección y
+                                  vas directo a cargar el importe.
                                 </p>
                                 {ot.sinPresupuesto ? (
                                   <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
@@ -731,7 +739,7 @@ export function M7TalleresPage() {
                           </div>
                         )}
 
-                        {isSeleccionStep(ot.currentStep) && (
+                        {isSeleccionStep(ot.currentStep) && !ot.sinPresupuesto && (
                           <SeleccionChecklist
                             ot={ot}
                             token={token!}
@@ -744,94 +752,154 @@ export function M7TalleresPage() {
                         )}
 
                         {isAjusteStep(ot.currentStep) && puedeEditarTaller && (
-                          <AjusteImportesChecklist
-                            ot={ot}
-                            token={token!}
-                            onSaved={replaceOt}
-                            importeDrafts={importeDrafts}
-                            setImporteDraft={setImporteDrafts}
-                          />
+                          ot.sinPresupuesto ? (
+                            <div className="space-y-3">
+                              <p className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                                <strong>Sin presupuesto.</strong> Cargá el importe del gasto acá.
+                                No se compara contra un presupuesto aprobado.
+                              </p>
+                              <ItemsEditor
+                                ot={ot}
+                                token={token!}
+                                talleres={talleres}
+                                tipo="FACTURA"
+                                lockTipo
+                                requireClasif
+                                desc={itemDesc}
+                                setDesc={setItemDesc}
+                                imp={itemImp}
+                                setImp={setItemImp}
+                                obs={itemObs}
+                                setObs={setItemObs}
+                                tallerId={itemTallerId}
+                                setTallerId={setItemTallerId}
+                                busy={busy}
+                                onSaved={replaceOt}
+                                onError={setError}
+                              />
+                            </div>
+                          ) : (
+                            <AjusteImportesChecklist
+                              ot={ot}
+                              token={token!}
+                              onSaved={replaceOt}
+                              importeDrafts={importeDrafts}
+                              setImporteDraft={setImporteDrafts}
+                            />
+                          )
                         )}
 
-                        {isCierreStep(ot.currentStep) && !vistaChofer && (
+                        {isCierreStep(ot.currentStep) && !vistaBrowse && (
                           <div className="space-y-3">
-                            <div className="rounded-lg border border-[var(--vl-card-border)] p-4">
-                              <p className="text-xs font-semibold text-[var(--vl-heading)]">
-                                Comparación y cierre
-                              </p>
-                              <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                                Presupuesto aprobado (fijo al seleccionar) vs suma de importes
-                                editados. Verde si el presupuesto supera el gasto; rojo al revés.
-                              </p>
-                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
+                            {ot.sinPresupuesto ? (
+                              <div className="rounded-lg border border-[var(--vl-card-border)] p-4">
+                                <p className="text-xs font-semibold text-[var(--vl-heading)]">
+                                  Cierre · sin presupuesto
+                                </p>
+                                <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                                  Esta OT está marcada sin presupuesto: no hay comparación
+                                  contra $0. Revisá el gasto cargado y cerrá la OT.
+                                </p>
+                                <div className="mt-3 rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
                                   <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                                    Presupuesto aprobado
+                                    Importe cargado
                                   </div>
                                   <div className="mt-1 text-lg font-bold">
-                                    {presupuestoAprobadoFijo > 0
-                                      ? money(presupuestoAprobadoFijo)
-                                      : "—"}
-                                  </div>
-                                </div>
-                                <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
-                                  <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                                    Importes editados
-                                  </div>
-                                  <div className="mt-1 text-lg font-bold">
-                                    {totTildados > 0 ? money(totTildados) : "—"}
+                                    {totTildados > 0 || (ot.valorFinal ?? 0) > 0
+                                      ? money(
+                                          totTildados > 0
+                                            ? totTildados
+                                            : Number(ot.valorFinal) || 0
+                                        )
+                                      : money(
+                                          (ot.items ?? [])
+                                            .filter((i) => i.tipo !== "PRESUPUESTO")
+                                            .reduce((a, i) => a + (i.importe || 0), 0)
+                                        )}
                                   </div>
                                 </div>
                               </div>
-                              {presupuestoAprobadoFijo > 0 && totTildados > 0 && (
-                                <p
-                                  className={`mt-3 text-sm font-semibold ${
-                                    presupuestoAprobadoFijo >= totTildados
-                                      ? "text-emerald-600 dark:text-emerald-400"
-                                      : "text-red-600 dark:text-red-400"
-                                  }`}
-                                >
-                                  Diferencia:{" "}
-                                  {money(presupuestoAprobadoFijo - totTildados)}
-                                  {presupuestoAprobadoFijo > totTildados
-                                    ? " (presupuesto mayor al gasto)"
-                                    : presupuestoAprobadoFijo < totTildados
-                                      ? " (gasto supera el presupuesto)"
-                                      : " (coinciden)"}
+                            ) : (
+                              <div className="rounded-lg border border-[var(--vl-card-border)] p-4">
+                                <p className="text-xs font-semibold text-[var(--vl-heading)]">
+                                  Comparación y cierre
                                 </p>
-                              )}
-                            </div>
-                            <div>
-                              <div className="mb-1 text-xs font-semibold">Ítems aprobados</div>
-                              {itemsPresupuesto.filter((i) => i.aprobado).length === 0 ? (
-                                <p className="text-xs text-[var(--vl-text-muted)]">
-                                  No hay ítems aprobados.
+                                <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                                  Presupuesto aprobado (fijo al seleccionar) vs suma de importes
+                                  editados. Verde si el presupuesto supera el gasto; rojo al revés.
                                 </p>
-                              ) : (
-                                <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
-                                  {itemsPresupuesto
-                                    .filter((i) => i.aprobado)
-                                    .map((i) => (
-                                      <li
-                                        key={i.id}
-                                        className="flex justify-between gap-2 border-b border-[var(--vl-card-border)] py-1 last:border-0"
-                                      >
-                                        <span>
-                                          {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
-                                          {i.descripcion}
-                                        </span>
-                                        <span className="shrink-0 font-medium">
-                                          {money(i.importe)}
-                                        </span>
-                                      </li>
-                                    ))}
-                                </ul>
-                              )}
-                            </div>
+                                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                  <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
+                                    <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
+                                      Presupuesto aprobado
+                                    </div>
+                                    <div className="mt-1 text-lg font-bold">
+                                      {presupuestoAprobadoFijo > 0
+                                        ? money(presupuestoAprobadoFijo)
+                                        : "—"}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
+                                    <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
+                                      Importes editados
+                                    </div>
+                                    <div className="mt-1 text-lg font-bold">
+                                      {totTildados > 0 ? money(totTildados) : "—"}
+                                    </div>
+                                  </div>
+                                </div>
+                                {presupuestoAprobadoFijo > 0 && totTildados > 0 && (
+                                  <p
+                                    className={`mt-3 text-sm font-semibold ${
+                                      presupuestoAprobadoFijo >= totTildados
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : "text-red-600 dark:text-red-400"
+                                    }`}
+                                  >
+                                    Diferencia:{" "}
+                                    {money(presupuestoAprobadoFijo - totTildados)}
+                                    {presupuestoAprobadoFijo > totTildados
+                                      ? " (presupuesto mayor al gasto)"
+                                      : presupuestoAprobadoFijo < totTildados
+                                        ? " (gasto supera el presupuesto)"
+                                        : " (coinciden)"}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {!ot.sinPresupuesto && (
+                              <div>
+                                <div className="mb-1 text-xs font-semibold">Ítems aprobados</div>
+                                {itemsPresupuesto.filter((i) => i.aprobado).length === 0 ? (
+                                  <p className="text-xs text-[var(--vl-text-muted)]">
+                                    No hay ítems aprobados.
+                                  </p>
+                                ) : (
+                                  <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
+                                    {itemsPresupuesto
+                                      .filter((i) => i.aprobado)
+                                      .map((i) => (
+                                        <li
+                                          key={i.id}
+                                          className="flex justify-between gap-2 border-b border-[var(--vl-card-border)] py-1 last:border-0"
+                                        >
+                                          <span>
+                                            {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
+                                            {i.descripcion}
+                                          </span>
+                                          <span className="shrink-0 font-medium">
+                                            {money(i.importe)}
+                                          </span>
+                                        </li>
+                                      ))}
+                                  </ul>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
 
-                        {!vistaChofer && (ot.auditorias?.length ?? 0) > 0 && (
+                        {!vistaBrowse && (ot.auditorias?.length ?? 0) > 0 && (
                           <details className="text-xs text-[var(--vl-text-muted)]">
                             <summary>Registro de acciones ({ot.auditorias!.length})</summary>
                             <ul className="mt-1 space-y-1">
@@ -845,7 +913,7 @@ export function M7TalleresPage() {
                     )}
                   </div>
 
-                  {!vistaChofer && !enPresupuesto && (
+                  {!vistaBrowse && !enPresupuesto && !ot.sinPresupuesto && (
                   <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                     <div className="rounded-xl border p-3">
                       <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto aprobado</div>
@@ -880,39 +948,85 @@ export function M7TalleresPage() {
                   </div>
                   )}
 
-                  {(vistaChofer || !ot.cerradaAt) && (
-                    <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                      {vistaChofer ? (
+                  {(vistaBrowse || !ot.cerradaAt) && (
+                    <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      {vistaBrowse ? (
                         <>
                           {displayStep > 0 && (
                             <button
                               type="button"
+                              aria-label="Anterior"
                               onClick={() => setBrowseStep(displayStep - 1)}
-                              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold"
+                              className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-xl border-2 px-4"
                             >
-                              <ChevronLeft size={18} /> Volver
+                              <ChevronLeft size={22} />
                             </button>
                           )}
                           {displayStep < maxBrowseStep && (
                             <button
                               type="button"
+                              aria-label="Siguiente"
                               onClick={() => setBrowseStep(displayStep + 1)}
-                              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-5 text-sm font-semibold text-white"
+                              className="inline-flex min-h-12 min-w-12 flex-1 items-center justify-center rounded-xl bg-[#1e4080] px-5 text-white"
                             >
-                              Continuar <ChevronRight size={18} />
+                              <ChevronRight size={22} />
                             </button>
-                          )}
-                          {displayStep >= maxBrowseStep && displayStep > 0 && (
-                            <p className="self-center text-xs text-[var(--vl-text-muted)]">
-                              Llegaste a la etapa actual de la OT.
-                            </p>
                           )}
                         </>
                       ) : (
                         <>
                           {ot.currentStep > 0 && (
-                            <button type="button" disabled={busy} onClick={() => void call(`/api/talleres/${ot.id}/retroceder`, { method: "POST", body: "{}" })} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold">
-                              <ChevronLeft size={18} /> Volver
+                            <button
+                              type="button"
+                              disabled={busy}
+                              aria-label="Volver"
+                              onClick={() => void call(`/api/talleres/${ot.id}/retroceder`, { method: "POST", body: "{}" })}
+                              className="inline-flex min-h-12 min-w-12 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold"
+                            >
+                              <ChevronLeft size={18} />
+                              <span className="hidden sm:inline">Volver</span>
+                            </button>
+                          )}
+                          {puedeEditarTaller && !isCierreStep(ot.currentStep) && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                void (async () => {
+                                  if (isAjusteStep(ot.currentStep) && !ot.sinPresupuesto) {
+                                    setBusy(true);
+                                    try {
+                                      for (const [id, draft] of Object.entries(importeDrafts)) {
+                                        if (!Number.isFinite(draft) || draft < 0) continue;
+                                        const item = (ot.items ?? []).find((i) => i.id === id);
+                                        if (!item || item.importe === draft) continue;
+                                        await apiFetch(
+                                          `/api/talleres/${ot.id}/items/${id}`,
+                                          {
+                                            method: "PATCH",
+                                            body: JSON.stringify({ importe: draft }),
+                                          },
+                                          token!
+                                        );
+                                      }
+                                      await load();
+                                    } catch (err) {
+                                      setError(
+                                        err instanceof ApiError
+                                          ? err.message
+                                          : "Error al guardar"
+                                      );
+                                    } finally {
+                                      setBusy(false);
+                                    }
+                                  }
+                                  setGuardadoOk(true);
+                                  window.setTimeout(() => setGuardadoOk(false), 2000);
+                                })();
+                              }}
+                              className="inline-flex min-h-12 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] px-4 text-sm font-semibold"
+                            >
+                              {guardadoOk ? "Guardado" : "Guardar"}
                             </button>
                           )}
                           {ot.currentStep < OT_STEPS.length - 1 && (
@@ -928,10 +1042,12 @@ export function M7TalleresPage() {
                                   ? "En esta etapa solo Vettore puede continuar"
                                   : undefined
                               }
+                              aria-label="Continuar"
                               onClick={() => void call(`/api/talleres/${ot.id}/avanzar`, { method: "POST", body: JSON.stringify({ incrementoJustificacion: justif }) })}
                               className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4080] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              Continuar <ChevronRight size={18} />
+                              <span className="hidden sm:inline">Continuar</span>
+                              <ChevronRight size={18} />
                             </button>
                           )}
                           {isCierreStep(ot.currentStep) && puedeEditarTaller && (
@@ -1443,7 +1559,7 @@ function AjusteImportesChecklist({
 }
 
 function ItemsEditor({
-  ot, token, talleres, tipo, setTipo, lockTipo, hideTotal, showSubtotales, requireClasif, readOnly, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved,
+  ot, token, talleres, tipo, setTipo, lockTipo, hideTotal, showSubtotales, requireClasif, readOnly, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved, onError,
 }: {
   ot: OrdenTrabajo;
   token: string;
@@ -1462,36 +1578,47 @@ function ItemsEditor({
   tallerId: string; setTallerId: (s: string) => void;
   busy: boolean;
   onSaved: (ot: OrdenTrabajo) => void;
+  onError?: (msg: string | null) => void;
 }) {
   const [clasificacion, setClasificacion] = useState<ClasificacionGasto | "">("");
   const [clasificacionOtro, setClasificacionOtro] = useState("");
   const [fecha, setFecha] = useState(todayInputDate);
+  const [saving, setSaving] = useState(false);
   const items = (ot.items ?? []).filter((i) =>
     tipo === "PRESUPUESTO" ? i.tipo === "PRESUPUESTO" : i.tipo !== "PRESUPUESTO"
   );
   const total = items.reduce((a, i) => a + i.importe, 0);
   const gastoRequiereClasif = tipo === "FACTURA" || !!requireClasif;
-  const proveedorObligatorio = tipo === "FACTURA";
+  const proveedorObligatorio = tipo === "FACTURA" || !!showSubtotales;
   const verSubtotal = showSubtotales || !hideTotal;
 
   async function add() {
-    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items`, {
-      method: "POST",
-      body: JSON.stringify({
-        tipo,
-        descripcion: desc,
-        importe: Number(imp),
-        observacion: obs,
-        tallerProveedorId: tallerId || undefined,
-        fecha: fecha || undefined,
-        clasificacion: clasificacion || undefined,
-        clasificacionOtro: clasificacion === "OTRO" ? clasificacionOtro : undefined,
-      }),
-    }, token);
-    onSaved(updated);
-    setDesc(""); setImp(""); setObs("");
-    setClasificacion(""); setClasificacionOtro("");
-    setFecha(todayInputDate());
+    if (!puedeSumar || saving) return;
+    setSaving(true);
+    onError?.(null);
+    try {
+      const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items`, {
+        method: "POST",
+        body: JSON.stringify({
+          tipo,
+          descripcion: desc,
+          importe: Number(imp),
+          observacion: obs,
+          tallerProveedorId: tallerId || undefined,
+          fecha: fecha || undefined,
+          clasificacion: clasificacion || undefined,
+          clasificacionOtro: clasificacion === "OTRO" ? clasificacionOtro : undefined,
+        }),
+      }, token);
+      onSaved(updated);
+      setDesc(""); setImp(""); setObs("");
+      setClasificacion(""); setClasificacionOtro("");
+      setFecha(todayInputDate());
+    } catch (err) {
+      onError?.(err instanceof ApiError ? err.message : "No se pudo guardar el ítem");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
@@ -1505,12 +1632,17 @@ function ItemsEditor({
     return CLASIFICACION_LABEL[i.clasificacion];
   }
 
+  const faltaClasif =
+    gastoRequiereClasif &&
+    (!clasificacion || (clasificacion === "OTRO" && clasificacionOtro.trim().length < 2));
+  const faltaProveedor = proveedorObligatorio && !tallerId;
   const puedeSumar =
-    !!desc &&
+    !!desc.trim() &&
     !!imp &&
-    (!proveedorObligatorio || !!tallerId) &&
-    (!gastoRequiereClasif ||
-      (clasificacion && (clasificacion !== "OTRO" || clasificacionOtro.trim().length >= 2)));
+    Number.isFinite(Number(imp)) &&
+    Number(imp) >= 0 &&
+    !faltaProveedor &&
+    !faltaClasif;
 
   return (
     <div className={readOnly ? "rounded-lg border border-slate-200 bg-slate-50/80 p-3 opacity-80 dark:border-slate-700 dark:bg-slate-900/40" : undefined}>
@@ -1581,7 +1713,9 @@ function ItemsEditor({
           value={clasificacion}
           onChange={(e) => setClasificacion(e.target.value as ClasificacionGasto | "")}
         >
-          <option value="">{gastoRequiereClasif ? "Clasificación: Mano de obra / Materiales (obligatoria)" : "Clasificación (opcional)"}</option>
+          <option value="">
+            {gastoRequiereClasif ? "Elegí clasificación (obligatoria)…" : "Clasificación (opcional)…"}
+          </option>
           {(Object.keys(CLASIFICACION_LABEL) as ClasificacionGasto[]).map((k) => (
             <option key={k} value={k}>{CLASIFICACION_LABEL[k]}</option>
           ))}
@@ -1596,8 +1730,27 @@ function ItemsEditor({
         )}
         <input className="sm:col-span-2 rounded-md border p-2 text-sm" placeholder="Observación (proveedor / n° factura)" value={obs} onChange={(e) => setObs(e.target.value)} />
       </div>
-      <button type="button" disabled={busy || !puedeSumar} className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-slate-100 dark:text-slate-900" onClick={() => void add()}>
-        Guardar ítem
+      {!puedeSumar && (
+        <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
+          Completá{" "}
+          {[
+            !desc.trim() && "descripción",
+            !(imp && Number.isFinite(Number(imp))) && "importe",
+            faltaProveedor && "proveedor",
+            faltaClasif && "clasificación",
+          ]
+            .filter(Boolean)
+            .join(", ")}{" "}
+          para guardar.
+        </p>
+      )}
+      <button
+        type="button"
+        disabled={busy || saving || !puedeSumar}
+        className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+        onClick={() => void add()}
+      >
+        {saving ? "Guardando…" : "Guardar ítem"}
       </button>
       </>
       )}
