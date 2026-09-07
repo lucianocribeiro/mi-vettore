@@ -1594,26 +1594,25 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       nextStep = 1;
     }
 
-    // 1 Presupuesto → 2 Selección, o 3 Ajuste si sin presupuesto (salta selección).
+    // 1 Presupuesto → 2 Selección si hay ítems; si no hay ítems → 3 Ajuste (salta selección).
     if (isAsignacionOPresupuestoStep(ot.currentStep)) {
       const tot = otTotales(ot);
-      const sinPresu = ot.sinPresupuesto || tot.presupuestoTodos <= 0;
-      extra.sinPresupuesto = sinPresu;
+      const hayItems =
+        (ot.items ?? []).some((i) => i.tipo === "PRESUPUESTO") ||
+        tot.presupuestoTodos > 0;
+      extra.sinPresupuesto = !hayItems;
       extra.presupuestoMonto = tot.presupuestoTodos > 0 ? tot.presupuestoTodos : null;
-      if (sinPresu) {
+      if (!hayItems) {
         extra.valorAprobado = null;
         extra.montoAutorizado = null;
-        nextStep = 3; // ajuste: cargar importe sin comparar vs 0
+        nextStep = 3; // ajuste directo: cargar / editar importes
       } else {
-        nextStep = 2;
+        nextStep = 2; // selección de aprobados
       }
     }
 
-    // 2 Selección → 3 Ajuste. Congela "presupuesto aprobado" = suma de tildados.
+    // 2 Selección → 3 Ajuste. Congela "presupuesto original" = suma de tildados.
     if (isSeleccionStep(ot.currentStep)) {
-      if (ot.sinPresupuesto) {
-        nextStep = 3;
-      } else {
       const seleccionados = (ot.items ?? []).filter(
         (i) => i.tipo === "PRESUPUESTO" && i.aprobado
       );
@@ -1641,8 +1640,8 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       }
       extra.valorAprobado = totalSel > 0 ? totalSel : null;
       extra.montoAutorizado = totalSel > 0 ? totalSel : null;
+      extra.sinPresupuesto = false;
       nextStep = 3;
-      }
     }
 
     // 3 Ajuste → 4 Comparación/cierre.

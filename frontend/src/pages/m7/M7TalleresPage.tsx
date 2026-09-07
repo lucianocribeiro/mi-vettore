@@ -707,33 +707,24 @@ export function M7TalleresPage() {
                             {puedeEditarTaller && (
                               <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
                                 <p className="text-xs text-[var(--vl-text-muted)]">
-                                  Guardá cada ítem con «Guardar ítem». La flecha / Continuar avanza
-                                  de etapa. Si marcás sin presupuesto, se saltea la selección y
-                                  vas directo a cargar el importe.
+                                  Guardá cada ítem con «Guardar ítem». Si hay ítems cargados,
+                                  Continuar va a <strong>selección</strong>. Si no hay ninguno,
+                                  salta directo a <strong>ajuste de importes</strong>.
                                 </p>
-                                {ot.sinPresupuesto ? (
-                                  <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                                    OT marcada sin presupuesto.
+                                {(ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO").length ===
+                                  0 && (
+                                  <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                                    Sin ítems: al continuar se marca sin presupuesto y se saltea
+                                    la selección.
                                   </p>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="mt-2 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-medium"
-                                    onClick={() =>
-                                      void call(`/api/talleres/${ot.id}/sin-presupuesto`, {
-                                        method: "POST",
-                                        body: JSON.stringify({ sinPresupuesto: true }),
-                                      })
-                                    }
-                                  >
-                                    Marcar sin presupuesto
-                                  </button>
                                 )}
                               </div>
                             )}
-                            {!puedeEditarTaller && ot.sinPresupuesto && (
-                              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                                OT marcada sin presupuesto.
+                            {!puedeEditarTaller &&
+                              (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO").length ===
+                                0 && (
+                              <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                Sin ítems de presupuesto cargados.
                               </p>
                             )}
                           </div>
