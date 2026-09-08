@@ -5,6 +5,7 @@ import {
   formatDate,
   TIPOS_DOCUMENTO_CHOFER,
   TIPOS_DOCUMENTO_CON_VENCIMIENTO,
+  TIPOS_DOCUMENTO_OBLIGATORIOS,
   TIPOS_DOCUMENTO_UNIDAD,
   TIPO_DOCUMENTO_LABEL,
   type Chofer,
@@ -59,6 +60,9 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
   const [conVencimiento, setConVencimiento] = useState<TipoDocumento[]>(
     TIPOS_DOCUMENTO_CON_VENCIMIENTO
   );
+  const [obligatorios, setObligatorios] = useState<TipoDocumento[]>(
+    TIPOS_DOCUMENTO_OBLIGATORIOS
+  );
   const canValidate = user?.rol === "SILVINA";
   const [dniNumero, setDniNumero] = useState("");
   const [dniGuardado, setDniGuardado] = useState("");
@@ -78,6 +82,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
           tiposChofer?: TipoDocumento[];
           tiposUnidad?: TipoDocumento[];
           conVencimiento: TipoDocumento[];
+          obligatorios?: TipoDocumento[];
         }>("/api/documentos/meta", {}, token).catch(() => null),
         choferId
           ? apiFetch<Chofer>(`/api/choferes/${choferId}`, {}, token).catch(() => null)
@@ -88,15 +93,17 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
         setDniNumero(chofer.dni);
         setDniGuardado(chofer.dni);
       }
-      const nextTipos = choferId
-        ? meta?.tiposChofer?.length
-          ? meta.tiposChofer
-          : TIPOS_DOCUMENTO_CHOFER
-        : meta?.tiposUnidad?.length
-          ? meta.tiposUnidad
-          : TIPOS_DOCUMENTO_UNIDAD;
-      setTipos(nextTipos);
-      if (meta?.conVencimiento?.length) setConVencimiento(meta.conVencimiento);
+      // Lista canónica en frontend: un /meta viejo no debe ocultar campos nuevos.
+      setTipos(choferId ? TIPOS_DOCUMENTO_CHOFER : TIPOS_DOCUMENTO_UNIDAD);
+      setObligatorios(TIPOS_DOCUMENTO_OBLIGATORIOS);
+      if (meta?.conVencimiento?.length) {
+        setConVencimiento([
+          ...new Set([
+            ...TIPOS_DOCUMENTO_CON_VENCIMIENTO,
+            ...meta.conVencimiento,
+          ]),
+        ]);
+      }
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Error al cargar documentos"
@@ -220,6 +227,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
       </div>
       <p className="text-[11px] text-[var(--vl-text-muted)]">
         Completá cada título a la derecha: vencimiento (si aplica) y foto o PDF.
+        Los marcados como obligatorios deben cargarse.
       </p>
 
       <div className="space-y-2">
@@ -257,6 +265,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
         {tipos.map((t) => {
           const latest = docs.find((d) => d.tipo === t);
           const needs = conVencimiento.includes(t);
+          const esObligatorio = obligatorios.includes(t);
           const venc = vencByTipo[t] ?? "";
           return (
             <div
@@ -265,8 +274,22 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
             >
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-[var(--vl-heading)]">
-                  {TIPO_DOCUMENTO_LABEL[t]}
+                  {TIPO_DOCUMENTO_LABEL[t] ?? t}
+                  <span
+                    className={`ml-2 text-[10px] font-medium ${
+                      esObligatorio
+                        ? "text-amber-700 dark:text-amber-300"
+                        : "text-[var(--vl-text-muted)]"
+                    }`}
+                  >
+                    {esObligatorio ? "(obligatorio)" : "(opcional)"}
+                  </span>
                 </div>
+                {t === "FOTO_VEHICULO" && (
+                  <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                    Foto del vehículo (Vettore indica el detalle / ángulo requerido).
+                  </div>
+                )}
                 {latest ? (
                   <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
                     {latest.nombreOriginal || "archivo"}

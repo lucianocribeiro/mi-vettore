@@ -100,11 +100,17 @@ enum TipoDocumento {
   DNI_FRENTE
   DNI_DORSO
   LICENCIA
+  LICENCIA_FRENTE
+  LICENCIA_DORSO
   HABILITACION_MANIPULACION
+  SEGURO_ACCIDENTES
   VTV
   SENASA
   SEGURO
   CEDULA
+  HOMOLOGACION
+  OTRA_DOCUMENTACION
+  FOTO_VEHICULO
 }
 
 enum EstadoValidacionDoc {
@@ -524,6 +530,8 @@ model OtItem {
   observacion            String?
   archivo                String?
   aprobado               Boolean             @default(false)
+  /// Ítem agregado en ajuste de importes (reparación adicional).
+  adicionalAjuste        Boolean             @default(false)
   /// Sugerencia de aprobación de la empresa (dueño flota) en etapa aprobacion_empresa.
   sugeridoEmpresa        Boolean             @default(false)
   clasificacion          ClasificacionGasto?

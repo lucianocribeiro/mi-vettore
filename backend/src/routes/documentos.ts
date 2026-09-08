@@ -36,18 +36,23 @@ const upload = multer({
 
 const CON_VENCIMIENTO = new Set<TipoDocumento>([
   TipoDocumento.LICENCIA,
+  TipoDocumento.LICENCIA_FRENTE,
+  TipoDocumento.LICENCIA_DORSO,
   TipoDocumento.HABILITACION_MANIPULACION,
   TipoDocumento.VTV,
   TipoDocumento.SENASA,
   TipoDocumento.SEGURO,
   TipoDocumento.CEDULA,
+  TipoDocumento.HOMOLOGACION,
 ]);
 
 const TIPOS_CHOFER = new Set<TipoDocumento>([
   TipoDocumento.DNI_FRENTE,
   TipoDocumento.DNI_DORSO,
-  TipoDocumento.LICENCIA,
+  TipoDocumento.LICENCIA_FRENTE,
+  TipoDocumento.LICENCIA_DORSO,
   TipoDocumento.HABILITACION_MANIPULACION,
+  TipoDocumento.SEGURO_ACCIDENTES,
 ]);
 
 const TIPOS_UNIDAD = new Set<TipoDocumento>([
@@ -55,6 +60,23 @@ const TIPOS_UNIDAD = new Set<TipoDocumento>([
   TipoDocumento.SENASA,
   TipoDocumento.SEGURO,
   TipoDocumento.CEDULA,
+  TipoDocumento.HOMOLOGACION,
+  TipoDocumento.OTRA_DOCUMENTACION,
+  TipoDocumento.FOTO_VEHICULO,
+]);
+
+/** Obligatorios (UI / validación blanda). SENASA y OTRA_DOCUMENTACION / SEGURO_ACCIDENTES son opcionales. */
+const TIPOS_OBLIGATORIOS = new Set<TipoDocumento>([
+  TipoDocumento.DNI_FRENTE,
+  TipoDocumento.DNI_DORSO,
+  TipoDocumento.LICENCIA_FRENTE,
+  TipoDocumento.LICENCIA_DORSO,
+  TipoDocumento.HABILITACION_MANIPULACION,
+  TipoDocumento.VTV,
+  TipoDocumento.SEGURO,
+  TipoDocumento.CEDULA,
+  TipoDocumento.HOMOLOGACION,
+  TipoDocumento.FOTO_VEHICULO,
 ]);
 
 function parseTipo(raw: unknown): TipoDocumento | null {
@@ -69,6 +91,7 @@ router.get("/meta", authenticate, (_req, res) => {
     tiposChofer: [...TIPOS_CHOFER],
     tiposUnidad: [...TIPOS_UNIDAD],
     conVencimiento: [...CON_VENCIMIENTO],
+    obligatorios: [...TIPOS_OBLIGATORIOS],
     storageConfigured: isSupabaseStorageConfigured(),
   });
 });
@@ -171,14 +194,15 @@ router.post(
       }
       if (choferId && !TIPOS_CHOFER.has(tipo)) {
         res.status(400).json({
-          error: "En chofer solo se carga DNI, licencia o habilitación de alimentos",
+          error:
+            "En chofer solo: DNI frente/dorso, licencia frente/dorso, habilitación o seguro de accidentes",
         });
         return;
       }
       if (camionetaId && !TIPOS_UNIDAD.has(tipo)) {
         res.status(400).json({
           error:
-            "En unidad solo se carga VTV, SENASA, seguro o cédula",
+            "En unidad solo: RTO/VTV, SENASA, seguro, cédula, homologación, otra documentación o foto del vehículo",
         });
         return;
       }

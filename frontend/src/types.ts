@@ -121,28 +121,39 @@ export type TipoDocumento =
   | "DNI_FRENTE"
   | "DNI_DORSO"
   | "LICENCIA"
+  | "LICENCIA_FRENTE"
+  | "LICENCIA_DORSO"
   | "HABILITACION_MANIPULACION"
+  | "SEGURO_ACCIDENTES"
   | "VTV"
   | "SENASA"
   | "SEGURO"
-  | "CEDULA";
+  | "CEDULA"
+  | "HOMOLOGACION"
+  | "OTRA_DOCUMENTACION"
+  | "FOTO_VEHICULO";
 
 export type EstadoValidacionDoc = "PENDIENTE" | "VALIDADO" | "RECHAZADO";
 
 export const TIPOS_DOCUMENTO_CON_VENCIMIENTO: TipoDocumento[] = [
   "LICENCIA",
+  "LICENCIA_FRENTE",
+  "LICENCIA_DORSO",
   "HABILITACION_MANIPULACION",
   "VTV",
   "SENASA",
   "SEGURO",
   "CEDULA",
+  "HOMOLOGACION",
 ];
 
 export const TIPOS_DOCUMENTO_CHOFER: TipoDocumento[] = [
   "DNI_FRENTE",
   "DNI_DORSO",
-  "LICENCIA",
+  "LICENCIA_FRENTE",
+  "LICENCIA_DORSO",
   "HABILITACION_MANIPULACION",
+  "SEGURO_ACCIDENTES",
 ];
 
 export const TIPOS_DOCUMENTO_UNIDAD: TipoDocumento[] = [
@@ -150,17 +161,39 @@ export const TIPOS_DOCUMENTO_UNIDAD: TipoDocumento[] = [
   "SENASA",
   "SEGURO",
   "CEDULA",
+  "HOMOLOGACION",
+  "OTRA_DOCUMENTACION",
+  "FOTO_VEHICULO",
+];
+
+export const TIPOS_DOCUMENTO_OBLIGATORIOS: TipoDocumento[] = [
+  "DNI_FRENTE",
+  "DNI_DORSO",
+  "LICENCIA_FRENTE",
+  "LICENCIA_DORSO",
+  "HABILITACION_MANIPULACION",
+  "VTV",
+  "SEGURO",
+  "CEDULA",
+  "HOMOLOGACION",
+  "FOTO_VEHICULO",
 ];
 
 export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
   DNI_FRENTE: "DNI frente",
   DNI_DORSO: "DNI dorso",
   LICENCIA: "Licencia",
+  LICENCIA_FRENTE: "Licencia (frente)",
+  LICENCIA_DORSO: "Licencia (dorso)",
   HABILITACION_MANIPULACION: "Habilitación manipulación",
-  VTV: "VTV",
+  SEGURO_ACCIDENTES: "Seguro de accidentes personales",
+  VTV: "RTO / VTV",
   SENASA: "SENASA",
   SEGURO: "Seguro",
   CEDULA: "Cédula",
+  HOMOLOGACION: "Homologación",
+  OTRA_DOCUMENTACION: "Otra documentación",
+  FOTO_VEHICULO: "Foto del vehículo",
 };
 
 export const TIPO_TALLER_LABEL: Record<TipoTaller, string> = {
