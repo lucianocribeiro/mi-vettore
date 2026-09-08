@@ -232,7 +232,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
 
       <div className="space-y-2">
         {choferId && (
-          <div className="flex flex-col gap-2 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2.5 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[var(--vl-heading)]">
                 Número de DNI
@@ -241,7 +241,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
                 {dniGuardado ? `Cargado: ${dniGuardado}` : "Completá el número"}
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
                 inputMode="numeric"
@@ -249,7 +249,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
                 placeholder="Ej. 30123456"
                 value={dniNumero}
                 onChange={(e) => setDniNumero(e.target.value)}
-                className="min-h-10 w-[9.5rem] rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-xs text-[var(--vl-text)]"
+                className="min-h-10 min-w-0 flex-1 basis-[9.5rem] rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-xs text-[var(--vl-text)] sm:max-w-[11rem] sm:flex-none"
               />
               <button
                 type="button"
@@ -270,13 +270,15 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
           return (
             <div
               key={t}
-              className="flex flex-col gap-2 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-2.5 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50"
             >
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-[var(--vl-heading)]">
-                  {TIPO_DOCUMENTO_LABEL[t] ?? t}
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-sm font-semibold text-[var(--vl-heading)]">
+                    {TIPO_DOCUMENTO_LABEL[t] ?? t}
+                  </span>
                   <span
-                    className={`ml-2 text-[10px] font-medium ${
+                    className={`text-[10px] font-medium ${
                       esObligatorio
                         ? "text-amber-700 dark:text-amber-300"
                         : "text-[var(--vl-text-muted)]"
@@ -304,16 +306,16 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
                   </div>
                 )}
               </div>
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {needs && (
                   <input
                     type="date"
-                    aria-label={`Vencimiento ${TIPO_DOCUMENTO_LABEL[t]}`}
+                    aria-label={`Vencimiento ${TIPO_DOCUMENTO_LABEL[t] ?? t}`}
                     value={venc}
                     onChange={(e) =>
                       setVencByTipo((prev) => ({ ...prev, [t]: e.target.value }))
                     }
-                    className="min-h-10 w-[9.5rem] rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-xs text-[var(--vl-text)]"
+                    className="min-h-10 min-w-0 flex-1 basis-[9.5rem] rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-xs text-[var(--vl-text)] sm:max-w-[11rem] sm:flex-none"
                   />
                 )}
                 {latest && (
