@@ -183,10 +183,6 @@ function canAdvanceFromStep(rol: Role | undefined, step: number) {
   return false;
 }
 
-function canCerrarOt(rol?: Role | null) {
-  return isFacuOrSilvina(rol) || rol === "CARLA";
-}
-
 function canReabrirOt(rol?: Role | null) {
   return isFacuOrSilvina(rol) || rol === "CARLA" || isInternalOps(rol);
 }

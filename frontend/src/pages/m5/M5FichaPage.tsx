@@ -69,6 +69,7 @@ const CREATE_KIND_BY_TAB: Record<Tab, CreateKind | null> = {
   empresas: "empresa",
   usuarios: "usuario",
   tiposServicio: "tipoServicio",
+  equiposFrio: null,
   talleres: "taller",
   asignacion: null,
 };
@@ -79,6 +80,7 @@ const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
   empresas: "empresa",
   usuarios: "usuario",
   tiposServicio: "tipo de servicio",
+  equiposFrio: "equipo de frío",
   talleres: "taller",
   asignacion: "",
 };
@@ -720,6 +722,7 @@ export function M5FichaPage() {
           url: "/api/tipos-servicio/export",
           file: "tipos_servicio.xlsx",
         },
+        equiposFrio: null,
         talleres: {
           url: "/api/talleres-proveedores",
           file: "talleres.json",
