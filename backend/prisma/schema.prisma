@@ -347,6 +347,8 @@ model OrdenTrabajo {
   solicitudTallerId       String    @unique
   numeroOT                String    @unique
   currentStep             Int       @default(0)
+  /// Máximo paso alcanzado (no baja al retroceder; sirve para el indicador verde).
+  maxStepReached          Int       @default(0)
   /// Unidad no puede circular → camino corto (rendición 24hs).
   urgente                 Boolean   @default(false)
   tallerAsignado          String?

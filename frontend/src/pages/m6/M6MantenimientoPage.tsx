@@ -79,6 +79,8 @@ export function M6MantenimientoPage() {
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [exportando, setExportando] = useState(false);
+  const [importandoMant, setImportandoMant] = useState(false);
+  const [mantMsg, setMantMsg] = useState<string | null>(null);
 
   async function exportarExcel() {
     if (!token) return;
@@ -89,6 +91,59 @@ export function M6MantenimientoPage() {
       alert(err instanceof ApiError ? err.message : "No se pudo exportar");
     } finally {
       setExportando(false);
+    }
+  }
+
+  async function exportarPlantillaMant() {
+    if (!token) return;
+    try {
+      await apiDownload(
+        "/api/camionetas/mantenimiento/plantilla",
+        token,
+        "plantilla_mantenimiento_historico.xlsx"
+      );
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo descargar la plantilla");
+    }
+  }
+
+  async function exportarMant() {
+    if (!token) return;
+    setExportando(true);
+    try {
+      await apiDownload(
+        "/api/camionetas/mantenimiento/export",
+        token,
+        "mantenimiento_historico.xlsx"
+      );
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo exportar");
+    } finally {
+      setExportando(false);
+    }
+  }
+
+  async function onImportMant(file: File | null) {
+    if (!token || !file) return;
+    setImportandoMant(true);
+    setMantMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const data = await apiFetch<{
+        creadas: number;
+        omitidas: number;
+        errores?: string[];
+      }>("/api/camionetas/mantenimiento/import", { method: "POST", body: fd }, token);
+      setMantMsg(
+        `Mantenimiento: importadas ${data.creadas ?? 0}` +
+          (data.omitidas ? ` · omitidas ${data.omitidas}` : "") +
+          (data.errores?.length ? ` · ${data.errores[0]}` : "")
+      );
+    } catch (err) {
+      setMantMsg(err instanceof ApiError ? err.message : "No se pudo importar");
+    } finally {
+      setImportandoMant(false);
     }
   }
 
@@ -237,15 +292,52 @@ export function M6MantenimientoPage() {
         </div>
         </div>
         {isInternalOps(user?.rol) && (
-          <button
-            type="button"
-            onClick={() => void exportarExcel()}
-            disabled={exportando}
-            className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-1.5 text-xs font-medium text-[var(--vl-text)] hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
-          >
-            <Download size={13} />
-            {exportando ? "Exportando…" : "Exportar Excel"}
-          </button>
+          <div className="flex w-full flex-col gap-2 sm:max-w-md sm:items-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void exportarPlantillaMant()}
+                className="inline-flex min-h-10 items-center rounded-md border border-dashed border-[#1e4080]/50 bg-[#1e4080]/5 px-3 text-xs font-semibold text-[#1e4080] dark:text-sky-300"
+              >
+                Plantilla mantenimiento
+              </button>
+              <button
+                type="button"
+                onClick={() => void exportarMant()}
+                disabled={exportando}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] px-3 text-xs font-medium disabled:opacity-50"
+              >
+                <Download size={13} />
+                Exportar historial
+              </button>
+              <label className="inline-flex min-h-10 cursor-pointer items-center rounded-md border border-[var(--vl-card-border)] px-3 text-xs font-medium">
+                {importandoMant ? "Importando…" : "Importar historial"}
+                <input
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="sr-only"
+                  disabled={importandoMant}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    e.target.value = "";
+                    void onImportMant(f);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void exportarExcel()}
+                disabled={exportando}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 text-xs font-medium disabled:opacity-50"
+              >
+                <Download size={13} />
+                {exportando ? "Exportando…" : "Exportar unidades"}
+              </button>
+            </div>
+            {mantMsg && (
+              <p className="text-right text-[11px] text-[var(--vl-text-muted)]">{mantMsg}</p>
+            )}
+          </div>
         )}
       </div>
 
@@ -636,18 +728,29 @@ function UltimasReparaciones({
   return (
     <div className="mt-4 rounded-xl border border-[var(--vl-card-border)] p-3">
       <h3 className="text-sm font-bold text-[var(--vl-heading)]">
-        Últimas 5 reparaciones
+        Historial de intervenciones
       </h3>
-      <ul className="mt-2 space-y-1 text-xs">
+      <p className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+        Ordenado por fecha y kilómetros (OT cerradas + carga histórica).
+      </p>
+      <ul className="mt-2 max-h-64 space-y-1.5 overflow-y-auto text-xs">
         {rows.length === 0 && (
           <li className="text-[var(--vl-text-muted)]">Sin historial de talleres aún.</li>
         )}
         {rows.map((r, i) => (
-          <li key={`${r.numeroOT ?? r.fecha}-${i}`}>
-            {r.fecha ? new Date(r.fecha).toLocaleDateString("es-AR") : "—"}
-            {r.km != null ? ` · ${r.km.toLocaleString("es-AR")} km` : ""}
-            {r.taller ? ` · ${r.taller}` : ""}
-            {r.detalle ? ` · ${r.detalle}` : ""}
+          <li
+            key={`${r.numeroOT ?? r.fecha}-${i}`}
+            className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--vl-card-border)] pb-1.5 last:border-0"
+          >
+            <span>
+              <span className="font-medium text-[var(--vl-heading)]">
+                {r.fecha ? new Date(r.fecha).toLocaleDateString("es-AR") : "—"}
+              </span>
+              {r.km != null ? ` · ${r.km.toLocaleString("es-AR")} km` : ""}
+              {r.taller ? ` · ${r.taller}` : ""}
+              {r.detalle ? ` · ${r.detalle}` : ""}
+              {r.numeroOT ? ` · ${r.numeroOT}` : ""}
+            </span>
           </li>
         ))}
       </ul>

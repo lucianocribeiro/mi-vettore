@@ -271,6 +271,7 @@ function sanitizeOtForViewer<T extends OtLoaded>(
     id: ot.id,
     numeroOT: ot.numeroOT,
     currentStep: ot.currentStep,
+    maxStepReached: Math.max(ot.maxStepReached ?? 0, ot.currentStep),
     urgente: ot.urgente,
     cerradaAt: ot.cerradaAt,
     createdAt: ot.createdAt,
@@ -858,6 +859,7 @@ router.post(
               solicitudTallerId: solicitud.id,
               numeroOT,
               currentStep: 4,
+              maxStepReached: 4,
               sinPresupuesto: true,
               tallerAsignado: taller || null,
               valorFinal: importe > 0 ? importe : null,
@@ -1207,6 +1209,7 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
             : null,
           // Tras crear, la solicitud (paso 0) quedó cargada → arranca en presupuesto.
           currentStep: 1,
+          maxStepReached: 1,
         },
         include: includeOTFor(req.user!.id),
       });
@@ -1919,7 +1922,11 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
 
     const updated = await prisma.ordenTrabajo.update({
       where: { id: ot.id },
-      data: { currentStep: nextStep, ...extra },
+      data: {
+        currentStep: nextStep,
+        maxStepReached: Math.max(ot.maxStepReached ?? 0, nextStep),
+        ...extra,
+      },
       include: includeOTFor(req.user!.id),
     });
     res.json(sanitizeOtForViewer(updated, rol));
@@ -2101,7 +2108,11 @@ router.post("/:id/reabrir", authenticate, async (req: AuthedRequest, res) => {
       });
       await tx.ordenTrabajo.update({
         where: { id: ot.id },
-        data: { cerradaAt: null, currentStep: 4 },
+        data: {
+          cerradaAt: null,
+          currentStep: 4,
+          maxStepReached: Math.max(ot.maxStepReached ?? 0, 4),
+        },
       });
       await tx.otAuditoria.create({
         data: {

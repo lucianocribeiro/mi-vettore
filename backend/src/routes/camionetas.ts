@@ -1,5 +1,6 @@
 import { Router } from "express";
 import ExcelJS from "exceljs";
+import multer from "multer";
 import { EstadoCamioneta, TipoTransporte } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import {
@@ -21,6 +22,10 @@ import { applyKmUpdate } from "../lib/km.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
+const uploadMant = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
 
 const includeAsignaciones = {
   tipoServicio: true,
@@ -158,6 +163,210 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
+const MANT_HEADERS = [
+  { header: "Patente", key: "patente", width: 12 },
+  { header: "Fecha", key: "fecha", width: 12 },
+  { header: "Km", key: "km", width: 10 },
+  { header: "Tipo", key: "tipo", width: 16 },
+  { header: "Detalle", key: "detalle", width: 36 },
+  { header: "Taller", key: "taller", width: 24 },
+] as const;
+
+/** Plantilla vacía para carga histórica de mantenimiento (reimportable). */
+router.get("/mantenimiento/plantilla", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Mantenimiento");
+    sheet.columns = [...MANT_HEADERS];
+    sheet.getRow(1).font = { bold: true };
+    sheet.addRow({
+      patente: "AA000AA",
+      fecha: "2026-01-15",
+      km: 50000,
+      tipo: "ACEITE",
+      detalle: "Cambio de aceite ejemplo",
+      taller: "Taller ejemplo",
+    });
+    const filename = "plantilla_mantenimiento_historico.xlsx";
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al generar plantilla" });
+  }
+});
+
+/** Exporta registros de mantenimiento (misma forma que la plantilla). */
+router.get("/mantenimiento/export", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const rows = await prisma.registroMantenimiento.findMany({
+      include: { camioneta: { select: { patente: true } } },
+      orderBy: [{ fecha: "desc" }, { km: "desc" }],
+      take: 5000,
+    });
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Mantenimiento");
+    sheet.columns = [...MANT_HEADERS];
+    sheet.getRow(1).font = { bold: true };
+    for (const r of rows) {
+      sheet.addRow({
+        patente: r.camioneta.patente,
+        fecha: r.fecha.toISOString().slice(0, 10),
+        km: r.km ?? "",
+        tipo: r.tipo,
+        detalle: r.detalle ?? "",
+        taller: r.tallerNombre ?? "",
+      });
+    }
+    const filename = `mantenimiento_historico_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al exportar mantenimiento" });
+  }
+});
+
+/** Importa historial de mantenimiento desde Excel (plantilla). */
+router.post(
+  "/mantenimiento/import",
+  authenticate,
+  uploadMant.single("file"),
+  async (req: AuthedRequest, res) => {
+    try {
+      if (!isInternalOpsRole(req.user!.rol)) {
+        res.status(403).json({ error: "Sin permiso para importar" });
+        return;
+      }
+      if (!req.file?.buffer) {
+        res.status(400).json({ error: "Subí un archivo Excel (.xlsx)" });
+        return;
+      }
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer as unknown as ArrayBuffer);
+      const sheet = workbook.worksheets[0];
+      if (!sheet) {
+        res.status(400).json({ error: "El Excel no tiene hojas" });
+        return;
+      }
+      const headerRow = sheet.getRow(1);
+      const headers: Record<string, number> = {};
+      headerRow.eachCell((cell, col) => {
+        const key = String(cell.value ?? "")
+          .trim()
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+        headers[key] = col;
+      });
+      const col = (...names: string[]) => {
+        for (const n of names) {
+          const k = n
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+          if (headers[k]) return headers[k];
+        }
+        return 0;
+      };
+      const cPatente = col("patente", "unidad");
+      const cFecha = col("fecha", "fecha evento", "fechaevento");
+      const cKm = col("km", "kilometros", "kilómetros");
+      const cTipo = col("tipo");
+      const cDetalle = col("detalle", "descripcion", "descripción");
+      const cTaller = col("taller");
+      if (!cPatente || !cFecha) {
+        res.status(400).json({
+          error: "El Excel debe tener columnas Patente y Fecha",
+        });
+        return;
+      }
+
+      let creadas = 0;
+      let omitidas = 0;
+      const errores: string[] = [];
+      for (let r = 2; r <= sheet.rowCount; r++) {
+        const row = sheet.getRow(r);
+        const patente = String(row.getCell(cPatente).value ?? "")
+          .trim()
+          .toUpperCase();
+        if (!patente || patente === "AA000AA") continue;
+        const fechaCell = row.getCell(cFecha).value;
+        let fecha: Date | null = null;
+        if (fechaCell instanceof Date) fecha = fechaCell;
+        else if (fechaCell && typeof fechaCell === "object" && "result" in fechaCell) {
+          const v = (fechaCell as { result?: unknown }).result;
+          if (v instanceof Date) fecha = v;
+          else if (v) {
+            const d = new Date(String(v));
+            if (!Number.isNaN(d.getTime())) fecha = d;
+          }
+        } else if (fechaCell) {
+          const d = new Date(String(fechaCell));
+          if (!Number.isNaN(d.getTime())) fecha = d;
+        }
+        if (!fecha) {
+          omitidas++;
+          errores.push(`Fila ${r}: fecha inválida`);
+          continue;
+        }
+        const camioneta = await prisma.camioneta.findFirst({
+          where: { patente: { equals: patente, mode: "insensitive" } },
+        });
+        if (!camioneta) {
+          omitidas++;
+          errores.push(`Fila ${r}: patente ${patente} no encontrada`);
+          continue;
+        }
+        const kmRaw = cKm ? Number(row.getCell(cKm).value) : NaN;
+        const tipo = cTipo
+          ? String(row.getCell(cTipo).value ?? "").trim() || "REPARACION"
+          : "REPARACION";
+        const detalle = cDetalle
+          ? String(row.getCell(cDetalle).value ?? "").trim() || null
+          : null;
+        const taller = cTaller
+          ? String(row.getCell(cTaller).value ?? "").trim() || null
+          : null;
+        await prisma.registroMantenimiento.create({
+          data: {
+            camionetaId: camioneta.id,
+            fecha,
+            km: Number.isFinite(kmRaw) ? kmRaw : null,
+            tipo,
+            detalle,
+            tallerNombre: taller,
+            fuente: "EXCEL_IMPORT",
+          },
+        });
+        creadas++;
+      }
+      res.json({ creadas, omitidas, errores: errores.slice(0, 10) });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al importar mantenimiento" });
+    }
+  }
+);
+
 /** Reporte de kilometraje por fecha y patente (exportable). */
 router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
   try {
@@ -279,13 +488,13 @@ router.get("/:id/reparaciones", authenticate, async (req: AuthedRequest, res) =>
         solicitud: true,
         tallerProveedor: true,
       },
-      orderBy: { cerradaAt: "desc" },
-      take: 5,
+      orderBy: [{ cerradaAt: "desc" }, { kmAlMomento: "desc" }],
+      take: 50,
     });
     const historicos = await prisma.registroMantenimiento.findMany({
       where: { camionetaId },
-      orderBy: { fecha: "desc" },
-      take: 5,
+      orderBy: [{ fecha: "desc" }, { km: "desc" }],
+      take: 50,
     });
 
     const fromOt = ots.map((ot) => ({
@@ -304,9 +513,11 @@ router.get("/:id/reparaciones", authenticate, async (req: AuthedRequest, res) =>
       detalle: h.detalle || h.tipo,
       numeroOT: h.otId,
     }));
-    const merged = [...fromOt, ...fromHist]
-      .sort((a, b) => new Date(b.fecha ?? 0).getTime() - new Date(a.fecha ?? 0).getTime())
-      .slice(0, 5);
+    const merged = [...fromOt, ...fromHist].sort((a, b) => {
+      const fd = new Date(b.fecha ?? 0).getTime() - new Date(a.fecha ?? 0).getTime();
+      if (fd !== 0) return fd;
+      return (b.km ?? 0) - (a.km ?? 0);
+    });
     res.json(merged);
   } catch (err) {
     console.error(err);

@@ -115,6 +115,7 @@ type OrdenTrabajo = {
   id: string;
   numeroOT: string;
   currentStep: number;
+  maxStepReached?: number;
   urgente?: boolean;
   tallerAsignado: string | null;
   tallerProveedorId?: string | null;
@@ -323,10 +324,13 @@ export function M7TalleresPage() {
   }, [ot?.id]);
 
   const displayStep = browseStep ?? ot?.currentStep ?? 0;
+  const furthestStep = ot
+    ? Math.max(ot.maxStepReached ?? 0, ot.currentStep)
+    : 0;
   const maxBrowseStep = ot
     ? ot.cerradaAt
       ? OT_STEPS.length - 1
-      : ot.currentStep
+      : furthestStep
     : 0;
   /** Ops y browse (chofer/empresa): flechas locales. */
   const puedeBrowsePasos = true;
@@ -336,6 +340,14 @@ export function M7TalleresPage() {
     !ot.cerradaAt &&
     displayStep === ot.currentStep;
   const ocultarMontos = vistaChofer;
+  const hayCambiosPendientes = useMemo(() => {
+    if (!ot) return false;
+    return Object.entries(importeDrafts).some(([id, draft]) => {
+      if (!Number.isFinite(draft) || draft < 0) return false;
+      const item = (ot.items ?? []).find((i) => i.id === id);
+      return !!item && item.importe !== draft;
+    });
+  }, [ot, importeDrafts]);
 
   function replaceOt(updated: OrdenTrabajo) {
     setOts((prev) =>
@@ -582,8 +594,8 @@ export function M7TalleresPage() {
 
                   <div className="my-5 flex items-center">
                     {OT_STEPS.map((s, i) => {
-                      const reached = ot.cerradaAt || i <= ot.currentStep;
-                      const done = ot.cerradaAt || i < ot.currentStep;
+                      const reached = ot.cerradaAt || i <= furthestStep;
+                      const done = ot.cerradaAt || i < furthestStep;
                       const active = i === displayStep;
                       return (
                       <div key={s.label} className="flex flex-1 items-center last:flex-none">
@@ -1048,7 +1060,7 @@ export function M7TalleresPage() {
                         !isCierreStep(ot.currentStep) && (
                         <button
                           type="button"
-                          disabled={busy}
+                          disabled={busy || !hayCambiosPendientes}
                           onClick={() => {
                             void (async () => {
                               if (isAjusteStep(ot.currentStep) && !ot.sinPresupuesto) {
@@ -1082,7 +1094,11 @@ export function M7TalleresPage() {
                               window.setTimeout(() => setGuardadoOk(false), 2000);
                             })();
                           }}
-                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 text-sm font-semibold disabled:opacity-50"
+                          className={`inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
+                            hayCambiosPendientes && !guardadoOk
+                              ? "border-[#1e4080] bg-[#1e4080] text-white"
+                              : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"
+                          }`}
                         >
                           {guardadoOk ? "Guardado" : "Guardar"}
                         </button>
