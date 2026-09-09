@@ -46,25 +46,53 @@ export const OT_STEPS = [
     key: 1,
     code: "presupuesto",
     label: "Presupuesto",
-    ownerRoles: [Role.FACU, Role.SILVINA] as Role[] | null,
+    ownerRoles: [
+      Role.PABLO,
+      Role.SILVINA,
+      Role.FACU,
+      Role.PATRICIO,
+      Role.JULIETA,
+      Role.CARLA,
+    ] as Role[] | null,
   },
   {
     key: 2,
     code: "seleccion",
     label: "Selección",
-    ownerRoles: [Role.FACU, Role.SILVINA],
+    ownerRoles: [
+      Role.PABLO,
+      Role.SILVINA,
+      Role.FACU,
+      Role.PATRICIO,
+      Role.JULIETA,
+      Role.CARLA,
+    ],
   },
   {
     key: 3,
     code: "ajuste",
     label: "Ajuste de importes",
-    ownerRoles: [Role.FACU, Role.SILVINA],
+    ownerRoles: [
+      Role.PABLO,
+      Role.SILVINA,
+      Role.FACU,
+      Role.PATRICIO,
+      Role.JULIETA,
+      Role.CARLA,
+    ],
   },
   {
     key: 4,
     code: "cierre",
     label: "Comparación y cierre",
-    ownerRoles: [Role.FACU, Role.SILVINA, Role.CARLA],
+    ownerRoles: [
+      Role.PABLO,
+      Role.SILVINA,
+      Role.FACU,
+      Role.PATRICIO,
+      Role.JULIETA,
+      Role.CARLA,
+    ],
   },
 ] as const;
 
@@ -91,9 +119,14 @@ export function migrateLegacyOtStep(step: number, opts?: { forceSeven?: boolean 
   return step;
 }
 
-/** Facu y Silvina tienen los mismos permisos de OT. */
+/** Facu y Silvina (legado / labels “habitual”). */
 export function isFacuOrSilvina(rol: Role | string | null | undefined): boolean {
   return rol === Role.FACU || rol === Role.SILVINA || rol === "FACU" || rol === "SILVINA";
+}
+
+/** Todos los perfiles Vettore internos pueden editar talleres por completo. */
+export function canEditTalleres(rol: Role | string | null | undefined): boolean {
+  return isInternalOpsRole(rol);
 }
 
 export function isPresupuestoStep(step: number): boolean {
@@ -147,18 +180,18 @@ export function canCreateSolicitud(rol: Role): boolean {
   );
 }
 
-/** Quién es el “dueño” habitual de avanzar DESDE currentStep. Ops pueden igual (log silencioso). */
+/** Avanzar etapas: cualquier perfil Vettore interno (y chofer en solicitud). */
 export function canAdvanceFromStep(rol: Role, currentStep: number): boolean {
   if (currentStep === 0) return canCreateSolicitud(rol);
-  if (currentStep === 1) return isFacuOrSilvina(rol);
-  if (currentStep === 2) return isFacuOrSilvina(rol);
-  if (currentStep === 3) return isFacuOrSilvina(rol);
+  if (currentStep === 1 || currentStep === 2 || currentStep === 3) {
+    return canEditTalleres(rol);
+  }
   if (currentStep === 4) return false;
   return false;
 }
 
 export function canCerrarOt(rol: Role): boolean {
-  return isFacuOrSilvina(rol) || rol === Role.CARLA;
+  return canEditTalleres(rol);
 }
 
 /** Aviso al crear la solicitud: Pablo y Silvina (notif automática, reunión 12/08). */

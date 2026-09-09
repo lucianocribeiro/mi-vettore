@@ -37,7 +37,7 @@ import {
   NOTIF_OPS_ROLES,
   OT_STEPS,
   isAsignacionOPresupuestoStep,
-  isFacuOrSilvina,
+  canEditTalleres,
   isGastoStep,
   isSeleccionStep,
   isAjusteStep,
@@ -1349,7 +1349,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       }
       const gate = await gateOrOverride({
         rol,
-        allowed: isFacuOrSilvina(rol) || isInternalOpsRole(rol),
+        allowed: canEditTalleres(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Asignar taller / inhabilitar unidad",
@@ -1408,7 +1408,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       }
       const gate = await gateOrOverride({
         rol,
-        allowed: isFacuOrSilvina(rol),
+        allowed: canEditTalleres(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Ajustar monto autorizado",
@@ -1443,7 +1443,7 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       }
       const gate = await gateOrOverride({
         rol,
-        allowed: isFacuOrSilvina(rol),
+        allowed: canEditTalleres(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Justificar incremento de taller",
@@ -1532,7 +1532,7 @@ router.post(
       const overrideComentario = parseOverrideComentario(req.body);
       const gate = await gateOrOverride({
         rol,
-        allowed: isFacuOrSilvina(rol),
+        allowed: canEditTalleres(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Cargar presupuesto",
@@ -1621,7 +1621,7 @@ router.delete(
       const overrideComentario = parseOverrideComentario(req.body);
       const gate = await gateOrOverride({
         rol,
-        allowed: isFacuOrSilvina(rol),
+        allowed: canEditTalleres(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Eliminar presupuesto",
@@ -1676,7 +1676,7 @@ router.post("/:id/sin-presupuesto", authenticate, async (req: AuthedRequest, res
     const overrideComentario = parseOverrideComentario(req.body);
     const gate = await gateOrOverride({
       rol,
-      allowed: isFacuOrSilvina(rol),
+      allowed: canEditTalleres(rol),
       userId: req.user!.id,
       otId: ot.id,
       accion: "Marcar sin presupuesto",
@@ -1741,7 +1741,7 @@ router.post(
       const overrideComentario = parseOverrideComentario(req.body);
       const gate = await gateOrOverride({
         rol,
-        allowed: isFacuOrSilvina(rol) || rol === "CARLA",
+        allowed: canEditTalleres(rol),
         userId: req.user!.id,
         otId: ot.id,
         accion: "Cargar factura",
@@ -2081,7 +2081,7 @@ router.post("/:id/reabrir", authenticate, async (req: AuthedRequest, res) => {
     const rol = req.user!.rol;
     const gate = await gateOrOverride({
       rol,
-      allowed: isFacuOrSilvina(rol) || rol === "CARLA",
+      allowed: canEditTalleres(rol),
       userId: req.user!.id,
       otId: ot.id,
       accion: "Reabrir OT",
@@ -2285,7 +2285,7 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
     const rol = req.user!.rol as Role;
     const gate = await gateOrOverride({
       rol,
-      allowed: isFacuOrSilvina(rol) || isInternalOpsRole(rol),
+      allowed: canEditTalleres(rol),
       userId: req.user!.id,
       otId: ot.id,
       accion: "Agregar ítem OT",
@@ -2441,21 +2441,21 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
     const sugeridoAllowed =
       wantsSugerido &&
       (isAsignacionOPresupuestoStep(ot.currentStep) || isSeleccionStep(ot.currentStep)) &&
-      (rol === "CHOFER" || isFacuOrSilvina(rol) || isInternalOpsRole(rol));
+      (rol === "CHOFER" || canEditTalleres(rol));
     // Tildar en selección; importe/concepto en ajuste.
     const seleccionAllowed =
       wantsAprobado &&
       isSeleccionStep(ot.currentStep) &&
-      (isFacuOrSilvina(rol) || isInternalOpsRole(rol));
+      (canEditTalleres(rol));
     const ajusteAllowed =
       (wantsCategoria || wantsOtherEdit) &&
       isAjusteStep(ot.currentStep) &&
-      (isFacuOrSilvina(rol) || isInternalOpsRole(rol));
+      (canEditTalleres(rol));
     const cargaImporteAllowed =
       wantsOtherEdit &&
       isAsignacionOPresupuestoStep(ot.currentStep) &&
-      (isFacuOrSilvina(rol) || isInternalOpsRole(rol));
-    const silvinaEdit = isFacuOrSilvina(rol) || isInternalOpsRole(rol);
+      (canEditTalleres(rol));
+    const silvinaEdit = canEditTalleres(rol);
 
     const gate = await gateOrOverride({
       rol,
@@ -2515,7 +2515,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
         });
         return;
       }
-      if (!(rol === "CHOFER" || isFacuOrSilvina(rol) || isInternalOpsRole(rol))) {
+      if (!(rol === "CHOFER" || canEditTalleres(rol))) {
         res.status(403).json({ error: "Sin permiso para sugerir aprobación" });
         return;
       }
@@ -2644,7 +2644,7 @@ router.delete("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res
     const rol = req.user!.rol as Role;
     const gate = await gateOrOverride({
       rol,
-      allowed: isFacuOrSilvina(rol),
+      allowed: canEditTalleres(rol),
       userId: req.user!.id,
       otId: ot.id,
       accion: "Eliminar ítem OT",
@@ -2744,7 +2744,7 @@ router.post(
       if (!scope) {
         const gate = await gateOrOverride({
           rol: req.user!.rol as Role,
-          allowed: isFacuOrSilvina(req.user!.rol),
+          allowed: canEditTalleres(req.user!.rol),
           userId: req.user!.id,
           otId: ot.id,
           accion: "Cargar rendición urgente",

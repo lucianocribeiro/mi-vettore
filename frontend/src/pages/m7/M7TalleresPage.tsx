@@ -40,10 +40,10 @@ const FALLAS_COMUNES = [
 
 const OT_STEPS = [
   { code: "solicitud", label: "Solicitud", owner: null as string | null, detail: "Ingreso de la orden de trabajo: unidad, problema y si puede circular." },
-  { code: "presupuesto", label: "Presupuesto", owner: "Facu / Silvina", detail: "Cargá presupuestos por proveedor. Solo se muestran los subtotales por proveedor." },
-  { code: "seleccion", label: "Selección", owner: "Facu / Silvina", detail: "Tildá los presupuestos aprobados. El importe no se edita. El total es el presupuesto aprobado." },
-  { code: "ajuste", label: "Ajuste de importes", owner: "Facu / Silvina", detail: "Solo ítems tildados: editá importes y concepto. Se actualiza el presupuesto aprobado." },
-  { code: "cierre", label: "Comparación y cierre", owner: "Facu / Silvina / Carla", detail: "Compará presupuesto aprobado vs importes editados y cerrá la OT." },
+  { code: "presupuesto", label: "Presupuesto", owner: "Vettore", detail: "Cargá presupuestos por proveedor. Solo se muestran los subtotales por proveedor." },
+  { code: "seleccion", label: "Selección", owner: "Vettore", detail: "Tildá los presupuestos aprobados. El importe no se edita. El total es el presupuesto aprobado." },
+  { code: "ajuste", label: "Ajuste de importes", owner: "Vettore", detail: "Solo ítems tildados: editá importes y concepto. Se actualiza el presupuesto aprobado." },
+  { code: "cierre", label: "Comparación y cierre", owner: "Vettore", detail: "Compará presupuesto aprobado vs importes editados y cerrá la OT." },
 ] as const;
 
 function isAsignacionOPresupuestoStep(step: number) {
@@ -62,10 +62,6 @@ function isCierreStep(step: number) {
   return step === 4;
 }
 
-function isFacuOrSilvina(rol?: Role | null) {
-  return rol === "FACU" || rol === "SILVINA";
-}
-
 function roleActionHint(
   rol?: Role | null,
   opts?: { esDuenoEmpresa?: boolean }
@@ -73,22 +69,13 @@ function roleActionHint(
   if (opts?.esDuenoEmpresa) {
     return "Tu rol (empresa): ves todos los pasos y montos de tu flota. Solo lectura: no editás presupuestos ni avanzás etapas.";
   }
-  switch (rol) {
-    case "CHOFER":
-      return "Tu rol: crear solicitudes y seguir el avance (sin montos). Podés comentar y enviar sugerencias.";
-    case "FACU":
-    case "SILVINA":
-      return "Tu rol: asignación, presupuesto, facturación y cierre (mismos permisos Facu/Silvina).";
-    case "PATRICIO":
-    case "JULIETA":
-      return "Tu rol: crear solicitudes y seguimiento de dirección.";
-    case "PABLO":
-      return "Tu rol: crear solicitudes; quedás notificado al crear la OT.";
-    case "CARLA":
-      return "Tu rol: crear solicitudes y cerrar/avisar pago.";
-    default:
-      return "Los permisos siguen el rol de tu sesión.";
+  if (rol === "CHOFER") {
+    return "Tu rol: crear solicitudes y seguir el avance (sin montos). Podés comentar y enviar sugerencias.";
   }
+  if (isInternalOps(rol)) {
+    return "Tu rol Vettore: podés editar toda la OT (presupuesto, selección, ajuste, cierre) y avanzar etapas.";
+  }
+  return "Los permisos siguen el rol de tu sesión.";
 }
 
 type ClasificacionGasto = "MANO_OBRA" | "MATERIALES" | "OTRO";
@@ -177,14 +164,12 @@ function canCreateSolicitud(rol?: Role | null) {
 function canAdvanceFromStep(rol: Role | undefined, step: number) {
   if (!rol) return false;
   if (step === 0) return canCreateSolicitud(rol);
-  if (step === 1) return isFacuOrSilvina(rol);
-  if (step === 2) return isFacuOrSilvina(rol);
-  if (step === 3) return isFacuOrSilvina(rol);
+  if (step === 1 || step === 2 || step === 3) return isInternalOps(rol);
   return false;
 }
 
 function canReabrirOt(rol?: Role | null) {
-  return isFacuOrSilvina(rol) || rol === "CARLA" || isInternalOps(rol);
+  return isInternalOps(rol);
 }
 
 function isOps(rol?: Role | null) {
@@ -220,11 +205,11 @@ export function M7TalleresPage() {
   const { token, user, contextoAcceso } = useAuth();
   const rol = user?.rol;
   const esChofer = rol === "CHOFER";
-  const vistaChofer =
-    esChofer && !(user?.esDuenoFlota && contextoAcceso === "EMPRESA");
-  /** Chofer y empresa: navegan con flechas (browse local). */
-  const vistaBrowse =
-    vistaChofer || !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA");
+  /** Solo choferes (incl. dueño en modo empresa) navegan en solo lectura. Perfiles Vettore siempre editan. */
+  const esDuenoEmpresa =
+    esChofer && !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA");
+  const vistaChofer = esChofer && !esDuenoEmpresa;
+  const vistaBrowse = esChofer;
 
   const [pageTab, setPageTab] = useState<"ots" | "proveedores" | "cc">("ots");
   const [ots, setOts] = useState<OrdenTrabajo[]>([]);
@@ -427,7 +412,7 @@ export function M7TalleresPage() {
           </p>
           <p className="mt-1 text-xs font-medium text-[#1e4080] dark:text-sky-300">
             {roleActionHint(rol, {
-              esDuenoEmpresa: !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA"),
+              esDuenoEmpresa,
             })}
           </p>
         </div>
@@ -515,7 +500,7 @@ export function M7TalleresPage() {
                       placeholder="Buscar patente…"
                       className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
                     />
-                    {!(user?.esDuenoFlota && contextoAcceso === "EMPRESA") && (
+                    {!esDuenoEmpresa && (
                       <input
                         type="search"
                         value={filtroEmpresa}
@@ -607,7 +592,17 @@ export function M7TalleresPage() {
                           disabled={!puedeBrowsePasos || !reached}
                           title={s.label}
                           onClick={() => {
-                            if (puedeBrowsePasos && reached) setBrowseStep(i);
+                            if (!puedeBrowsePasos || !reached) return;
+                            // Volver a la etapa actual = modo edición (ops).
+                            if (
+                              !vistaBrowse &&
+                              !ot.cerradaAt &&
+                              i === ot.currentStep
+                            ) {
+                              setBrowseStep(null);
+                            } else {
+                              setBrowseStep(i);
+                            }
                           }}
                           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                             done && !active
@@ -657,6 +652,17 @@ export function M7TalleresPage() {
                           . Mirás:{" "}
                           <strong>{OT_STEPS[displayStep]?.label ?? "—"}</strong>.
                         </p>
+                        {!vistaBrowse &&
+                          !ot.cerradaAt &&
+                          displayStep !== ot.currentStep && (
+                            <button
+                              type="button"
+                              className="mt-2 text-xs font-semibold text-[#1e4080] underline"
+                              onClick={() => setBrowseStep(null)}
+                            >
+                              Ir a la etapa actual para editar
+                            </button>
+                          )}
                       </div>
                     )}
 
@@ -743,7 +749,7 @@ export function M7TalleresPage() {
                           soloLectura={!editandoPasoActual || !puedeEditarTaller}
                           ocultarMontos={ocultarMontos}
                           esEmpresa={
-                            !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA")
+                            esDuenoEmpresa
                           }
                         />
                         )
@@ -990,7 +996,18 @@ export function M7TalleresPage() {
                         <button
                           type="button"
                           aria-label="Anterior"
-                          onClick={() => setBrowseStep(displayStep - 1)}
+                          onClick={() => {
+                            const next = displayStep - 1;
+                            if (
+                              !vistaBrowse &&
+                              !ot.cerradaAt &&
+                              next === ot.currentStep
+                            ) {
+                              setBrowseStep(null);
+                            } else {
+                              setBrowseStep(next);
+                            }
+                          }}
                           className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] text-sm font-semibold"
                         >
                           <ChevronLeft size={22} />
@@ -1094,7 +1111,18 @@ export function M7TalleresPage() {
                         <button
                           type="button"
                           aria-label="Siguiente"
-                          onClick={() => setBrowseStep(displayStep + 1)}
+                          onClick={() => {
+                            const next = displayStep + 1;
+                            if (
+                              !vistaBrowse &&
+                              !ot.cerradaAt &&
+                              next === ot.currentStep
+                            ) {
+                              setBrowseStep(null);
+                            } else {
+                              setBrowseStep(next);
+                            }
+                          }}
                           className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] text-sm font-semibold text-white"
                         >
                           <ChevronRight size={22} />
