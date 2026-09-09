@@ -654,7 +654,36 @@ export function M7TalleresPage() {
                         </p>
                         {!vistaBrowse &&
                           !ot.cerradaAt &&
-                          displayStep !== ot.currentStep && (
+                          displayStep < ot.currentStep &&
+                          puedeEditarTaller && (
+                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                              <button
+                                type="button"
+                                disabled={busy}
+                                className="inline-flex min-h-10 items-center justify-center rounded-lg border-2 border-[#1e4080] bg-[#1e4080] px-3 text-xs font-semibold text-white disabled:opacity-50"
+                                onClick={() => {
+                                  void call(`/api/talleres/${ot.id}/ir-a-etapa`, {
+                                    method: "POST",
+                                    body: JSON.stringify({ step: displayStep }),
+                                  }).then((updated) => {
+                                    if (updated) setBrowseStep(null);
+                                  });
+                                }}
+                              >
+                                Editar esta etapa
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--vl-card-border)] px-3 text-xs font-semibold text-[var(--vl-heading)]"
+                                onClick={() => setBrowseStep(null)}
+                              >
+                                Ir a la etapa actual
+                              </button>
+                            </div>
+                          )}
+                        {!vistaBrowse &&
+                          !ot.cerradaAt &&
+                          displayStep > ot.currentStep && (
                             <button
                               type="button"
                               className="mt-2 text-xs font-semibold text-[#1e4080] underline"

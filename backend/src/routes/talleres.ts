@@ -2239,6 +2239,74 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
   }
 });
 
+/** Vettore: vuelve la OT a una etapa ya recorrida para editarla. */
+router.post("/:id/ir-a-etapa", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const ot = await prisma.ordenTrabajo.findUnique({
+      where: { id: req.params.id },
+      include: includeOTFor(req.user!.id),
+    });
+    if (!ot) {
+      res.status(404).json({ error: "OT no encontrada" });
+      return;
+    }
+    if (await choferScope(req.user!.id)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    if (ot.cerradaAt) {
+      res.status(400).json({ error: "OT cerrada: reabrila para editar etapas" });
+      return;
+    }
+    const rol = req.user!.rol;
+    if (!canEditTalleres(rol) && !canRetreat(rol)) {
+      res.status(403).json({ error: "Sin permiso para editar etapas anteriores" });
+      return;
+    }
+
+    let target = Number(req.body?.step);
+    if (!Number.isInteger(target) || target < 0 || target > OT_STEPS.length - 1) {
+      res.status(400).json({ error: "Etapa inválida" });
+      return;
+    }
+    if (target > ot.currentStep) {
+      res.status(400).json({ error: "No se puede saltar a una etapa futura" });
+      return;
+    }
+    if (target === ot.currentStep) {
+      res.json(sanitizeOtForViewer(ot, rol));
+      return;
+    }
+    // Sin presupuesto: selección no existe; si piden 2, van a presupuesto.
+    if (ot.sinPresupuesto && target === 2) {
+      target = 1;
+    }
+
+    const gate = await gateOrOverride({
+      rol,
+      allowed: canEditTalleres(rol),
+      userId: req.user!.id,
+      otId: ot.id,
+      accion: `Ir a etapa "${OT_STEPS[target]?.label ?? target}" (desde ${OT_STEPS[ot.currentStep]?.label ?? ot.currentStep})`,
+      overrideComentario: parseOverrideComentario(req.body),
+    });
+    if (!gate.ok) {
+      res.status(gate.status).json({ error: gate.error });
+      return;
+    }
+
+    const updated = await prisma.ordenTrabajo.update({
+      where: { id: ot.id },
+      data: { currentStep: target },
+      include: includeOTFor(req.user!.id),
+    });
+    res.json(sanitizeOtForViewer(updated, rol));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al cambiar de etapa" });
+  }
+});
+
 async function reloadOt(id: string, userId: string, rol: Role, req?: AuthedRequest) {
   let ot = await prisma.ordenTrabajo.findUnique({
     where: { id },
