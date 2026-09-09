@@ -26,6 +26,8 @@ type HistorialRow = {
   currentStep: number;
   cerradaAt: string | null;
   createdAt: string;
+  /** Fecha en que se cargó la solicitud de taller. */
+  solicitudAt?: string;
 };
 
 function money(n: number | null | undefined) {
@@ -205,7 +207,11 @@ export function HistorialTalleresPage() {
                   {row.patente} · {row.numeroOT}
                 </div>
                 <div className="mt-0.5 text-xs text-[var(--vl-text-muted)]">
-                  {row.falla}
+                  Solicitud:{" "}
+                  <strong className="text-[var(--vl-text)]">
+                    {formatDate(row.solicitudAt ?? row.createdAt)}
+                  </strong>
+                  {row.falla ? ` · ${row.falla}` : ""}
                   {row.chofer ? ` · ${row.chofer}` : ""}
                 </div>
               </div>

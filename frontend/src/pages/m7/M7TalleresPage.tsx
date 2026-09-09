@@ -1814,6 +1814,85 @@ function AjusteImportesChecklist({
           ? "Detalle de lo que se está editando (sin montos)."
           : "Solo los tildados del paso anterior. El desglose de niveles aplica a todas las cotizaciones. Si agregás una reparación adicional, elegí el nivel de esa línea."}
       </p>
+
+      {!ocultarMontos && (
+        <div className="mb-3">
+          {readOnly ? (
+            <p className="rounded-md border border-dashed border-[var(--vl-card-border)] px-3 py-2 text-[11px] text-[var(--vl-text-muted)]">
+              Ítem fuera de presupuesto: disponible al editar esta etapa (etapa actual de la OT).
+            </p>
+          ) : !showAdic ? (
+            <button
+              type="button"
+              className="inline-flex min-h-10 w-full items-center justify-center rounded-lg border-2 border-dashed border-[#1e4080]/50 bg-[#1e4080]/5 px-3 text-xs font-semibold text-[#1e4080] dark:text-sky-300"
+              onClick={() => {
+                setAdicConceptoId(sharedConceptoId);
+                setShowAdic(true);
+              }}
+            >
+              + Agregar ítem fuera de presupuesto
+            </button>
+          ) : (
+            <div className="rounded-lg border border-[var(--vl-card-border)] p-3 space-y-2">
+              <div className="text-xs font-semibold">Ítem fuera de presupuesto</div>
+              <p className="text-[11px] text-[var(--vl-text-muted)]">
+                Se suma al presupuesto total general (editado). No modifica el presupuesto original.
+              </p>
+              <select
+                className="w-full rounded-md border p-2 text-sm"
+                value={adicTallerId}
+                onChange={(e) => setAdicTallerId(e.target.value)}
+              >
+                <option value="">Proveedor…</option>
+                {talleres.map((t) => (
+                  <option key={t.id} value={t.id}>{t.razonSocial}</option>
+                ))}
+              </select>
+              <input
+                className="w-full rounded-md border p-2 text-sm"
+                placeholder="Descripción"
+                value={adicDesc}
+                onChange={(e) => setAdicDesc(e.target.value)}
+              />
+              <input
+                className="w-full min-h-11 rounded-md border p-2 text-base font-medium"
+                placeholder="Importe $"
+                type="number"
+                value={adicImp}
+                onChange={(e) => setAdicImp(e.target.value)}
+              />
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
+                  Nivel (por defecto = general; editable)
+                </div>
+                <ConceptoCascada
+                  cats={cats}
+                  valueId={adicConceptoId ?? sharedConceptoId}
+                  onPick={setAdicConceptoId}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={adicSaving || !adicDesc.trim() || !adicImp}
+                  className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+                  onClick={() => void agregarAdicional()}
+                >
+                  {adicSaving ? "Guardando…" : "Agregar"}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs underline text-[var(--vl-text-muted)]"
+                  onClick={() => setShowAdic(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {!ocultarMontos && (
         <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] p-3">
           <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
@@ -1948,80 +2027,6 @@ function AjusteImportesChecklist({
               )}
             </div>
           ))}
-        </div>
-      )}
-
-      {!readOnly && !ocultarMontos && (
-        <div className="mb-3">
-          {!showAdic ? (
-            <button
-              type="button"
-              className="text-xs font-semibold text-[#1e4080] underline dark:text-sky-300"
-              onClick={() => {
-                setAdicConceptoId(sharedConceptoId);
-                setShowAdic(true);
-              }}
-            >
-              + Agregar ítem fuera de presupuesto
-            </button>
-          ) : (
-            <div className="rounded-lg border border-[var(--vl-card-border)] p-3 space-y-2">
-              <div className="text-xs font-semibold">Ítem fuera de presupuesto</div>
-              <p className="text-[11px] text-[var(--vl-text-muted)]">
-                Se suma al presupuesto total general (editado). No modifica el presupuesto original.
-              </p>
-              <select
-                className="w-full rounded-md border p-2 text-sm"
-                value={adicTallerId}
-                onChange={(e) => setAdicTallerId(e.target.value)}
-              >
-                <option value="">Proveedor…</option>
-                {talleres.map((t) => (
-                  <option key={t.id} value={t.id}>{t.razonSocial}</option>
-                ))}
-              </select>
-              <input
-                className="w-full rounded-md border p-2 text-sm"
-                placeholder="Descripción"
-                value={adicDesc}
-                onChange={(e) => setAdicDesc(e.target.value)}
-              />
-              <input
-                className="w-full min-h-11 rounded-md border p-2 text-base font-medium"
-                placeholder="Importe $"
-                type="number"
-                value={adicImp}
-                onChange={(e) => setAdicImp(e.target.value)}
-              />
-              <div>
-                <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
-                  Nivel (por defecto = general; editable)
-                </div>
-                <ConceptoCascada
-                  cats={cats}
-                  valueId={adicConceptoId ?? sharedConceptoId}
-                  onPick={setAdicConceptoId}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={adicSaving || !adicDesc.trim() || !adicImp}
-                  className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
-                  onClick={() => void agregarAdicional()}
-                >
-                  {adicSaving ? "Guardando…" : "Agregar"}
-                </button>
-                <button
-                  type="button"
-                  className="text-xs underline text-[var(--vl-text-muted)]"
-                  onClick={() => setShowAdic(false)}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

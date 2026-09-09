@@ -620,6 +620,7 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
         currentStep: ot.currentStep,
         cerradaAt: ot.cerradaAt,
         createdAt: ot.createdAt,
+        solicitudAt: ot.solicitud.createdAt,
       };
     });
 
@@ -671,6 +672,7 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
     sheet.columns = [
       { header: "Patente", key: "patente", width: 12 },
       { header: "OT", key: "ot", width: 12 },
+      { header: "Fecha solicitud", key: "fechaSolicitud", width: 14 },
       { header: "Falla", key: "falla", width: 28 },
       { header: "Detalle", key: "detalle", width: 32 },
       { header: "Chofer", key: "chofer", width: 22 },
@@ -678,7 +680,7 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
       { header: "Descripcion", key: "descripcion", width: 32 },
       { header: "Importe", key: "importe", width: 12 },
       { header: "Tipo", key: "tipo", width: 12 },
-      { header: "Fecha", key: "fecha", width: 12 },
+      { header: "Fecha ítem", key: "fecha", width: 12 },
       { header: "Cerrada", key: "cerrada", width: 12 },
     ];
     sheet.getRow(1).font = { bold: true };
@@ -704,6 +706,7 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
         sheet.addRow({
           patente,
           ot: ot.numeroOT,
+          fechaSolicitud: ot.solicitud.createdAt.toISOString().slice(0, 10),
           falla: ot.solicitud.falla,
           detalle: ot.solicitud.detalle,
           chofer: ot.solicitud.chofer?.nombre ?? "",
