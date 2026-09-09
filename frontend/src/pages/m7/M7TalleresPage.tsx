@@ -233,6 +233,7 @@ export function M7TalleresPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [filtroEstado, setFiltroEstado] = useState<"todas" | "abierta" | "cerrada">("abierta");
   const [filtroPatente, setFiltroPatente] = useState("");
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroTaller, setFiltroTaller] = useState("");
@@ -274,6 +275,7 @@ export function M7TalleresPage() {
 
   useEffect(() => {
     setSelectedId(null);
+    setFiltroEstado("abierta");
     setFiltroPatente("");
     setFiltroEmpresa("");
     setFiltroTaller("");
@@ -285,6 +287,8 @@ export function M7TalleresPage() {
     const empresaQ = filtroEmpresa.trim().toLowerCase();
     const tallerQ = filtroTaller.trim().toLowerCase();
     return ots.filter((o) => {
+      if (filtroEstado === "abierta" && o.cerradaAt) return false;
+      if (filtroEstado === "cerrada" && !o.cerradaAt) return false;
       if (
         patenteQ &&
         !o.solicitud.camioneta.patente.toLowerCase().includes(patenteQ)
@@ -299,7 +303,7 @@ export function M7TalleresPage() {
       }
       return true;
     });
-  }, [ots, filtroPatente, filtroEmpresa, filtroTaller]);
+  }, [ots, filtroEstado, filtroPatente, filtroEmpresa, filtroTaller]);
 
   useEffect(() => {
     if (visibleOts.length === 0) {
@@ -466,9 +470,43 @@ export function M7TalleresPage() {
               <div className="space-y-3">
                 <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-2">
                   <p className="px-0.5 text-[10px] text-[var(--vl-text-muted)]">
-                    {otCounts.total} órdenes · {otCounts.abiertas} abiertas ·{" "}
-                    {otCounts.cerradas} cerradas
+                    {otCounts.total} órdenes
                   </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setFiltroEstado("todas")}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        filtroEstado === "todas"
+                          ? "border-slate-700 bg-slate-700 text-white dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900"
+                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                      }`}
+                    >
+                      Todas ({otCounts.total})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltroEstado("abierta")}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        filtroEstado === "abierta"
+                          ? "border-amber-600 bg-amber-500/20 text-amber-900 dark:border-amber-400 dark:text-amber-100"
+                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                      }`}
+                    >
+                      Abiertas ({otCounts.abiertas})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltroEstado("cerrada")}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        filtroEstado === "cerrada"
+                          ? "border-emerald-600 bg-emerald-500/20 text-emerald-900 dark:border-emerald-400 dark:text-emerald-100"
+                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                      }`}
+                    >
+                      Cerradas ({otCounts.cerradas})
+                    </button>
+                  </div>
                   <div className="space-y-1.5">
                     <input
                       type="search"
@@ -516,7 +554,13 @@ export function M7TalleresPage() {
                 </div>
                 {visibleOts.length === 0 && (
                   <p className="rounded-lg border border-[var(--vl-card-border)] p-3 text-xs text-[var(--vl-text-muted)]">
-                    No hay órdenes{filtroPatente || filtroEmpresa || filtroTaller ? " con ese filtro" : ""}.
+                    No hay órdenes
+                    {filtroEstado === "abierta"
+                      ? " abiertas"
+                      : filtroEstado === "cerrada"
+                        ? " cerradas"
+                        : ""}
+                    {filtroPatente || filtroEmpresa || filtroTaller ? " con ese filtro" : ""}.
                   </p>
                 )}
                 {visibleOts.map((o) => (
@@ -630,6 +674,11 @@ export function M7TalleresPage() {
                       )}
 
                       {isAsignacionOPresupuestoStep(displayStep) && (
+                        vistaChofer ? (
+                          <p className="rounded-lg border border-[var(--vl-card-border)] bg-slate-100/80 p-3 text-xs text-[var(--vl-text-muted)] dark:bg-slate-900/50">
+                            El presupuesto lo carga el equipo de Vettore. Acá solo ves el avance de la OT.
+                          </p>
+                        ) : (
                         <div className="space-y-3">
                           {editandoPasoActual && !puedeEditarTaller && (
                             <div className="rounded-lg border border-slate-300 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200">
@@ -645,7 +694,7 @@ export function M7TalleresPage() {
                             lockTipo
                             showAprobado={false}
                             hideTotal
-                            showSubtotales={!ocultarMontos}
+                            showSubtotales
                             requireClasif
                             readOnly={!editandoPasoActual || !puedeEditarTaller}
                             desc={itemDesc}
@@ -678,9 +727,15 @@ export function M7TalleresPage() {
                             </div>
                           )}
                         </div>
+                        )
                       )}
 
                       {isSeleccionStep(displayStep) && !ot.sinPresupuesto && (
+                        vistaChofer ? (
+                          <p className="rounded-lg border border-[var(--vl-card-border)] bg-slate-100/80 p-3 text-xs text-[var(--vl-text-muted)] dark:bg-slate-900/50">
+                            Vettore está eligiendo los presupuestos aprobados. Sin detalle de montos.
+                          </p>
+                        ) : (
                         <SeleccionChecklist
                           ot={ot}
                           token={token!}
@@ -691,6 +746,7 @@ export function M7TalleresPage() {
                             !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA")
                           }
                         />
+                        )
                       )}
 
                       {isSeleccionStep(displayStep) && ot.sinPresupuesto && (
@@ -700,54 +756,38 @@ export function M7TalleresPage() {
                       )}
 
                       {isAjusteStep(displayStep) && (
-                        ot.sinPresupuesto ? (
+                        vistaChofer ? (
+                          <p className="rounded-lg border border-[var(--vl-card-border)] bg-slate-100/80 p-3 text-xs text-[var(--vl-text-muted)] dark:bg-slate-900/50">
+                            {ot.sinPresupuesto
+                              ? "El equipo está cargando el gasto (sin presupuesto previo)."
+                              : "El equipo está ajustando importes. Sin detalle de montos."}
+                          </p>
+                        ) : ot.sinPresupuesto ? (
                           <div className="space-y-3">
                             <p className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-                              <strong>Sin presupuesto.</strong>{" "}
-                              {ocultarMontos
-                                ? "El equipo carga el gasto en esta etapa."
-                                : "Cargá el importe del gasto acá. No se compara contra un presupuesto aprobado."}
+                              <strong>Sin presupuesto.</strong> Cargá el importe del gasto acá.
+                              No se compara contra un presupuesto aprobado.
                             </p>
-                            {!ocultarMontos && (
-                              <ItemsEditor
-                                ot={ot}
-                                token={token!}
-                                talleres={talleres}
-                                tipo="FACTURA"
-                                lockTipo
-                                requireClasif
-                                readOnly={!editandoPasoActual || !puedeEditarTaller}
-                                desc={itemDesc}
-                                setDesc={setItemDesc}
-                                imp={itemImp}
-                                setImp={setItemImp}
-                                obs={itemObs}
-                                setObs={setItemObs}
-                                tallerId={itemTallerId}
-                                setTallerId={setItemTallerId}
-                                busy={busy}
-                                onSaved={replaceOt}
-                                onError={setError}
-                              />
-                            )}
-                            {ocultarMontos && (
-                              <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
-                                {(ot.items ?? [])
-                                  .filter((i) => i.tipo !== "PRESUPUESTO")
-                                  .map((i) => (
-                                    <li key={i.id}>
-                                      {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
-                                      {i.descripcion}
-                                    </li>
-                                  ))}
-                                {(ot.items ?? []).filter((i) => i.tipo !== "PRESUPUESTO")
-                                  .length === 0 && (
-                                  <li className="text-[var(--vl-text-muted)]">
-                                    Todavía no hay gastos cargados.
-                                  </li>
-                                )}
-                              </ul>
-                            )}
+                            <ItemsEditor
+                              ot={ot}
+                              token={token!}
+                              talleres={talleres}
+                              tipo="FACTURA"
+                              lockTipo
+                              requireClasif
+                              readOnly={!editandoPasoActual || !puedeEditarTaller}
+                              desc={itemDesc}
+                              setDesc={setItemDesc}
+                              imp={itemImp}
+                              setImp={setItemImp}
+                              obs={itemObs}
+                              setObs={setItemObs}
+                              tallerId={itemTallerId}
+                              setTallerId={setItemTallerId}
+                              busy={busy}
+                              onSaved={replaceOt}
+                              onError={setError}
+                            />
                           </div>
                         ) : (
                           <AjusteImportesChecklist
@@ -758,12 +798,19 @@ export function M7TalleresPage() {
                             importeDrafts={importeDrafts}
                             setImporteDraft={setImporteDrafts}
                             readOnly={!editandoPasoActual || !puedeEditarTaller}
-                            ocultarMontos={ocultarMontos}
+                            ocultarMontos={false}
                           />
                         )
                       )}
 
                       {isCierreStep(displayStep) && (
+                        vistaChofer ? (
+                          <p className="rounded-lg border border-[var(--vl-card-border)] bg-slate-100/80 p-3 text-xs text-[var(--vl-text-muted)] dark:bg-slate-900/50">
+                            {ot.cerradaAt
+                              ? "La OT está cerrada. El detalle de montos lo ve Vettore."
+                              : "La OT está en comparación y cierre. Sin detalle de montos."}
+                          </p>
+                        ) : (
                         <div className="space-y-3">
                           {ot.sinPresupuesto ? (
                             <div className="rounded-lg border border-[var(--vl-card-border)] p-4">
@@ -882,6 +929,7 @@ export function M7TalleresPage() {
                             </div>
                           )}
                         </div>
+                        )
                       )}
 
                       {!vistaBrowse && (ot.auditorias?.length ?? 0) > 0 && editandoPasoActual && (
