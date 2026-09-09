@@ -185,6 +185,29 @@ model TipoServicio {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   camionetas Camioneta[]
+  equipoFrioTipos EquipoFrioTipo[]
+}
+
+/// Catálogo ABM de marcas de equipo de frío y sus tipos de servicio correspondientes.
+model EquipoFrio {
+  id        String   @id @default(cuid())
+  nombre    String   @unique
+  activo    Boolean  @default(true)
+  orden     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tipos     EquipoFrioTipo[]
+}
+
+model EquipoFrioTipo {
+  id             String       @id @default(cuid())
+  equipoFrioId   String
+  tipoServicioId String
+  equipoFrio     EquipoFrio   @relation(fields: [equipoFrioId], references: [id], onDelete: Cascade)
+  tipoServicio   TipoServicio @relation(fields: [tipoServicioId], references: [id], onDelete: Cascade)
+
+  @@unique([equipoFrioId, tipoServicioId])
+  @@index([tipoServicioId])
 }
 
 model Camioneta {

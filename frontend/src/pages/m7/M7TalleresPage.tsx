@@ -71,7 +71,7 @@ function roleActionHint(
   opts?: { esDuenoEmpresa?: boolean }
 ): string {
   if (opts?.esDuenoEmpresa) {
-    return "Tu rol: ves montos de tu flota, sugerís por comentario y podés enviar sugerencias. No editás presupuestos.";
+    return "Tu rol (empresa): ves todos los pasos y montos de tu flota. Solo lectura: no editás presupuestos ni avanzás etapas.";
   }
   switch (rol) {
     case "CHOFER":
@@ -109,6 +109,7 @@ type OtItem = {
   observacion: string | null;
   archivo: string | null;
   aprobado?: boolean;
+  adicionalAjuste?: boolean;
   sugeridoEmpresa?: boolean;
   categoriaDiagnosticoId?: string | null;
   categoriaDiagnostico?: { id: string; nombre: string; nivel: number; padreId: string | null } | null;
@@ -236,7 +237,6 @@ export function M7TalleresPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [filtroEstado, setFiltroEstado] = useState<"abierta" | "cerrada">("abierta");
   const [filtroPatente, setFiltroPatente] = useState("");
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroTaller, setFiltroTaller] = useState("");
@@ -247,13 +247,13 @@ export function M7TalleresPage() {
   const [importeDrafts, setImporteDrafts] = useState<Record<string, number>>({});
   const [guardadoOk, setGuardadoOk] = useState(false);
   const [confirmCerrar, setConfirmCerrar] = useState(false);
+  const [confirmSinPresupuesto, setConfirmSinPresupuesto] = useState(false);
   const puedeEditarTaller = isOps(rol);
 
   const [itemDesc, setItemDesc] = useState("");
   const [itemImp, setItemImp] = useState("");
   const [itemObs, setItemObs] = useState("");
   const [itemTallerId, setItemTallerId] = useState("");
-  const [justif, setJustif] = useState("");
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -278,43 +278,32 @@ export function M7TalleresPage() {
 
   useEffect(() => {
     setSelectedId(null);
-    setFiltroEstado("abierta");
     setFiltroPatente("");
     setFiltroEmpresa("");
     setFiltroTaller("");
     setBrowseStep(null);
   }, [contextoAcceso]);
 
-  function needsMyAction(o: OrdenTrabajo) {
-    if (o.cerradaAt) return false;
-    if (vistaChofer) return false;
-    return canAdvanceFromStep(rol, o.currentStep) || (isCierreStep(o.currentStep) && canCerrarOt(rol));
-  }
-
   const visibleOts = useMemo(() => {
     const patenteQ = filtroPatente.trim().toLowerCase();
     const empresaQ = filtroEmpresa.trim().toLowerCase();
     const tallerQ = filtroTaller.trim().toLowerCase();
     return ots.filter((o) => {
-      if (filtroEstado === "abierta" && o.cerradaAt) return false;
-      if (filtroEstado === "cerrada" && !o.cerradaAt) return false;
-      if (filtroEstado === "cerrada") {
-        if (
-          patenteQ &&
-          !o.solicitud.camioneta.patente.toLowerCase().includes(patenteQ)
-        ) {
-          return false;
-        }
-        if (empresaQ && !otEmpresaNombre(o).toLowerCase().includes(empresaQ)) {
-          return false;
-        }
-        if (tallerQ && !otTallerNombre(o).toLowerCase().includes(tallerQ)) {
-          return false;
-        }
+      if (
+        patenteQ &&
+        !o.solicitud.camioneta.patente.toLowerCase().includes(patenteQ)
+      ) {
+        return false;
+      }
+      if (empresaQ && !otEmpresaNombre(o).toLowerCase().includes(empresaQ)) {
+        return false;
+      }
+      if (tallerQ && !otTallerNombre(o).toLowerCase().includes(tallerQ)) {
+        return false;
       }
       return true;
     });
-  }, [ots, filtroEstado, filtroPatente, filtroEmpresa, filtroTaller]);
+  }, [ots, filtroPatente, filtroEmpresa, filtroTaller]);
 
   useEffect(() => {
     if (visibleOts.length === 0) {
@@ -328,6 +317,7 @@ export function M7TalleresPage() {
 
   const otCounts = useMemo(
     () => ({
+      total: ots.length,
       abiertas: ots.filter((o) => !o.cerradaAt).length,
       cerradas: ots.filter((o) => !!o.cerradaAt).length,
     }),
@@ -341,20 +331,26 @@ export function M7TalleresPage() {
 
   useEffect(() => {
     if (!ot) return;
-    setJustif(ot.incrementoJustificacion ?? "");
     setBrowseStep(null);
     setImporteDrafts({});
     setConfirmCerrar(false);
+    setConfirmSinPresupuesto(false);
   }, [ot?.id]);
 
-  const displayStep = vistaBrowse
-    ? browseStep ?? ot?.currentStep ?? 0
-    : ot?.currentStep ?? 0;
+  const displayStep = browseStep ?? ot?.currentStep ?? 0;
   const maxBrowseStep = ot
     ? ot.cerradaAt
       ? OT_STEPS.length - 1
       : ot.currentStep
     : 0;
+  /** Ops y browse (chofer/empresa): flechas locales. */
+  const puedeBrowsePasos = true;
+  const editandoPasoActual =
+    !vistaBrowse &&
+    !!ot &&
+    !ot.cerradaAt &&
+    displayStep === ot.currentStep;
+  const ocultarMontos = vistaChofer;
 
   function replaceOt(updated: OrdenTrabajo) {
     setOts((prev) =>
@@ -370,8 +366,10 @@ export function M7TalleresPage() {
     try {
       const updated = await apiFetch<OrdenTrabajo>(path, init, token);
       replaceOt(updated);
+      return updated;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error");
+      return undefined;
     } finally {
       setBusy(false);
     }
@@ -414,7 +412,6 @@ export function M7TalleresPage() {
   const enSeleccion = isSeleccionStep(ot?.currentStep ?? -1);
   const enAjuste = isAjusteStep(ot?.currentStep ?? -1);
   const enCierre = isCierreStep(ot?.currentStep ?? -1);
-  const enPresupuesto = isAsignacionOPresupuestoStep(ot?.currentStep ?? -1);
 
   return (
     <div>
@@ -472,85 +469,58 @@ export function M7TalleresPage() {
             <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
               <div className="space-y-3">
                 <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFiltroEstado("abierta");
-                        setFiltroPatente("");
-                        setFiltroEmpresa("");
-                        setFiltroTaller("");
-                      }}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                        filtroEstado === "abierta"
-                          ? "border-amber-600 bg-amber-500/20 text-amber-900 dark:border-amber-400 dark:text-amber-100"
-                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-                      }`}
-                    >
-                      Abiertas ({otCounts.abiertas})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFiltroEstado("cerrada")}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                        filtroEstado === "cerrada"
-                          ? "border-emerald-600 bg-emerald-500/20 text-emerald-900 dark:border-emerald-400 dark:text-emerald-100"
-                          : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-                      }`}
-                    >
-                      Cerradas ({otCounts.cerradas})
-                    </button>
-                  </div>
-                  {filtroEstado === "cerrada" && (
-                    <div className="space-y-1.5 pt-1">
+                  <p className="px-0.5 text-[10px] text-[var(--vl-text-muted)]">
+                    {otCounts.total} órdenes · {otCounts.abiertas} abiertas ·{" "}
+                    {otCounts.cerradas} cerradas
+                  </p>
+                  <div className="space-y-1.5">
+                    <input
+                      type="search"
+                      value={filtroPatente}
+                      onChange={(e) => setFiltroPatente(e.target.value)}
+                      placeholder="Buscar patente…"
+                      className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                    />
+                    {!(user?.esDuenoFlota && contextoAcceso === "EMPRESA") && (
                       <input
                         type="search"
-                        value={filtroPatente}
-                        onChange={(e) => setFiltroPatente(e.target.value)}
-                        placeholder="Buscar patente…"
+                        value={filtroEmpresa}
+                        onChange={(e) => setFiltroEmpresa(e.target.value)}
+                        placeholder="Buscar empresa de transporte…"
                         className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
                       />
-                      {!(user?.esDuenoFlota && contextoAcceso === "EMPRESA") && (
-                        <input
-                          type="search"
-                          value={filtroEmpresa}
-                          onChange={(e) => setFiltroEmpresa(e.target.value)}
-                          placeholder="Buscar empresa de transporte…"
-                          className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
-                        />
-                      )}
-                      {isOps(rol) && (
-                        <input
-                          type="search"
-                          value={filtroTaller}
-                          onChange={(e) => setFiltroTaller(e.target.value)}
-                          placeholder="Buscar taller / proveedor…"
-                          className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
-                        />
-                      )}
-                      {(filtroPatente || filtroEmpresa || filtroTaller) && (
-                        <p className="text-[10px] text-[var(--vl-text-muted)]">
-                          {visibleOts.length} resultado{visibleOts.length === 1 ? "" : "s"}
-                          {" · "}
-                          <button
-                            type="button"
-                            className="underline"
-                            onClick={() => {
-                              setFiltroPatente("");
-                              setFiltroEmpresa("");
-                              setFiltroTaller("");
-                            }}
-                          >
-                            Limpiar
-                          </button>
-                        </p>
-                      )}
-                    </div>
-                  )}
+                    )}
+                    {isOps(rol) && (
+                      <input
+                        type="search"
+                        value={filtroTaller}
+                        onChange={(e) => setFiltroTaller(e.target.value)}
+                        placeholder="Buscar taller / proveedor…"
+                        className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                      />
+                    )}
+                    {(filtroPatente || filtroEmpresa || filtroTaller) && (
+                      <p className="text-[10px] text-[var(--vl-text-muted)]">
+                        {visibleOts.length} resultado{visibleOts.length === 1 ? "" : "s"}
+                        {" · "}
+                        <button
+                          type="button"
+                          className="underline"
+                          onClick={() => {
+                            setFiltroPatente("");
+                            setFiltroEmpresa("");
+                            setFiltroTaller("");
+                          }}
+                        >
+                          Limpiar
+                        </button>
+                      </p>
+                    )}
+                  </div>
                 </div>
                 {visibleOts.length === 0 && (
                   <p className="rounded-lg border border-[var(--vl-card-border)] p-3 text-xs text-[var(--vl-text-muted)]">
-                    No hay órdenes {filtroEstado === "abierta" ? "abiertas" : "cerradas"}.
+                    No hay órdenes{filtroPatente || filtroEmpresa || filtroTaller ? " con ese filtro" : ""}.
                   </p>
                 )}
                 {visibleOts.map((o) => (
@@ -568,7 +538,6 @@ export function M7TalleresPage() {
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                       <span>{o.cerradaAt ? "Cerrada" : OT_STEPS[o.currentStep]?.label}</span>
                       {o.urgente && <span className="rounded bg-red-100 px-1.5 text-red-800 dark:bg-red-950 dark:text-red-200">Urgente</span>}
-                      {needsMyAction(o) && <span className="rounded bg-amber-100 px-1.5 text-amber-800">Tu turno</span>}
                     </div>
                   </button>
                 ))}
@@ -595,10 +564,10 @@ export function M7TalleresPage() {
                       <div key={s.label} className="flex flex-1 items-center last:flex-none">
                         <button
                           type="button"
-                          disabled={!vistaBrowse || !reached}
+                          disabled={!puedeBrowsePasos || !reached}
                           title={s.label}
                           onClick={() => {
-                            if (vistaBrowse && reached) setBrowseStep(i);
+                            if (puedeBrowsePasos && reached) setBrowseStep(i);
                           }}
                           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                             done && !active
@@ -606,7 +575,7 @@ export function M7TalleresPage() {
                               : active
                                 ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
                                 : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                          } ${vistaBrowse && reached ? "cursor-pointer" : ""}`}
+                          } ${puedeBrowsePasos && reached ? "cursor-pointer" : ""}`}
                         >
                           {done && !active ? <Check size={13} /> : i + 1}
                         </button>
@@ -623,134 +592,127 @@ export function M7TalleresPage() {
                       <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">Habitual: {OT_STEPS[displayStep].owner}</p>
                     )}
 
-                    {vistaBrowse ? (
-                      <div className="mt-4 space-y-3">
-                        <div className="rounded-xl border border-[var(--vl-card-border)] bg-slate-100/80 p-4 opacity-90 dark:bg-slate-900/50">
-                          <p className="text-sm font-semibold text-[var(--vl-heading)]">
-                            {vistaChofer ? "Solo lectura · sin montos" : "Solo lectura"}
-                          </p>
-                          <p className="mt-1 text-xs text-[var(--vl-text-muted)]">
-                            Podés avanzar y volver para ver cada etapa
-                            {vistaChofer
-                              ? " (sin montos; la empresa de transporte sí los ve)"
-                              : " (ves montos de tu flota)"}
-                            . Podés dejar un comentario o sugerencia.
-                            Etapa real de la OT:{" "}
-                            <strong>
-                              {ot.cerradaAt
-                                ? "Cerrada"
-                                : OT_STEPS[ot.currentStep]?.label ?? "—"}
-                            </strong>
-                            . Estás mirando:{" "}
-                            <strong>{OT_STEPS[displayStep]?.label ?? "—"}</strong>.
-                          </p>
-                        </div>
-                        {ot.tallerAsignado && (
-                          <p className="text-xs text-[var(--vl-text-muted)]">
-                            Taller referido: <strong>{ot.tallerAsignado}</strong>
-                          </p>
-                        )}
-                        {(ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO").length > 0 &&
-                          (isAsignacionOPresupuestoStep(displayStep) ||
-                            isSeleccionStep(displayStep)) && (
-                          <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
-                            {(ot.items ?? [])
-                              .filter((i) => i.tipo === "PRESUPUESTO")
-                              .map((i) => (
-                                <li key={i.id}>
-                                  {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
-                                  {i.descripcion}
-                                </li>
-                              ))}
-                          </ul>
-                        )}
+                    {(vistaBrowse || !editandoPasoActual) && (
+                      <div className="mt-4 rounded-xl border border-[var(--vl-card-border)] bg-slate-100/80 p-3 opacity-90 dark:bg-slate-900/50">
+                        <p className="text-sm font-semibold text-[var(--vl-heading)]">
+                          {vistaChofer
+                            ? "Solo lectura · sin montos"
+                            : vistaBrowse
+                              ? "Solo lectura · ves montos"
+                              : "Vista de etapa (sin editar)"}
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--vl-text-muted)]">
+                          Usá las flechas para recorrer el proceso
+                          {vistaChofer
+                            ? " (sin montos; la empresa de transporte sí los ve)"
+                            : vistaBrowse
+                              ? " (montos visibles; no podés editar)"
+                              : ""}
+                          . Etapa real:{" "}
+                          <strong>
+                            {ot.cerradaAt
+                              ? "Cerrada"
+                              : OT_STEPS[ot.currentStep]?.label ?? "—"}
+                          </strong>
+                          . Mirás:{" "}
+                          <strong>{OT_STEPS[displayStep]?.label ?? "—"}</strong>.
+                        </p>
                       </div>
-                    ) : (
-                      <div className="mt-4 space-y-4">
-                        {ot.sugerenciaChofer && (
-                          <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-950 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
-                            <strong>Sugerencia del chofer:</strong> {ot.sugerenciaChofer}
-                          </div>
-                        )}
+                    )}
 
-                        {isAsignacionOPresupuestoStep(ot.currentStep) && (
-                          <div className="space-y-3">
-                            {!puedeEditarTaller && (
-                              <div className="rounded-lg border border-slate-300 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200">
-                                <strong>Solo lectura.</strong> No podés editar presupuestos
-                                (campos en gris). Usá las flechas para moverte entre etapas.
-                              </div>
-                            )}
+                    <div className="mt-4 space-y-4">
+                      {ot.sugerenciaChofer && (
+                        <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-950 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
+                          <strong>Sugerencia del chofer:</strong> {ot.sugerenciaChofer}
+                        </div>
+                      )}
 
-                            <ItemsEditor
-                              ot={ot}
-                              token={token!}
-                              talleres={talleres}
-                              tipo="PRESUPUESTO"
-                              lockTipo
-                              showAprobado={false}
-                              hideTotal
-                              showSubtotales
-                              requireClasif
-                              readOnly={!puedeEditarTaller}
-                              desc={itemDesc}
-                              setDesc={setItemDesc}
-                              imp={itemImp}
-                              setImp={setItemImp}
-                              obs={itemObs}
-                              setObs={setItemObs}
-                              tallerId={itemTallerId}
-                              setTallerId={setItemTallerId}
-                              busy={busy}
-                              onSaved={replaceOt}
-                              onError={setError}
-                            />
+                      {ot.tallerAsignado && (
+                        <p className="text-xs text-[var(--vl-text-muted)]">
+                          Taller referido: <strong>{ot.tallerAsignado}</strong>
+                        </p>
+                      )}
 
-                            {puedeEditarTaller && (
-                              <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
-                                <p className="text-xs text-[var(--vl-text-muted)]">
-                                  Guardá cada ítem con «Guardar ítem». Si hay ítems cargados,
-                                  Continuar va a <strong>selección</strong>. Si no hay ninguno,
-                                  salta directo a <strong>ajuste de importes</strong>.
-                                </p>
-                                {(ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO").length ===
-                                  0 && (
-                                  <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
-                                    Sin ítems: al continuar se marca sin presupuesto y se saltea
-                                    la selección.
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                            {!puedeEditarTaller &&
-                              (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO").length ===
-                                0 && (
-                              <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
-                                Sin ítems de presupuesto cargados.
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {isSeleccionStep(ot.currentStep) && !ot.sinPresupuesto && (
-                          <SeleccionChecklist
+                      {isAsignacionOPresupuestoStep(displayStep) && (
+                        <div className="space-y-3">
+                          {editandoPasoActual && !puedeEditarTaller && (
+                            <div className="rounded-lg border border-slate-300 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200">
+                              <strong>Solo lectura.</strong> No podés editar presupuestos
+                              (campos en gris). Usá las flechas para moverte entre etapas.
+                            </div>
+                          )}
+                          <ItemsEditor
                             ot={ot}
                             token={token!}
+                            talleres={talleres}
+                            tipo="PRESUPUESTO"
+                            lockTipo
+                            showAprobado={false}
+                            hideTotal
+                            showSubtotales={!ocultarMontos}
+                            requireClasif
+                            readOnly={!editandoPasoActual || !puedeEditarTaller}
+                            desc={itemDesc}
+                            setDesc={setItemDesc}
+                            imp={itemImp}
+                            setImp={setItemImp}
+                            obs={itemObs}
+                            setObs={setItemObs}
+                            tallerId={itemTallerId}
+                            setTallerId={setItemTallerId}
+                            busy={busy}
                             onSaved={replaceOt}
-                            soloLectura={!puedeEditarTaller}
-                            esEmpresa={
-                              !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA")
-                            }
+                            onError={setError}
                           />
-                        )}
-
-                        {isAjusteStep(ot.currentStep) && puedeEditarTaller && (
-                          ot.sinPresupuesto ? (
-                            <div className="space-y-3">
-                              <p className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-                                <strong>Sin presupuesto.</strong> Cargá el importe del gasto acá.
-                                No se compara contra un presupuesto aprobado.
+                          {editandoPasoActual && puedeEditarTaller && (
+                            <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
+                              <p className="text-xs text-[var(--vl-text-muted)]">
+                                Guardá cada ítem con «Guardar ítem». Si hay ítems cargados,
+                                Continuar va a <strong>selección</strong>. Si no hay ninguno,
+                                salta la selección (sin presupuesto) y va a{" "}
+                                <strong>ajuste de importes</strong>.
                               </p>
+                              {(ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO").length ===
+                                0 && (
+                                <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                                  Sin ítems: al continuar se marca sin presupuesto y se saltea
+                                  la selección.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {isSeleccionStep(displayStep) && !ot.sinPresupuesto && (
+                        <SeleccionChecklist
+                          ot={ot}
+                          token={token!}
+                          onSaved={replaceOt}
+                          soloLectura={!editandoPasoActual || !puedeEditarTaller}
+                          ocultarMontos={ocultarMontos}
+                          esEmpresa={
+                            !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA")
+                          }
+                        />
+                      )}
+
+                      {isSeleccionStep(displayStep) && ot.sinPresupuesto && (
+                        <p className="text-xs text-[var(--vl-text-muted)]">
+                          Esta OT está sin presupuesto: la selección se omitió.
+                        </p>
+                      )}
+
+                      {isAjusteStep(displayStep) && (
+                        ot.sinPresupuesto ? (
+                          <div className="space-y-3">
+                            <p className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                              <strong>Sin presupuesto.</strong>{" "}
+                              {ocultarMontos
+                                ? "El equipo carga el gasto en esta etapa."
+                                : "Cargá el importe del gasto acá. No se compara contra un presupuesto aprobado."}
+                            </p>
+                            {!ocultarMontos && (
                               <ItemsEditor
                                 ot={ot}
                                 token={token!}
@@ -758,6 +720,7 @@ export function M7TalleresPage() {
                                 tipo="FACTURA"
                                 lockTipo
                                 requireClasif
+                                readOnly={!editandoPasoActual || !puedeEditarTaller}
                                 desc={itemDesc}
                                 setDesc={setItemDesc}
                                 imp={itemImp}
@@ -770,29 +733,53 @@ export function M7TalleresPage() {
                                 onSaved={replaceOt}
                                 onError={setError}
                               />
-                            </div>
-                          ) : (
-                            <AjusteImportesChecklist
-                              ot={ot}
-                              token={token!}
-                              onSaved={replaceOt}
-                              importeDrafts={importeDrafts}
-                              setImporteDraft={setImporteDrafts}
-                            />
-                          )
-                        )}
+                            )}
+                            {ocultarMontos && (
+                              <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
+                                {(ot.items ?? [])
+                                  .filter((i) => i.tipo !== "PRESUPUESTO")
+                                  .map((i) => (
+                                    <li key={i.id}>
+                                      {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
+                                      {i.descripcion}
+                                    </li>
+                                  ))}
+                                {(ot.items ?? []).filter((i) => i.tipo !== "PRESUPUESTO")
+                                  .length === 0 && (
+                                  <li className="text-[var(--vl-text-muted)]">
+                                    Todavía no hay gastos cargados.
+                                  </li>
+                                )}
+                              </ul>
+                            )}
+                          </div>
+                        ) : (
+                          <AjusteImportesChecklist
+                            ot={ot}
+                            token={token!}
+                            talleres={talleres}
+                            onSaved={replaceOt}
+                            importeDrafts={importeDrafts}
+                            setImporteDraft={setImporteDrafts}
+                            readOnly={!editandoPasoActual || !puedeEditarTaller}
+                            ocultarMontos={ocultarMontos}
+                          />
+                        )
+                      )}
 
-                        {isCierreStep(ot.currentStep) && !vistaBrowse && (
-                          <div className="space-y-3">
-                            {ot.sinPresupuesto ? (
-                              <div className="rounded-lg border border-[var(--vl-card-border)] p-4">
-                                <p className="text-xs font-semibold text-[var(--vl-heading)]">
-                                  Cierre · sin presupuesto
-                                </p>
-                                <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                                  Esta OT está marcada sin presupuesto: no hay comparación
-                                  contra $0. Revisá el gasto cargado y cerrá la OT.
-                                </p>
+                      {isCierreStep(displayStep) && (
+                        <div className="space-y-3">
+                          {ot.sinPresupuesto ? (
+                            <div className="rounded-lg border border-[var(--vl-card-border)] p-4">
+                              <p className="text-xs font-semibold text-[var(--vl-heading)]">
+                                Cierre · sin presupuesto
+                              </p>
+                              <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                                {ocultarMontos
+                                  ? "Orden en cierre. Los montos los ve el equipo de Vettore."
+                                  : "Esta OT está marcada sin presupuesto: no hay comparación contra $0. Revisá el gasto cargado y cerrá la OT."}
+                              </p>
+                              {!ocultarMontos && (
                                 <div className="mt-3 rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
                                   <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
                                     Importe cargado
@@ -811,102 +798,114 @@ export function M7TalleresPage() {
                                         )}
                                   </div>
                                 </div>
-                              </div>
-                            ) : (
-                              <div className="rounded-lg border border-[var(--vl-card-border)] p-4">
-                                <p className="text-xs font-semibold text-[var(--vl-heading)]">
-                                  Comparación y cierre
-                                </p>
-                                <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                                  Presupuesto original (fijo al seleccionar) vs presupuesto total
-                                  general. Verde si el original supera el gasto; rojo al revés.
-                                </p>
-                                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                  <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
-                                    <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                                      Presupuesto original
+                              )}
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border border-[var(--vl-card-border)] p-4">
+                              <p className="text-xs font-semibold text-[var(--vl-heading)]">
+                                Comparación y cierre
+                              </p>
+                              <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                                {ocultarMontos
+                                  ? "Comparación de presupuesto vs gasto (montos ocultos para chofer)."
+                                  : "Presupuesto original (fijo al seleccionar) vs presupuesto total general. Verde si el original supera el gasto; rojo al revés."}
+                              </p>
+                              {!ocultarMontos && (
+                                <>
+                                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
+                                      <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
+                                        Presupuesto original
+                                      </div>
+                                      <div className="mt-1 text-lg font-bold">
+                                        {presupuestoAprobadoFijo > 0
+                                          ? money(presupuestoAprobadoFijo)
+                                          : "—"}
+                                      </div>
                                     </div>
-                                    <div className="mt-1 text-lg font-bold">
-                                      {presupuestoAprobadoFijo > 0
-                                        ? money(presupuestoAprobadoFijo)
-                                        : "—"}
+                                    <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
+                                      <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
+                                        Presupuesto total general
+                                      </div>
+                                      <div className="mt-1 text-lg font-bold">
+                                        {totTildados > 0 ? money(totTildados) : "—"}
+                                      </div>
                                     </div>
                                   </div>
-                                  <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
-                                    <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                                      Presupuesto total general
-                                    </div>
-                                    <div className="mt-1 text-lg font-bold">
-                                      {totTildados > 0 ? money(totTildados) : "—"}
-                                    </div>
-                                  </div>
-                                </div>
-                                {presupuestoAprobadoFijo > 0 && totTildados > 0 && (
-                                  <p
-                                    className={`mt-3 text-sm font-semibold ${
-                                      presupuestoAprobadoFijo >= totTildados
-                                        ? "text-emerald-600 dark:text-emerald-400"
-                                        : "text-red-600 dark:text-red-400"
-                                    }`}
-                                  >
-                                    Diferencia:{" "}
-                                    {money(presupuestoAprobadoFijo - totTildados)}
-                                    {presupuestoAprobadoFijo > totTildados
-                                      ? " (presupuesto mayor al gasto)"
-                                      : presupuestoAprobadoFijo < totTildados
-                                        ? " (gasto supera el presupuesto)"
-                                        : " (coinciden)"}
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                            {!ot.sinPresupuesto && (
-                              <div>
-                                <div className="mb-1 text-xs font-semibold">Ítems aprobados</div>
-                                {itemsPresupuesto.filter((i) => i.aprobado).length === 0 ? (
-                                  <p className="text-xs text-[var(--vl-text-muted)]">
-                                    No hay ítems aprobados.
-                                  </p>
-                                ) : (
-                                  <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
-                                    {itemsPresupuesto
-                                      .filter((i) => i.aprobado)
-                                      .map((i) => (
-                                        <li
-                                          key={i.id}
-                                          className="flex justify-between gap-2 border-b border-[var(--vl-card-border)] py-1 last:border-0"
-                                        >
-                                          <span>
-                                            {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
-                                            {i.descripcion}
-                                          </span>
+                                  {presupuestoAprobadoFijo > 0 && totTildados > 0 && (
+                                    <p
+                                      className={`mt-3 text-sm font-semibold ${
+                                        presupuestoAprobadoFijo >= totTildados
+                                          ? "text-emerald-600 dark:text-emerald-400"
+                                          : "text-red-600 dark:text-red-400"
+                                      }`}
+                                    >
+                                      Diferencia:{" "}
+                                      {money(presupuestoAprobadoFijo - totTildados)}
+                                      {presupuestoAprobadoFijo > totTildados
+                                        ? " (presupuesto mayor al gasto)"
+                                        : presupuestoAprobadoFijo < totTildados
+                                          ? " (gasto supera el presupuesto)"
+                                          : " (coinciden)"}
+                                    </p>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          )}
+                          {!ot.sinPresupuesto && (
+                            <div>
+                              <div className="mb-1 text-xs font-semibold">Ítems aprobados</div>
+                              {itemsPresupuesto.filter((i) => i.aprobado).length === 0 ? (
+                                <p className="text-xs text-[var(--vl-text-muted)]">
+                                  No hay ítems aprobados.
+                                </p>
+                              ) : (
+                                <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
+                                  {itemsPresupuesto
+                                    .filter((i) => i.aprobado)
+                                    .map((i) => (
+                                      <li
+                                        key={i.id}
+                                        className="flex justify-between gap-2 border-b border-[var(--vl-card-border)] py-1 last:border-0"
+                                      >
+                                        <span>
+                                          {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
+                                          {i.descripcion}
+                                          {i.adicionalAjuste ? " · adicional" : ""}
+                                        </span>
+                                        {!ocultarMontos && (
                                           <span className="shrink-0 font-medium">
                                             {money(i.importe)}
                                           </span>
-                                        </li>
-                                      ))}
-                                  </ul>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
+                                        )}
+                                      </li>
+                                    ))}
+                                </ul>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
-                        {!vistaBrowse && (ot.auditorias?.length ?? 0) > 0 && (
-                          <details className="text-xs text-[var(--vl-text-muted)]">
-                            <summary>Registro de acciones ({ot.auditorias!.length})</summary>
-                            <ul className="mt-1 space-y-1">
-                              {ot.auditorias!.map((a) => (
-                                <li key={a.id}>{new Date(a.createdAt).toLocaleString("es-AR")} · {a.user?.nombre || a.user?.email} · {a.accion}</li>
-                              ))}
-                            </ul>
-                          </details>
-                        )}
-                      </div>
-                    )}
+                      {!vistaBrowse && (ot.auditorias?.length ?? 0) > 0 && editandoPasoActual && (
+                        <details className="text-xs text-[var(--vl-text-muted)]">
+                          <summary>Registro de acciones ({ot.auditorias!.length})</summary>
+                          <ul className="mt-1 space-y-1">
+                            {ot.auditorias!.map((a) => (
+                              <li key={a.id}>{new Date(a.createdAt).toLocaleString("es-AR")} · {a.user?.nombre || a.user?.email} · {a.accion}</li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                    </div>
                   </div>
 
-                  {!vistaBrowse && !enPresupuesto && !ot.sinPresupuesto && (
+                  {!vistaBrowse &&
+                    !ocultarMontos &&
+                    !isAsignacionOPresupuestoStep(displayStep) &&
+                    !ot.sinPresupuesto &&
+                    editandoPasoActual && (
                   <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                     <div className="rounded-xl border p-3">
                       <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto original</div>
@@ -941,121 +940,144 @@ export function M7TalleresPage() {
                   </div>
                   )}
 
-                  {(vistaBrowse || !ot.cerradaAt) && (
+                  {(vistaBrowse || !ot.cerradaAt || displayStep < maxBrowseStep || displayStep > 0) && (
                     <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
-                      {vistaBrowse ? (
-                        <>
-                          {displayStep > 0 && (
-                            <button
-                              type="button"
-                              aria-label="Anterior"
-                              onClick={() => setBrowseStep(displayStep - 1)}
-                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] text-sm font-semibold"
-                            >
-                              <ChevronLeft size={22} />
-                            </button>
-                          )}
-                          {displayStep < maxBrowseStep && (
-                            <button
-                              type="button"
-                              aria-label="Siguiente"
-                              onClick={() => setBrowseStep(displayStep + 1)}
-                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] text-sm font-semibold text-white"
-                            >
-                              <ChevronRight size={22} />
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {ot.currentStep > 0 && (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              aria-label="Volver"
-                              onClick={() => void call(`/api/talleres/${ot.id}/retroceder`, { method: "POST", body: "{}" })}
-                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 text-sm font-semibold disabled:opacity-50"
-                            >
-                              <ChevronLeft size={18} />
-                              Volver
-                            </button>
-                          )}
-                          {puedeEditarTaller && !isCierreStep(ot.currentStep) && (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => {
-                                void (async () => {
-                                  if (isAjusteStep(ot.currentStep) && !ot.sinPresupuesto) {
-                                    setBusy(true);
-                                    try {
-                                      for (const [id, draft] of Object.entries(importeDrafts)) {
-                                        if (!Number.isFinite(draft) || draft < 0) continue;
-                                        const item = (ot.items ?? []).find((i) => i.id === id);
-                                        if (!item || item.importe === draft) continue;
-                                        await apiFetch(
-                                          `/api/talleres/${ot.id}/items/${id}`,
-                                          {
-                                            method: "PATCH",
-                                            body: JSON.stringify({ importe: draft }),
-                                          },
-                                          token!
-                                        );
-                                      }
-                                      await load();
-                                    } catch (err) {
-                                      setError(
-                                        err instanceof ApiError
-                                          ? err.message
-                                          : "Error al guardar"
-                                      );
-                                    } finally {
-                                      setBusy(false);
-                                    }
+                      {displayStep > 0 && (
+                        <button
+                          type="button"
+                          aria-label="Anterior"
+                          onClick={() => setBrowseStep(displayStep - 1)}
+                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] text-sm font-semibold"
+                        >
+                          <ChevronLeft size={22} />
+                        </button>
+                      )}
+                      {!vistaBrowse &&
+                        editandoPasoActual &&
+                        puedeEditarTaller &&
+                        !isCierreStep(ot.currentStep) && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            void (async () => {
+                              if (isAjusteStep(ot.currentStep) && !ot.sinPresupuesto) {
+                                setBusy(true);
+                                try {
+                                  for (const [id, draft] of Object.entries(importeDrafts)) {
+                                    if (!Number.isFinite(draft) || draft < 0) continue;
+                                    const item = (ot.items ?? []).find((i) => i.id === id);
+                                    if (!item || item.importe === draft) continue;
+                                    await apiFetch(
+                                      `/api/talleres/${ot.id}/items/${id}`,
+                                      {
+                                        method: "PATCH",
+                                        body: JSON.stringify({ importe: draft }),
+                                      },
+                                      token!
+                                    );
                                   }
-                                  setGuardadoOk(true);
-                                  window.setTimeout(() => setGuardadoOk(false), 2000);
-                                })();
-                              }}
-                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 text-sm font-semibold disabled:opacity-50"
-                            >
-                              {guardadoOk ? "Guardado" : "Guardar"}
-                            </button>
-                          )}
-                          {ot.currentStep < OT_STEPS.length - 1 && (
-                            <button
-                              type="button"
-                              disabled={
-                                busy ||
-                                (!puedeEditarTaller &&
-                                  !canAdvanceFromStep(rol, ot.currentStep))
+                                  await load();
+                                } catch (err) {
+                                  setError(
+                                    err instanceof ApiError
+                                      ? err.message
+                                      : "Error al guardar"
+                                  );
+                                } finally {
+                                  setBusy(false);
+                                }
                               }
-                              title={
-                                !puedeEditarTaller && !canAdvanceFromStep(rol, ot.currentStep)
-                                  ? "En esta etapa solo Vettore puede continuar"
-                                  : undefined
-                              }
-                              aria-label="Continuar"
-                              onClick={() => void call(`/api/talleres/${ot.id}/avanzar`, { method: "POST", body: JSON.stringify({ incrementoJustificacion: justif }) })}
-                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[#1e4080] bg-[#1e4080] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              Continuar
-                              <ChevronRight size={18} />
-                            </button>
-                          )}
-                          {isCierreStep(ot.currentStep) && puedeEditarTaller && (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => setConfirmCerrar(true)}
-                              className="inline-flex h-12 min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-emerald-600 bg-emerald-600 px-3 text-sm font-semibold text-white disabled:opacity-50"
-                            >
-                              <Check size={18} /> Cerrar OT
-                            </button>
-                          )}
-                        </>
+                              setGuardadoOk(true);
+                              window.setTimeout(() => setGuardadoOk(false), 2000);
+                            })();
+                          }}
+                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 text-sm font-semibold disabled:opacity-50"
+                        >
+                          {guardadoOk ? "Guardado" : "Guardar"}
+                        </button>
+                      )}
+                      {!vistaBrowse &&
+                        editandoPasoActual &&
+                        ot.currentStep < OT_STEPS.length - 1 && (
+                        <button
+                          type="button"
+                          disabled={
+                            busy ||
+                            (!puedeEditarTaller &&
+                              !canAdvanceFromStep(rol, ot.currentStep))
+                          }
+                          title={
+                            !puedeEditarTaller && !canAdvanceFromStep(rol, ot.currentStep)
+                              ? "En esta etapa solo Vettore puede continuar"
+                              : undefined
+                          }
+                          aria-label="Continuar"
+                          onClick={() => {
+                            const sinItems =
+                              isAsignacionOPresupuestoStep(ot.currentStep) &&
+                              (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO")
+                                .length === 0;
+                            if (sinItems) {
+                              setConfirmSinPresupuesto(true);
+                              return;
+                            }
+                            void call(`/api/talleres/${ot.id}/avanzar`, {
+                              method: "POST",
+                              body: JSON.stringify({}),
+                            }).then(() => setBrowseStep(null));
+                          }}
+                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[#1e4080] bg-[#1e4080] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Continuar
+                          <ChevronRight size={18} />
+                        </button>
+                      )}
+                      {!vistaBrowse &&
+                        editandoPasoActual &&
+                        isCierreStep(ot.currentStep) &&
+                        puedeEditarTaller && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setConfirmCerrar(true)}
+                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-emerald-600 bg-emerald-600 px-3 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          <Check size={18} /> Cerrar OT
+                        </button>
+                      )}
+                      {displayStep < maxBrowseStep && (
+                        <button
+                          type="button"
+                          aria-label="Siguiente"
+                          onClick={() => setBrowseStep(displayStep + 1)}
+                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] text-sm font-semibold text-white"
+                        >
+                          <ChevronRight size={22} />
+                        </button>
                       )}
                     </div>
+                  )}
+
+                  {!vistaBrowse &&
+                    editandoPasoActual &&
+                    ot.currentStep > 0 &&
+                    !isCierreStep(ot.currentStep) &&
+                    !ot.cerradaAt &&
+                    puedeEditarTaller && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void call(`/api/talleres/${ot.id}/retroceder`, {
+                          method: "POST",
+                          body: "{}",
+                        }).then(() => setBrowseStep(null))
+                      }
+                      className="mt-2 text-xs text-[var(--vl-text-muted)] underline disabled:opacity-50"
+                    >
+                      Retroceder etapa (cambia el estado de la OT)
+                    </button>
                   )}
 
                   {ot.cerradaAt && canReabrirOt(rol) && (
@@ -1107,6 +1129,60 @@ export function M7TalleresPage() {
         />
       )}
 
+      {confirmSinPresupuesto && ot && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sin-presupuesto-title"
+          onClick={() => !busy && setConfirmSinPresupuesto(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="sin-presupuesto-title"
+              className="text-base font-bold text-[var(--vl-heading)]"
+            >
+              ¿Continuar sin presupuesto?
+            </h3>
+            <p className="mt-2 text-sm text-[var(--vl-text-muted)]">
+              No hay ítems de presupuesto cargados. Si seguís, la OT se marca{" "}
+              <strong className="text-[var(--vl-heading)]">sin presupuesto</strong>,
+              se saltea la selección y pasás directo al ajuste de importes.
+            </p>
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirmSinPresupuesto(false)}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-4 text-sm font-semibold sm:flex-none sm:min-w-[7.5rem]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  void (async () => {
+                    await call(`/api/talleres/${ot.id}/avanzar`, {
+                      method: "POST",
+                      body: JSON.stringify({}),
+                    });
+                    setConfirmSinPresupuesto(false);
+                    setBrowseStep(null);
+                  })();
+                }}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-amber-600 bg-amber-600 px-4 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none sm:min-w-[10rem]"
+              >
+                {busy ? "Avanzando…" : "Sí, sin presupuesto"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmCerrar && ot && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
@@ -1128,15 +1204,15 @@ export function M7TalleresPage() {
                   id="cerrar-ot-title"
                   className="text-base font-bold text-[var(--vl-heading)]"
                 >
-                  ¿Cerrar esta OT?
+                  Confirmás que guardás y no hay vuelta atrás?
                 </h3>
                 <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-                  Vas a finalizar{" "}
+                  Vas a cerrar{" "}
                   <strong className="text-[var(--vl-heading)]">{ot.numeroOT}</strong>
                   {ot.solicitud?.camioneta?.patente
                     ? ` · ${ot.solicitud.camioneta.patente}`
                     : ""}
-                  . Esta acción cierra la orden de trabajo.
+                  . Después de guardar no se puede editar ni volver a etapas anteriores.
                 </p>
               </div>
             </div>
@@ -1282,13 +1358,14 @@ function groupByTaller<T extends { tallerNombre: string; importe: number }>(item
 }
 
 function SeleccionChecklist({
-  ot, token, onSaved, soloLectura, esEmpresa,
+  ot, token, onSaved, soloLectura, esEmpresa, ocultarMontos,
 }: {
   ot: OrdenTrabajo;
   token: string;
   onSaved: (ot: OrdenTrabajo) => void;
   soloLectura?: boolean;
   esEmpresa?: boolean;
+  ocultarMontos?: boolean;
 }) {
   const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
   const marcados = items.filter((i) => i.aprobado);
@@ -1329,19 +1406,23 @@ function SeleccionChecklist({
   }
 
   return (
-    <div>
+    <div className={soloLectura ? "opacity-90" : undefined}>
       <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
         <div className="text-xs font-semibold">
           Selección de presupuestos aprobados
           {!soloLectura && ` — ${marcados.length}/${items.length}`}
         </div>
-        <div className="text-right">
-          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto original</div>
-          <div className="text-base font-bold">{totalAprobado > 0 ? money(totalAprobado) : "—"}</div>
-        </div>
+        {!ocultarMontos && (
+          <div className="text-right">
+            <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto original</div>
+            <div className="text-base font-bold">{totalAprobado > 0 ? money(totalAprobado) : "—"}</div>
+          </div>
+        )}
       </div>
       <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-        Tildá o destildá los presupuestos / proveedores aprobados. El importe no se edita en este paso.
+        {soloLectura
+          ? "Presupuestos seleccionados (solo lectura)."
+          : "Tildá o destildá los presupuestos / proveedores aprobados. El importe no se edita en este paso."}
       </p>
       {ot.sugerenciaChofer && (
         <p className="mb-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-950 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
@@ -1352,7 +1433,7 @@ function SeleccionChecklist({
         <div key={g.nombre} className="mb-3">
           <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
             <span>{g.nombre}</span>
-            <span>Presupuesto original {money(g.subtotal)}</span>
+            {!ocultarMontos && <span>Presupuesto original {money(g.subtotal)}</span>}
           </div>
           <table className="w-full text-left text-xs">
             <thead>
@@ -1360,7 +1441,7 @@ function SeleccionChecklist({
                 <th className="w-8 py-1" />
                 <th className="py-1">Descripción</th>
                 <th className="py-1">Concepto</th>
-                <th className="py-1 text-right">Importe $</th>
+                {!ocultarMontos && <th className="py-1 text-right">Importe $</th>}
               </tr>
             </thead>
             <tbody>
@@ -1385,7 +1466,9 @@ function SeleccionChecklist({
                         : CLASIFICACION_LABEL[i.clasificacion]
                       : "—"}
                   </td>
-                  <td className="py-1 text-right font-medium">{money(i.importe)}</td>
+                  {!ocultarMontos && (
+                    <td className="py-1 text-right font-medium">{money(i.importe)}</td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -1491,17 +1574,29 @@ function ConceptoCascada({
 }
 
 function AjusteImportesChecklist({
-  ot, token, onSaved, importeDrafts, setImporteDraft,
+  ot,
+  token,
+  talleres,
+  onSaved,
+  importeDrafts,
+  setImporteDraft,
+  readOnly,
+  ocultarMontos,
 }: {
   ot: OrdenTrabajo;
   token: string;
+  talleres: TallerProveedor[];
   onSaved: (ot: OrdenTrabajo) => void;
   importeDrafts: Record<string, number>;
   setImporteDraft: Dispatch<SetStateAction<Record<string, number>>>;
+  readOnly?: boolean;
+  ocultarMontos?: boolean;
 }) {
   const items = (ot.items ?? []).filter(
     (i) => i.tipo === "PRESUPUESTO" && i.aprobado
   );
+  const itemsBase = items.filter((i) => !i.adicionalAjuste);
+  const itemsAdic = items.filter((i) => i.adicionalAjuste);
   const total = items.reduce((a, i) => {
     const draft = importeDrafts[i.id];
     const val =
@@ -1512,12 +1607,20 @@ function AjusteImportesChecklist({
     ot.valorAprobado != null && ot.valorAprobado > 0 ? ot.valorAprobado : total;
   const [cats, setCats] = useState<CatDiag[]>([]);
   const [conceptoBusy, setConceptoBusy] = useState(false);
-  /** Concepto compartido: si todos tienen el mismo, lo mostramos. */
+  const [showAdic, setShowAdic] = useState(false);
+  const [adicDesc, setAdicDesc] = useState("");
+  const [adicImp, setAdicImp] = useState("");
+  const [adicTallerId, setAdicTallerId] = useState("");
+  const [adicConceptoId, setAdicConceptoId] = useState<string | null>(null);
+  const [adicSaving, setAdicSaving] = useState(false);
+
+  /** Concepto general: de los ítems no adicionales. */
   const sharedConceptoId = (() => {
-    const ids = items
+    const pool = itemsBase.length > 0 ? itemsBase : items;
+    const ids = pool
       .map((i) => i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null)
       .filter(Boolean) as string[];
-    if (ids.length === 0 || ids.length !== items.length) return null;
+    if (ids.length === 0) return null;
     const first = ids[0];
     return ids.every((id) => id === first) ? first : null;
   })();
@@ -1528,7 +1631,14 @@ function AjusteImportesChecklist({
       .catch(() => setCats([]));
   }, [token]);
 
+  useEffect(() => {
+    if (showAdic && adicConceptoId == null && sharedConceptoId) {
+      setAdicConceptoId(sharedConceptoId);
+    }
+  }, [showAdic, sharedConceptoId, adicConceptoId]);
+
   async function guardarImporte(id: string) {
+    if (readOnly) return;
     const draft = importeDrafts[id];
     if (draft === undefined) return;
     if (!Number.isFinite(draft) || draft < 0) return;
@@ -1540,11 +1650,11 @@ function AjusteImportesChecklist({
   }
 
   async function setConceptoTodos(categoriaDiagnosticoId: string | null) {
-    if (conceptoBusy || items.length === 0) return;
+    if (readOnly || conceptoBusy || itemsBase.length === 0) return;
     setConceptoBusy(true);
     try {
       let last: OrdenTrabajo | null = null;
-      for (const i of items) {
+      for (const i of itemsBase) {
         last = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${i.id}`, {
           method: "PATCH",
           body: JSON.stringify({ categoriaDiagnosticoId }),
@@ -1556,7 +1666,49 @@ function AjusteImportesChecklist({
     }
   }
 
-  if (items.length === 0) {
+  async function setConceptoItem(id: string, categoriaDiagnosticoId: string | null) {
+    if (readOnly || conceptoBusy) return;
+    setConceptoBusy(true);
+    try {
+      const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ categoriaDiagnosticoId }),
+      }, token);
+      onSaved(updated);
+    } finally {
+      setConceptoBusy(false);
+    }
+  }
+
+  async function agregarAdicional() {
+    if (readOnly || adicSaving) return;
+    if (!adicDesc.trim() || !adicImp || !Number.isFinite(Number(adicImp))) return;
+    setAdicSaving(true);
+    try {
+      const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items`, {
+        method: "POST",
+        body: JSON.stringify({
+          tipo: "PRESUPUESTO",
+          descripcion: adicDesc.trim(),
+          importe: Number(adicImp),
+          tallerProveedorId: adicTallerId || undefined,
+          categoriaDiagnosticoId: adicConceptoId || sharedConceptoId || undefined,
+          clasificacion: "OTRO",
+          clasificacionOtro: "Reparación adicional",
+        }),
+      }, token);
+      onSaved(updated);
+      setAdicDesc("");
+      setAdicImp("");
+      setAdicTallerId("");
+      setAdicConceptoId(sharedConceptoId);
+      setShowAdic(false);
+    } finally {
+      setAdicSaving(false);
+    }
+  }
+
+  if (items.length === 0 && !readOnly) {
     return (
       <p className="text-xs text-[var(--vl-text-muted)]">
         No hay ítems aprobados. Volvé a selección y tildá presupuestos.
@@ -1564,35 +1716,50 @@ function AjusteImportesChecklist({
     );
   }
 
+  if (items.length === 0) {
+    return (
+      <p className="text-xs text-[var(--vl-text-muted)]">
+        Todavía no hay importes ajustados en esta etapa.
+      </p>
+    );
+  }
+
   return (
-    <div>
+    <div className={readOnly ? "opacity-90" : undefined}>
       <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
         <div className="text-xs font-semibold">
           Ajuste de importes — {items.length} ítem{items.length === 1 ? "" : "s"}
         </div>
-        <div className="text-right">
-          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto original</div>
-          <div className="text-base font-bold">{original > 0 ? money(original) : "—"}</div>
-        </div>
-      </div>
-      <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
-        Solo los tildados del paso anterior. Editá importes abajo. El concepto se aplica a todos
-        los ítems.
-      </p>
-      <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] p-3">
-        <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
-          Concepto (para todos los ítems)
-        </div>
-        <ConceptoCascada
-          cats={cats}
-          valueId={sharedConceptoId}
-          onPick={(leafId) => void setConceptoTodos(leafId)}
-        />
-        {conceptoBusy && (
-          <p className="mt-1 text-[10px] text-[var(--vl-text-muted)]">Aplicando concepto…</p>
+        {!ocultarMontos && (
+          <div className="text-right">
+            <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto original</div>
+            <div className="text-base font-bold">{original > 0 ? money(original) : "—"}</div>
+          </div>
         )}
       </div>
-      {groupByTaller(items).map((g) => {
+      <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
+        {ocultarMontos
+          ? "Detalle de lo que se está editando (sin montos)."
+          : "Solo los tildados del paso anterior. El desglose de niveles aplica a todas las cotizaciones. Si agregás una reparación adicional, elegí el nivel de esa línea."}
+      </p>
+      {!ocultarMontos && (
+        <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] p-3">
+          <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
+            Concepto general (todas las cotizaciones)
+          </div>
+          <ConceptoCascada
+            cats={cats}
+            valueId={sharedConceptoId}
+            onPick={(leafId) => {
+              if (!readOnly) void setConceptoTodos(leafId);
+            }}
+          />
+          {conceptoBusy && (
+            <p className="mt-1 text-[10px] text-[var(--vl-text-muted)]">Aplicando concepto…</p>
+          )}
+        </div>
+      )}
+      {groupByTaller(itemsBase).map((g) => {
         const subtotal = g.items.reduce((a, i) => {
           const draft = importeDrafts[i.id];
           const val =
@@ -1603,20 +1770,74 @@ function AjusteImportesChecklist({
         <div key={g.nombre} className="mb-3">
           <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
             <span>{g.nombre}</span>
-            <span>Presupuesto original {money(subtotal)}</span>
+            {!ocultarMontos && <span>Subtotal {money(subtotal)}</span>}
           </div>
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
                 <th className="py-1">Descripción</th>
-                <th className="py-1 text-right">Importe $</th>
+                {!ocultarMontos && <th className="py-1 text-right">Importe $</th>}
               </tr>
             </thead>
             <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
                   <td className="py-1">{i.descripcion}</td>
-                  <td className="py-1 text-right align-top">
+                  {!ocultarMontos && (
+                    <td className="py-1 text-right align-top">
+                      {readOnly ? (
+                        <span className="font-medium">{money(
+                          importeDrafts[i.id] !== undefined && Number.isFinite(importeDrafts[i.id])
+                            ? importeDrafts[i.id]
+                            : i.importe
+                        )}</span>
+                      ) : (
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className="min-h-11 w-32 rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-right text-base font-medium"
+                          value={
+                            importeDrafts[i.id] !== undefined
+                              ? String(importeDrafts[i.id])
+                              : String(i.importe)
+                          }
+                          onChange={(e) => {
+                            const n = Number(e.target.value);
+                            setImporteDraft((prev) => ({
+                              ...prev,
+                              [i.id]: e.target.value === "" ? NaN : n,
+                            }));
+                          }}
+                          onBlur={() => void guardarImporte(i.id)}
+                        />
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        );
+      })}
+
+      {itemsAdic.length > 0 && (
+        <div className="mb-3 rounded-lg border border-dashed border-amber-400/50 p-3">
+          <div className="mb-2 text-[10px] font-semibold uppercase text-amber-800 dark:text-amber-200">
+            Ítems fuera de presupuesto (suman al total general, no al original)
+          </div>
+          {itemsAdic.map((i) => (
+            <div key={i.id} className="mb-3 border-b border-[var(--vl-card-border)] pb-3 last:mb-0 last:border-0 last:pb-0">
+              <div className="flex flex-wrap items-start justify-between gap-2 text-xs">
+                <div>
+                  <div className="font-semibold">{i.descripcion}</div>
+                  <div className="text-[var(--vl-text-muted)]">{i.tallerNombre || "Sin proveedor"}</div>
+                </div>
+                {!ocultarMontos && (
+                  readOnly ? (
+                    <span className="font-medium">{money(i.importe)}</span>
+                  ) : (
                     <input
                       type="number"
                       min={0}
@@ -1636,18 +1857,108 @@ function AjusteImportesChecklist({
                       }}
                       onBlur={() => void guardarImporte(i.id)}
                     />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  )
+                )}
+              </div>
+              {!ocultarMontos && (
+                <div className="mt-2">
+                  <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
+                    Nivel (esta reparación)
+                  </div>
+                  <ConceptoCascada
+                    cats={cats}
+                    valueId={i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id}
+                    onPick={(leafId) => {
+                      if (!readOnly) void setConceptoItem(i.id, leafId);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-        );
-      })}
-      <div className="mt-3 rounded-xl border border-[var(--vl-card-border)] p-3 text-right">
-        <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto total general</div>
-        <div className="text-xl font-bold tracking-tight">{total > 0 ? money(total) : "—"}</div>
-      </div>
+      )}
+
+      {!readOnly && !ocultarMontos && (
+        <div className="mb-3">
+          {!showAdic ? (
+            <button
+              type="button"
+              className="text-xs font-semibold text-[#1e4080] underline dark:text-sky-300"
+              onClick={() => {
+                setAdicConceptoId(sharedConceptoId);
+                setShowAdic(true);
+              }}
+            >
+              + Agregar ítem fuera de presupuesto
+            </button>
+          ) : (
+            <div className="rounded-lg border border-[var(--vl-card-border)] p-3 space-y-2">
+              <div className="text-xs font-semibold">Ítem fuera de presupuesto</div>
+              <p className="text-[11px] text-[var(--vl-text-muted)]">
+                Se suma al presupuesto total general (editado). No modifica el presupuesto original.
+              </p>
+              <select
+                className="w-full rounded-md border p-2 text-sm"
+                value={adicTallerId}
+                onChange={(e) => setAdicTallerId(e.target.value)}
+              >
+                <option value="">Proveedor…</option>
+                {talleres.map((t) => (
+                  <option key={t.id} value={t.id}>{t.razonSocial}</option>
+                ))}
+              </select>
+              <input
+                className="w-full rounded-md border p-2 text-sm"
+                placeholder="Descripción"
+                value={adicDesc}
+                onChange={(e) => setAdicDesc(e.target.value)}
+              />
+              <input
+                className="w-full min-h-11 rounded-md border p-2 text-base font-medium"
+                placeholder="Importe $"
+                type="number"
+                value={adicImp}
+                onChange={(e) => setAdicImp(e.target.value)}
+              />
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
+                  Nivel (por defecto = general; editable)
+                </div>
+                <ConceptoCascada
+                  cats={cats}
+                  valueId={adicConceptoId ?? sharedConceptoId}
+                  onPick={setAdicConceptoId}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={adicSaving || !adicDesc.trim() || !adicImp}
+                  className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+                  onClick={() => void agregarAdicional()}
+                >
+                  {adicSaving ? "Guardando…" : "Agregar"}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs underline text-[var(--vl-text-muted)]"
+                  onClick={() => setShowAdic(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!ocultarMontos && (
+        <div className="mt-3 rounded-xl border border-[var(--vl-card-border)] p-3 text-right">
+          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto total general</div>
+          <div className="text-xl font-bold tracking-tight">{total > 0 ? money(total) : "—"}</div>
+        </div>
+      )}
     </div>
   );
 }

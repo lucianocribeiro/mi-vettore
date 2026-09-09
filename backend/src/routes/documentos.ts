@@ -42,7 +42,6 @@ const CON_VENCIMIENTO = new Set<TipoDocumento>([
   TipoDocumento.VTV,
   TipoDocumento.SENASA,
   TipoDocumento.SEGURO,
-  TipoDocumento.CEDULA,
   TipoDocumento.HOMOLOGACION,
 ]);
 
@@ -65,7 +64,7 @@ const TIPOS_UNIDAD = new Set<TipoDocumento>([
   TipoDocumento.FOTO_VEHICULO,
 ]);
 
-/** Obligatorios (UI / validación blanda). SENASA y OTRA_DOCUMENTACION / SEGURO_ACCIDENTES son opcionales. */
+/** Obligatorios (UI / validación blanda). SENASA, Homologación, OTRA_DOCUMENTACION y SEGURO_ACCIDENTES son opcionales. Cédula no lleva vencimiento. */
 const TIPOS_OBLIGATORIOS = new Set<TipoDocumento>([
   TipoDocumento.DNI_FRENTE,
   TipoDocumento.DNI_DORSO,
@@ -75,7 +74,6 @@ const TIPOS_OBLIGATORIOS = new Set<TipoDocumento>([
   TipoDocumento.VTV,
   TipoDocumento.SEGURO,
   TipoDocumento.CEDULA,
-  TipoDocumento.HOMOLOGACION,
   TipoDocumento.FOTO_VEHICULO,
 ]);
 

@@ -38,6 +38,7 @@ import {
 } from "../../types";
 import { FichaDrawer } from "./FichaDrawer";
 import { Field, FormModal, inputClass } from "./FormModal";
+import { EquiposFrioAbmPanel } from "./EquiposFrioAbmPanel";
 
 type Tab =
   | "camioneta"
@@ -45,6 +46,7 @@ type Tab =
   | "empresas"
   | "usuarios"
   | "tiposServicio"
+  | "equiposFrio"
   | "talleres"
   | "asignacion";
 
@@ -745,6 +747,7 @@ export function M5FichaPage() {
     { id: "empresas", label: "Empresas" },
     { id: "usuarios", label: "Usuarios" },
     { id: "tiposServicio", label: "Tipos de servicio" },
+    { id: "equiposFrio", label: "Equipo de frío" },
   ];
 
   const camionetasFiltradas = useMemo(
@@ -1512,6 +1515,8 @@ export function M5FichaPage() {
           ])}
         />
       )}
+
+      {!loading && !error && tab === "equiposFrio" && <EquiposFrioAbmPanel />}
 
       {!loading && !error && tab === "talleres" && (
         <EntityTable

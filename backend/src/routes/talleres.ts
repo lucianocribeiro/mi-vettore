@@ -535,6 +535,7 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
     const q = String(req.query?.q ?? "").trim().toLowerCase();
+    const patenteQ = String(req.query?.patente ?? "").trim().toLowerCase();
     const ots = await prisma.ordenTrabajo.findMany({
       include: {
         solicitud: {
@@ -553,6 +554,17 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
       },
       orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
       take: 300,
+      ...(patenteQ
+        ? {
+            where: {
+              solicitud: {
+                camioneta: {
+                  patente: { contains: patenteQ, mode: "insensitive" as const },
+                },
+              },
+            },
+          }
+        : {}),
     });
 
     const cats = await prisma.categoriaDiagnostico.findMany({
@@ -636,6 +648,245 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
     res.status(500).json({ error: "Error al cargar historial de talleres" });
   }
 });
+
+/** Export historial por unidad (misma vista del listado). */
+router.get("/historial/export", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso para exportar" });
+      return;
+    }
+    const q = String(req.query?.q ?? "").trim().toLowerCase();
+    const ots = await prisma.ordenTrabajo.findMany({
+      include: {
+        solicitud: { include: { camioneta: true, chofer: true } },
+        tallerProveedor: true,
+        items: { orderBy: { createdAt: "asc" } },
+      },
+      orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
+      take: 1000,
+    });
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Historial talleres");
+    sheet.columns = [
+      { header: "Patente", key: "patente", width: 12 },
+      { header: "OT", key: "ot", width: 12 },
+      { header: "Falla", key: "falla", width: 28 },
+      { header: "Detalle", key: "detalle", width: 32 },
+      { header: "Chofer", key: "chofer", width: 22 },
+      { header: "Taller", key: "taller", width: 24 },
+      { header: "Descripcion", key: "descripcion", width: 32 },
+      { header: "Importe", key: "importe", width: 12 },
+      { header: "Tipo", key: "tipo", width: 12 },
+      { header: "Fecha", key: "fecha", width: 12 },
+      { header: "Cerrada", key: "cerrada", width: 12 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+
+    for (const ot of ots) {
+      const patente = ot.solicitud.camioneta.patente;
+      if (q && !patente.toLowerCase().includes(q) && !ot.numeroOT.toLowerCase().includes(q)) {
+        continue;
+      }
+      const items =
+        ot.items.length > 0
+          ? ot.items
+          : [
+              {
+                descripcion: ot.solicitud.falla,
+                importe: Number(ot.valorFinal) || 0,
+                tipo: "FACTURA",
+                tallerNombre: ot.tallerAsignado ?? "",
+                fecha: ot.cerradaAt ?? ot.createdAt,
+              },
+            ];
+      for (const it of items) {
+        sheet.addRow({
+          patente,
+          ot: ot.numeroOT,
+          falla: ot.solicitud.falla,
+          detalle: ot.solicitud.detalle,
+          chofer: ot.solicitud.chofer?.nombre ?? "",
+          taller:
+            ("tallerNombre" in it && it.tallerNombre) ||
+            ot.tallerProveedor?.razonSocial ||
+            ot.tallerAsignado ||
+            "",
+          descripcion: it.descripcion,
+          importe: it.importe,
+          tipo: it.tipo,
+          fecha: (it.fecha ?? ot.createdAt).toISOString().slice(0, 10),
+          cerrada: ot.cerradaAt ? ot.cerradaAt.toISOString().slice(0, 10) : "",
+        });
+      }
+    }
+
+    const filename = `historial_talleres_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al exportar historial" });
+  }
+});
+
+const uploadHistorial = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
+
+/** Importa historial cerrado desde Excel (Patente, Falla, Taller, Descripcion, Importe, Fecha). */
+router.post(
+  "/historial/import",
+  authenticate,
+  uploadHistorial.single("file"),
+  async (req: AuthedRequest, res) => {
+    try {
+      if (!isInternalOpsRole(req.user!.rol)) {
+        res.status(403).json({ error: "Sin permiso para importar" });
+        return;
+      }
+      if (!req.file?.buffer) {
+        res.status(400).json({ error: "Subí un archivo Excel (.xlsx)" });
+        return;
+      }
+      const workbook = new ExcelJS.Workbook();
+      // exceljs tipado estricto vs Buffer de Node 22
+      await workbook.xlsx.load(req.file.buffer as unknown as ArrayBuffer);
+      const sheet = workbook.worksheets[0];
+      if (!sheet) {
+        res.status(400).json({ error: "El Excel no tiene hojas" });
+        return;
+      }
+
+      const headerRow = sheet.getRow(1);
+      const headers: Record<string, number> = {};
+      headerRow.eachCell((cell, col) => {
+        const key = String(cell.value ?? "")
+          .trim()
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+        headers[key] = col;
+      });
+      const col = (...names: string[]) => {
+        for (const n of names) {
+          const k = n
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+          if (headers[k]) return headers[k];
+        }
+        return 0;
+      };
+      const cPatente = col("patente", "unidad");
+      const cFalla = col("falla");
+      const cDetalle = col("detalle");
+      const cTaller = col("taller");
+      const cDesc = col("descripcion", "descripción");
+      const cImporte = col("importe", "monto");
+      const cFecha = col("fecha", "cerrada");
+      if (!cPatente || !cFalla) {
+        res.status(400).json({
+          error: "El Excel debe tener columnas Patente y Falla (mínimo)",
+        });
+        return;
+      }
+
+      let creadas = 0;
+      let omitidas = 0;
+      const errores: string[] = [];
+
+      for (let r = 2; r <= sheet.rowCount; r++) {
+        const row = sheet.getRow(r);
+        const patente = String(row.getCell(cPatente).value ?? "")
+          .trim()
+          .toUpperCase();
+        if (!patente) continue;
+        const falla = String(row.getCell(cFalla).value ?? "").trim() || "Importación historial";
+        const detalle = cDetalle
+          ? String(row.getCell(cDetalle).value ?? "").trim()
+          : "Importado desde Excel";
+        const taller = cTaller ? String(row.getCell(cTaller).value ?? "").trim() : "";
+        const descripcion = cDesc
+          ? String(row.getCell(cDesc).value ?? "").trim() || falla
+          : falla;
+        const importeRaw = cImporte ? Number(row.getCell(cImporte).value) : 0;
+        const importe = Number.isFinite(importeRaw) ? importeRaw : 0;
+        let fecha = new Date();
+        if (cFecha) {
+          const v = row.getCell(cFecha).value;
+          if (v instanceof Date) fecha = v;
+          else if (typeof v === "string" || typeof v === "number") {
+            const d = new Date(v);
+            if (!Number.isNaN(d.getTime())) fecha = d;
+          }
+        }
+
+        const camioneta = await prisma.camioneta.findFirst({
+          where: { patente: { equals: patente, mode: "insensitive" } },
+        });
+        if (!camioneta) {
+          omitidas++;
+          errores.push(`Fila ${r}: patente ${patente} no encontrada`);
+          continue;
+        }
+
+        const numeroOT = await nextNumeroOT();
+        await prisma.$transaction(async (tx) => {
+          const solicitud = await tx.solicitudTaller.create({
+            data: {
+              camionetaId: camioneta.id,
+              solicitante: SolicitanteTaller.ADMINISTRATIVO,
+              falla,
+              detalle: detalle || "Importado desde Excel",
+              habilitadaCircular: true,
+              inhabilitado: false,
+              createdById: req.user!.id,
+            },
+          });
+          const ot = await tx.ordenTrabajo.create({
+            data: {
+              solicitudTallerId: solicitud.id,
+              numeroOT,
+              currentStep: 4,
+              sinPresupuesto: true,
+              tallerAsignado: taller || null,
+              valorFinal: importe > 0 ? importe : null,
+              cerradaAt: fecha,
+              kmAlMomento: camioneta.km,
+            },
+          });
+          if (descripcion || importe > 0) {
+            await tx.otItem.create({
+              data: {
+                otId: ot.id,
+                tipo: "FACTURA",
+                tallerNombre: taller,
+                descripcion,
+                importe,
+                fecha,
+                clasificacion: "OTRO",
+                clasificacionOtro: "Importación historial",
+              },
+            });
+          }
+        });
+        creadas++;
+      }
+
+      res.json({ creadas, omitidas, errores: errores.slice(0, 20) });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al importar historial" });
+    }
+  }
+);
 
 /** Historial por reparación (árbol de diagnóstico nivel 1/2/3 en ítems de OT). */
 router.get("/historial/reparaciones", authenticate, async (req: AuthedRequest, res) => {
@@ -1937,6 +2188,12 @@ router.post("/:id/retroceder", authenticate, async (req: AuthedRequest, res) => 
       res.status(400).json({ error: "OT cerrada: no se puede retroceder" });
       return;
     }
+    if (isCierreStep(ot.currentStep)) {
+      res.status(400).json({
+        error: "En comparación y cierre no se puede volver atrás",
+      });
+      return;
+    }
 
     const rol = req.user!.rol;
     const overrideComentario = parseOverrideComentario(req.body);
@@ -2043,10 +2300,15 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "Tipo de ítem inválido" });
       return;
     }
+    const adicionalEnAjuste =
+      tipoRaw === "PRESUPUESTO" &&
+      isAjusteStep(ot.currentStep) &&
+      !ot.sinPresupuesto;
     if (
       tipoRaw === "PRESUPUESTO" &&
       !isAsignacionOPresupuestoStep(ot.currentStep) &&
-      !(isAjusteStep(ot.currentStep) && ot.sinPresupuesto)
+      !(isAjusteStep(ot.currentStep) && ot.sinPresupuesto) &&
+      !adicionalEnAjuste
     ) {
       res.status(400).json({ error: "Los presupuestos se cargan en la etapa de presupuesto" });
       return;
@@ -2100,6 +2362,16 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
     } else {
       fecha = new Date();
     }
+    let categoriaDiagnosticoId: string | null = null;
+    if (req.body?.categoriaDiagnosticoId) {
+      const catId = String(req.body.categoriaDiagnosticoId);
+      const cat = await prisma.categoriaDiagnostico.findUnique({ where: { id: catId } });
+      if (!cat || cat.nivel !== 3) {
+        res.status(400).json({ error: "El concepto debe ser una hoja (nivel 3) del árbol" });
+        return;
+      }
+      categoriaDiagnosticoId = catId;
+    }
     await prisma.otItem.create({
       data: {
         otId: ot.id,
@@ -2112,6 +2384,9 @@ router.post("/:id/items", authenticate, async (req: AuthedRequest, res) => {
         clasificacion: clasif.clasificacion,
         clasificacionOtro: clasif.clasificacionOtro,
         fecha,
+        aprobado: adicionalEnAjuste ? true : undefined,
+        adicionalAjuste: adicionalEnAjuste,
+        categoriaDiagnosticoId: adicionalEnAjuste ? categoriaDiagnosticoId : undefined,
       },
     });
     if (tipoRaw === "PRESUPUESTO" && isAsignacionOPresupuestoStep(ot.currentStep)) {

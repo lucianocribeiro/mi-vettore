@@ -143,7 +143,6 @@ export const TIPOS_DOCUMENTO_CON_VENCIMIENTO: TipoDocumento[] = [
   "VTV",
   "SENASA",
   "SEGURO",
-  "CEDULA",
   "HOMOLOGACION",
 ];
 
@@ -175,7 +174,6 @@ export const TIPOS_DOCUMENTO_OBLIGATORIOS: TipoDocumento[] = [
   "VTV",
   "SEGURO",
   "CEDULA",
-  "HOMOLOGACION",
   "FOTO_VEHICULO",
 ];
 
