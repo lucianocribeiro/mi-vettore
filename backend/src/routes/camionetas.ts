@@ -260,6 +260,13 @@ router.post(
         res.status(400).json({ error: "Subí un archivo Excel (.xlsx)" });
         return;
       }
+      const modoRaw = String(req.body?.modo ?? req.query?.modo ?? "nuevos")
+        .trim()
+        .toLowerCase();
+      const modoActualizar =
+        modoRaw === "actualizar" ||
+        modoRaw === "update" ||
+        modoRaw === "actualizar datos";
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(req.file.buffer as unknown as ArrayBuffer);
       const sheet = workbook.worksheets[0];
@@ -301,6 +308,7 @@ router.post(
       }
 
       let creadas = 0;
+      let actualizadas = 0;
       let omitidas = 0;
       const errores: string[] = [];
       for (let r = 2; r <= sheet.rowCount; r++) {
@@ -346,11 +354,42 @@ router.post(
         const taller = cTaller
           ? String(row.getCell(cTaller).value ?? "").trim() || null
           : null;
+        const km = Number.isFinite(kmRaw) ? kmRaw : null;
+
+        if (modoActualizar) {
+          const dayStart = new Date(fecha);
+          dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = new Date(fecha);
+          dayEnd.setHours(23, 59, 59, 999);
+          const existente = await prisma.registroMantenimiento.findFirst({
+            where: {
+              camionetaId: camioneta.id,
+              tipo,
+              fecha: { gte: dayStart, lte: dayEnd },
+            },
+            orderBy: { createdAt: "desc" },
+          });
+          if (existente) {
+            await prisma.registroMantenimiento.update({
+              where: { id: existente.id },
+              data: {
+                fecha,
+                km,
+                detalle,
+                tallerNombre: taller,
+                fuente: "EXCEL_UPDATE",
+              },
+            });
+            actualizadas++;
+            continue;
+          }
+        }
+
         await prisma.registroMantenimiento.create({
           data: {
             camionetaId: camioneta.id,
             fecha,
-            km: Number.isFinite(kmRaw) ? kmRaw : null,
+            km,
             tipo,
             detalle,
             tallerNombre: taller,
@@ -359,7 +398,13 @@ router.post(
         });
         creadas++;
       }
-      res.json({ creadas, omitidas, errores: errores.slice(0, 10) });
+      res.json({
+        creadas,
+        actualizadas,
+        omitidas,
+        modo: modoActualizar ? "actualizar" : "nuevos",
+        errores: errores.slice(0, 10),
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al importar mantenimiento" });
@@ -750,6 +795,14 @@ router.post("/", ...write, async (req, res) => {
         seguroVencimiento: parseDate(req.body?.seguroVencimiento),
         vtbVencimiento: parseDate(req.body?.vtbVencimiento),
         estado: estadoRaw as EstadoCamioneta,
+        estadoDesde:
+          estadoRaw === "OPERATIVA"
+            ? null
+            : parseDate(req.body?.estadoDesde),
+        estadoHasta:
+          estadoRaw === "OPERATIVA"
+            ? null
+            : parseDate(req.body?.estadoHasta),
         empresaId,
       },
       include: includeAsignaciones,
@@ -915,6 +968,16 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
         return;
       }
       data.estado = s as EstadoCamioneta;
+      if (s === "OPERATIVA") {
+        data.estadoDesde = null;
+        data.estadoHasta = null;
+      }
+    }
+    if (req.body?.estadoDesde !== undefined) {
+      data.estadoDesde = parseDate(req.body.estadoDesde);
+    }
+    if (req.body?.estadoHasta !== undefined) {
+      data.estadoHasta = parseDate(req.body.estadoHasta);
     }
     if (req.body?.empresaId !== undefined) {
       const nextEmpresaId = strOrNull(req.body.empresaId);

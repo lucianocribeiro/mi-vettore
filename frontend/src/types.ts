@@ -349,6 +349,10 @@ export type Camioneta = {
   seguroVencimiento: string | null;
   vtbVencimiento: string | null;
   estado: EstadoCamioneta;
+  /** Inicio del periodo en estado no operativo. */
+  estadoDesde?: string | null;
+  /** Fin del periodo en estado no operativo. */
+  estadoHasta?: string | null;
   asignaciones?: AsignacionFlota[];
   /** Presente en respuestas de mantenimiento/update si el salto de km es alto. */
   alertaKmAnomalia?: boolean;

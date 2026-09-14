@@ -44,6 +44,7 @@ export function HistorialTalleresPage() {
   const [exportando, setExportando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [importModo, setImportModo] = useState<"nuevos" | "actualizar">("nuevos");
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -98,8 +99,10 @@ export function HistorialTalleresPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
+      fd.append("modo", importModo);
       const data = await apiFetch<{
         creadas: number;
+        actualizadas?: number;
         omitidas: number;
         errores?: string[];
       }>(
@@ -108,7 +111,12 @@ export function HistorialTalleresPage() {
         token
       );
       setImportMsg(
-        `Importadas ${data.creadas ?? 0}` +
+        (importModo === "actualizar"
+          ? `Actualizadas ${data.actualizadas ?? 0}`
+          : `Importadas ${data.creadas ?? 0}`) +
+          (data.creadas && importModo === "actualizar"
+            ? ` · nuevas ${data.creadas}`
+            : "") +
           (data.omitidas ? ` · omitidas ${data.omitidas}` : "") +
           (data.errores?.length ? ` · ${data.errores[0]}` : "")
       );
@@ -164,20 +172,40 @@ export function HistorialTalleresPage() {
               <Download size={14} />
               {exportando ? "Exportando…" : "Exportar Excel"}
             </button>
-            <label className="inline-flex min-h-9 cursor-pointer items-center rounded-md border border-dashed border-[#1e4080]/50 bg-[#1e4080]/5 px-3 text-xs font-semibold text-[#1e4080] dark:text-sky-300">
-              {importando ? "Importando…" : "Importar Excel"}
-              <input
-                type="file"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="sr-only"
-                disabled={importando}
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  e.target.value = "";
-                  void onImport(f);
-                }}
-              />
-            </label>
+            <div className="flex min-h-9 flex-wrap items-center gap-2 rounded-md border border-dashed border-[#1e4080]/50 bg-[#1e4080]/5 px-2 py-1 text-xs">
+              <label className="inline-flex items-center gap-1 font-semibold text-[#1e4080] dark:text-sky-300">
+                <input
+                  type="radio"
+                  name="import-modo-hist"
+                  checked={importModo === "nuevos"}
+                  onChange={() => setImportModo("nuevos")}
+                />
+                Datos nuevos
+              </label>
+              <label className="inline-flex items-center gap-1 font-semibold text-[#1e4080] dark:text-sky-300">
+                <input
+                  type="radio"
+                  name="import-modo-hist"
+                  checked={importModo === "actualizar"}
+                  onChange={() => setImportModo("actualizar")}
+                />
+                Actualizar datos
+              </label>
+              <label className="inline-flex cursor-pointer items-center rounded-md border border-[#1e4080]/40 bg-[var(--vl-page)] px-2 py-1 font-semibold text-[#1e4080] dark:text-sky-300">
+                {importando ? "Importando…" : "Importar Excel"}
+                <input
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="sr-only"
+                  disabled={importando}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    e.target.value = "";
+                    void onImport(f);
+                  }}
+                />
+              </label>
+            </div>
           </div>
           {importMsg && (
             <p className="text-[11px] text-[var(--vl-text-muted)]">{importMsg}</p>

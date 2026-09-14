@@ -226,6 +226,15 @@ export function FichaDrawer({
                     {cam.estado.replace("_", " ").toLowerCase()}
                   </Badge>
                 </div>
+                {cam.estado !== "OPERATIVA" &&
+                  (cam.estadoDesde || cam.estadoHasta) && (
+                    <Row
+                      label="Periodo estado"
+                      value={`${formatDate(cam.estadoDesde)} → ${
+                        cam.estadoHasta ? formatDate(cam.estadoHasta) : "sin fin"
+                      }`}
+                    />
+                  )}
               </section>
 
               <section className="space-y-3 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">

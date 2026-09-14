@@ -81,6 +81,9 @@ export function M6MantenimientoPage() {
   const [exportando, setExportando] = useState(false);
   const [importandoMant, setImportandoMant] = useState(false);
   const [mantMsg, setMantMsg] = useState<string | null>(null);
+  const [importModoMant, setImportModoMant] = useState<"nuevos" | "actualizar">(
+    "nuevos"
+  );
 
   async function exportarExcel() {
     if (!token) return;
@@ -130,13 +133,20 @@ export function M6MantenimientoPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
+      fd.append("modo", importModoMant);
       const data = await apiFetch<{
         creadas: number;
+        actualizadas?: number;
         omitidas: number;
         errores?: string[];
       }>("/api/camionetas/mantenimiento/import", { method: "POST", body: fd }, token);
       setMantMsg(
-        `Mantenimiento: importadas ${data.creadas ?? 0}` +
+        (importModoMant === "actualizar"
+          ? `Actualizadas ${data.actualizadas ?? 0}`
+          : `Importadas ${data.creadas ?? 0}`) +
+          (data.creadas && importModoMant === "actualizar"
+            ? ` · nuevas ${data.creadas}`
+            : "") +
           (data.omitidas ? ` · omitidas ${data.omitidas}` : "") +
           (data.errores?.length ? ` · ${data.errores[0]}` : "")
       );
@@ -310,8 +320,28 @@ export function M6MantenimientoPage() {
                 <Download size={13} />
                 Exportar historial
               </button>
-              <label className="inline-flex min-h-10 cursor-pointer items-center rounded-md border border-[var(--vl-card-border)] px-3 text-xs font-medium">
-                {importandoMant ? "Importando…" : "Importar historial"}
+              <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-[var(--vl-card-border)] px-3 text-xs font-medium">
+                <span className="inline-flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="import-modo-mant"
+                    checked={importModoMant === "nuevos"}
+                    onChange={() => setImportModoMant("nuevos")}
+                  />
+                  Nuevos
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="import-modo-mant"
+                    checked={importModoMant === "actualizar"}
+                    onChange={() => setImportModoMant("actualizar")}
+                  />
+                  Actualizar
+                </span>
+                <span className="border-l border-[var(--vl-card-border)] pl-2">
+                  {importandoMant ? "Importando…" : "Importar historial"}
+                </span>
                 <input
                   type="file"
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

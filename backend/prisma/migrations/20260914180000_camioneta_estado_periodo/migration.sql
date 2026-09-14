@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Camioneta" ADD COLUMN IF NOT EXISTS "estadoDesde" TIMESTAMP(3);
+ALTER TABLE "Camioneta" ADD COLUMN IF NOT EXISTS "estadoHasta" TIMESTAMP(3);

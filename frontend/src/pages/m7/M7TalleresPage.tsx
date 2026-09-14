@@ -1060,7 +1060,7 @@ export function M7TalleresPage() {
                         !isCierreStep(ot.currentStep) && (
                         <button
                           type="button"
-                          disabled={busy || !hayCambiosPendientes}
+                          disabled={busy}
                           onClick={() => {
                             void (async () => {
                               if (isAjusteStep(ot.currentStep) && !ot.sinPresupuesto) {
@@ -1094,49 +1094,13 @@ export function M7TalleresPage() {
                               window.setTimeout(() => setGuardadoOk(false), 2000);
                             })();
                           }}
-                          className={`inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
+                          className={`inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 px-3 text-sm font-semibold disabled:opacity-50 ${
                             hayCambiosPendientes && !guardadoOk
                               ? "border-[#1e4080] bg-[#1e4080] text-white"
                               : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"
                           }`}
                         >
                           {guardadoOk ? "Guardado" : "Guardar"}
-                        </button>
-                      )}
-                      {!vistaBrowse &&
-                        editandoPasoActual &&
-                        ot.currentStep < OT_STEPS.length - 1 && (
-                        <button
-                          type="button"
-                          disabled={
-                            busy ||
-                            (!puedeEditarTaller &&
-                              !canAdvanceFromStep(rol, ot.currentStep))
-                          }
-                          title={
-                            !puedeEditarTaller && !canAdvanceFromStep(rol, ot.currentStep)
-                              ? "En esta etapa solo Vettore puede continuar"
-                              : undefined
-                          }
-                          aria-label="Continuar"
-                          onClick={() => {
-                            const sinItems =
-                              isAsignacionOPresupuestoStep(ot.currentStep) &&
-                              (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO")
-                                .length === 0;
-                            if (sinItems) {
-                              setConfirmSinPresupuesto(true);
-                              return;
-                            }
-                            void call(`/api/talleres/${ot.id}/avanzar`, {
-                              method: "POST",
-                              body: JSON.stringify({}),
-                            }).then(() => setBrowseStep(null));
-                          }}
-                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[#1e4080] bg-[#1e4080] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Continuar
-                          <ChevronRight size={18} />
                         </button>
                       )}
                       {!vistaBrowse &&
@@ -1152,11 +1116,53 @@ export function M7TalleresPage() {
                           <Check size={18} /> Cerrar OT
                         </button>
                       )}
-                      {displayStep < maxBrowseStep && (
+                      {((!vistaBrowse &&
+                        editandoPasoActual &&
+                        ot.currentStep < OT_STEPS.length - 1 &&
+                        (puedeEditarTaller ||
+                          canAdvanceFromStep(rol, ot.currentStep))) ||
+                        displayStep < maxBrowseStep) && (
                         <button
                           type="button"
-                          aria-label="Siguiente"
+                          aria-label={
+                            !vistaBrowse &&
+                            editandoPasoActual &&
+                            displayStep === ot.currentStep &&
+                            ot.currentStep < OT_STEPS.length - 1
+                              ? "Avanzar etapa"
+                              : "Siguiente"
+                          }
+                          disabled={
+                            busy ||
+                            (!vistaBrowse &&
+                              editandoPasoActual &&
+                              displayStep === ot.currentStep &&
+                              !puedeEditarTaller &&
+                              !canAdvanceFromStep(rol, ot.currentStep))
+                          }
                           onClick={() => {
+                            const puedeAvanzar =
+                              !vistaBrowse &&
+                              editandoPasoActual &&
+                              displayStep === ot.currentStep &&
+                              ot.currentStep < OT_STEPS.length - 1 &&
+                              (puedeEditarTaller ||
+                                canAdvanceFromStep(rol, ot.currentStep));
+                            if (puedeAvanzar) {
+                              const sinItems =
+                                isAsignacionOPresupuestoStep(ot.currentStep) &&
+                                (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO")
+                                  .length === 0;
+                              if (sinItems) {
+                                setConfirmSinPresupuesto(true);
+                                return;
+                              }
+                              void call(`/api/talleres/${ot.id}/avanzar`, {
+                                method: "POST",
+                                body: JSON.stringify({}),
+                              }).then(() => setBrowseStep(null));
+                              return;
+                            }
                             const next = displayStep + 1;
                             if (
                               !vistaBrowse &&
@@ -1168,7 +1174,7 @@ export function M7TalleresPage() {
                               setBrowseStep(next);
                             }
                           }}
-                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] text-sm font-semibold text-white"
+                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] text-sm font-semibold text-white disabled:opacity-50"
                         >
                           <ChevronRight size={22} />
                         </button>

@@ -759,6 +759,13 @@ router.post(
         res.status(400).json({ error: "Subí un archivo Excel (.xlsx)" });
         return;
       }
+      const modoRaw = String(req.body?.modo ?? req.query?.modo ?? "nuevos")
+        .trim()
+        .toLowerCase();
+      const modoActualizar =
+        modoRaw === "actualizar" ||
+        modoRaw === "update" ||
+        modoRaw === "actualizar datos";
       const workbook = new ExcelJS.Workbook();
       // exceljs tipado estricto vs Buffer de Node 22
       await workbook.xlsx.load(req.file.buffer as unknown as ArrayBuffer);
@@ -803,6 +810,7 @@ router.post(
       }
 
       let creadas = 0;
+      let actualizadas = 0;
       let omitidas = 0;
       const errores: string[] = [];
 
@@ -839,6 +847,66 @@ router.post(
           omitidas++;
           errores.push(`Fila ${r}: patente ${patente} no encontrada`);
           continue;
+        }
+
+        const dayStart = new Date(fecha);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(fecha);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        if (modoActualizar) {
+          const existente = await prisma.ordenTrabajo.findFirst({
+            where: {
+              cerradaAt: { gte: dayStart, lte: dayEnd },
+              solicitud: {
+                camionetaId: camioneta.id,
+                falla,
+              },
+            },
+            include: { items: true },
+            orderBy: { cerradaAt: "desc" },
+          });
+          if (existente) {
+            await prisma.$transaction(async (tx) => {
+              await tx.ordenTrabajo.update({
+                where: { id: existente.id },
+                data: {
+                  tallerAsignado: taller || existente.tallerAsignado,
+                  valorFinal: importe > 0 ? importe : existente.valorFinal,
+                  cerradaAt: fecha,
+                },
+              });
+              if (descripcion || importe > 0) {
+                const firstItem = existente.items[0];
+                if (firstItem) {
+                  await tx.otItem.update({
+                    where: { id: firstItem.id },
+                    data: {
+                      tallerNombre: taller || firstItem.tallerNombre,
+                      descripcion: descripcion || firstItem.descripcion,
+                      importe: importe > 0 ? importe : firstItem.importe,
+                      fecha,
+                    },
+                  });
+                } else {
+                  await tx.otItem.create({
+                    data: {
+                      otId: existente.id,
+                      tipo: "FACTURA",
+                      tallerNombre: taller,
+                      descripcion,
+                      importe,
+                      fecha,
+                      clasificacion: "OTRO",
+                      clasificacionOtro: "Importación historial",
+                    },
+                  });
+                }
+              }
+            });
+            actualizadas++;
+            continue;
+          }
         }
 
         const numeroOT = await nextNumeroOT();
@@ -885,7 +953,13 @@ router.post(
         creadas++;
       }
 
-      res.json({ creadas, omitidas, errores: errores.slice(0, 20) });
+      res.json({
+        creadas,
+        actualizadas,
+        omitidas,
+        modo: modoActualizar ? "actualizar" : "nuevos",
+        errores: errores.slice(0, 20),
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al importar historial" });

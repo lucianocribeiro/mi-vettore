@@ -23,6 +23,7 @@ import {
   TIPO_TALLER_LABEL,
   canWriteMaster,
   currentAsignacion,
+  formatDate,
   isInternalOps,
   tiposFrioParaEquipo,
   type Camioneta,
@@ -171,6 +172,8 @@ export function M5FichaPage() {
   const [fEstadoCam, setFEstadoCam] = useState<
     "OPERATIVA" | "EN_TALLER" | "DE_VACACIONES" | "FUERA_SERVICIO"
   >("OPERATIVA");
+  const [fEstadoDesde, setFEstadoDesde] = useState("");
+  const [fEstadoHasta, setFEstadoHasta] = useState("");
   const [fEmpresaId, setFEmpresaId] = useState("");
   const [fEmail, setFEmail] = useState("");
   const [fPassword, setFPassword] = useState("");
@@ -311,6 +314,8 @@ export function M5FichaPage() {
     setFSeguroVenc("");
     setFVtbVenc("");
     setFEstadoCam("OPERATIVA");
+    setFEstadoDesde("");
+    setFEstadoHasta("");
     setFEmpresaId("");
     setFEmail("");
     setFPassword("");
@@ -391,6 +396,12 @@ export function M5FichaPage() {
     );
     setFVtbVenc(item.vtbVencimiento ? item.vtbVencimiento.slice(0, 10) : "");
     setFEstadoCam(item.estado);
+    setFEstadoDesde(
+      item.estadoDesde ? item.estadoDesde.slice(0, 10) : ""
+    );
+    setFEstadoHasta(
+      item.estadoHasta ? item.estadoHasta.slice(0, 10) : ""
+    );
     setFEmpresaId(item.empresaId ?? currentAsignacion(item)?.empresaId ?? "");
     setForm({ kind: "camioneta", item });
   }
@@ -497,6 +508,8 @@ export function M5FichaPage() {
           seguroVencimiento: fSeguroVenc || null,
           vtbVencimiento: fVtbVenc || null,
           estado: fEstadoCam,
+          estadoDesde: fEstadoCam === "OPERATIVA" ? null : fEstadoDesde || null,
+          estadoHasta: fEstadoCam === "OPERATIVA" ? null : fEstadoHasta || null,
           empresaId: fEmpresaId || null,
         };
         if (form.item) {
@@ -1023,6 +1036,18 @@ export function M5FichaPage() {
                       <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
                         {ESTADO_CAMIONETA_LABEL[c.estado]}
                       </Badge>
+                      {c.estado !== "OPERATIVA" &&
+                        (c.estadoDesde || c.estadoHasta) && (
+                          <span className="text-[var(--vl-text-muted)]">
+                            {c.estadoDesde
+                              ? formatDate(c.estadoDesde)
+                              : "—"}
+                            {" → "}
+                            {c.estadoHasta
+                              ? formatDate(c.estadoHasta)
+                              : "sin fin"}
+                          </span>
+                        )}
                       {(c.tipoServicio?.nombre || c.tipoTransporte) && (
                         <span className="text-[var(--vl-text-muted)]">
                           {c.tipoServicio?.nombre ||
@@ -1990,6 +2015,31 @@ export function M5FichaPage() {
                   <option value="FUERA_SERVICIO">Fuera de servicio</option>
                 </select>
               </Field>
+              {fEstadoCam !== "OPERATIVA" && (
+                <>
+                  <Field label="Estado desde">
+                    <input
+                      type="date"
+                      className={inputClass}
+                      value={fEstadoDesde}
+                      onChange={(e) => setFEstadoDesde(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Estado hasta">
+                    <input
+                      type="date"
+                      className={inputClass}
+                      value={fEstadoHasta}
+                      onChange={(e) => setFEstadoHasta(e.target.value)}
+                    />
+                  </Field>
+                  <p className="col-span-full text-[11px] text-[var(--vl-text-muted)]">
+                    Periodo en el que la unidad permanece {fEstadoCam === "EN_TALLER" ? "en taller" : fEstadoCam === "DE_VACACIONES" ? "de vacaciones" : "fuera de servicio"}.
+                    Podés dejar “hasta” vacío si aún no hay fecha de retorno.
+                  </p>
+                </>
+              )}
               <Field label="Empresa de transporte (propietaria)">
                 <select
                   className={inputClass}

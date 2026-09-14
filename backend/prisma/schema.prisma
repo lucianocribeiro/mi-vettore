@@ -242,6 +242,9 @@ model Camioneta {
   /// VTV (Verificación Técnica Vehicular) — vencimiento
   vtbVencimiento         DateTime?
   estado                 EstadoCamioneta  @default(OPERATIVA)
+  /// Periodo en que la unidad permanece en estado no operativo (taller / vacaciones / fuera).
+  estadoDesde            DateTime?
+  estadoHasta            DateTime?
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   asignaciones           AsignacionFlota[]
