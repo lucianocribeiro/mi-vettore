@@ -228,7 +228,6 @@ export function M7TalleresPage() {
   const [comentarioTexto, setComentarioTexto] = useState("");
   const [browseStep, setBrowseStep] = useState<number | null>(null);
   const [importeDrafts, setImporteDrafts] = useState<Record<string, number>>({});
-  const [guardadoOk, setGuardadoOk] = useState(false);
   const [confirmCerrar, setConfirmCerrar] = useState(false);
   const [confirmSinPresupuesto, setConfirmSinPresupuesto] = useState(false);
   const puedeEditarTaller = isOps(rol);
@@ -1049,11 +1048,7 @@ export function M7TalleresPage() {
                               setBrowseStep(next);
                             }
                           }}
-                          className={`inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 text-sm font-semibold ${
-                            guardadoOk
-                              ? "border-slate-400 bg-slate-400 text-white dark:border-slate-500 dark:bg-slate-500"
-                              : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"
-                          }`}
+                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] text-sm font-semibold text-white"
                         >
                           <ChevronLeft size={22} />
                         </button>
@@ -1084,6 +1079,7 @@ export function M7TalleresPage() {
                                     );
                                   }
                                   await load();
+                                  setImporteDrafts({});
                                 } catch (err) {
                                   setError(
                                     err instanceof ApiError
@@ -1093,20 +1089,18 @@ export function M7TalleresPage() {
                                 } finally {
                                   setBusy(false);
                                 }
+                              } else {
+                                setImporteDrafts({});
                               }
-                              setGuardadoOk(true);
-                              window.setTimeout(() => setGuardadoOk(false), 2000);
                             })();
                           }}
                           className={`inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 px-3 text-sm font-semibold disabled:opacity-50 ${
-                            guardadoOk
-                              ? "border-slate-400 bg-slate-400 text-white dark:border-slate-500 dark:bg-slate-500"
-                              : hayCambiosPendientes
-                                ? "border-[#1e4080] bg-[#1e4080] text-white"
-                                : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"
+                            hayCambiosPendientes
+                              ? "border-[#1e4080] bg-[#1e4080] text-white"
+                              : "border-slate-400 bg-slate-400 text-white dark:border-slate-500 dark:bg-slate-500"
                           }`}
                         >
-                          {guardadoOk ? "Guardado" : "Guardar"}
+                          {hayCambiosPendientes ? "Guardar" : "Guardado"}
                         </button>
                       )}
                       {!vistaBrowse &&
@@ -1180,11 +1174,7 @@ export function M7TalleresPage() {
                               setBrowseStep(next);
                             }
                           }}
-                          className={`inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 text-sm font-semibold disabled:opacity-50 ${
-                            guardadoOk
-                              ? "border-slate-400 bg-slate-400 text-white dark:border-slate-500 dark:bg-slate-500"
-                              : "border-[#1e4080] bg-[#1e4080] text-white"
-                          }`}
+                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] text-sm font-semibold text-white disabled:opacity-50"
                         >
                           <ChevronRight size={22} />
                         </button>
