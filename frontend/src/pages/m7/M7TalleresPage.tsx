@@ -1258,6 +1258,71 @@ export function M7TalleresPage() {
         />
       )}
 
+      {confirmAvanzarSinGuardar && ot && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="avanzar-sin-guardar-title"
+          onClick={() => !busy && setConfirmAvanzarSinGuardar(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="avanzar-sin-guardar-title"
+              className="text-base font-bold text-[var(--vl-heading)]"
+            >
+              ¿Avanzar sin guardar?
+            </h3>
+            <p className="mt-2 text-sm text-[var(--vl-text-muted)]">
+              Estás avanzando sin guardar la etapa{" "}
+              <strong className="text-[var(--vl-heading)]">
+                {OT_STEPS[ot.currentStep]?.label ?? "actual"}
+              </strong>
+              . Los cambios pendientes se van a perder. ¿Estás seguro?
+            </p>
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirmAvanzarSinGuardar(false)}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-4 text-sm font-semibold sm:flex-none sm:min-w-[7.5rem]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  void (async () => {
+                    setImporteDrafts({});
+                    const sinItems =
+                      isAsignacionOPresupuestoStep(ot.currentStep) &&
+                      (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO")
+                        .length === 0;
+                    setConfirmAvanzarSinGuardar(false);
+                    if (sinItems) {
+                      setConfirmSinPresupuesto(true);
+                      return;
+                    }
+                    await call(`/api/talleres/${ot.id}/avanzar`, {
+                      method: "POST",
+                      body: JSON.stringify({}),
+                    });
+                    setBrowseStep(null);
+                  })();
+                }}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-amber-600 bg-amber-600 px-4 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none sm:min-w-[11rem]"
+              >
+                {busy ? "Avanzando…" : "Sí, avanzar sin guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmSinPresupuesto && ot && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
