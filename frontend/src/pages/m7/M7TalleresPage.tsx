@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge } from "../../components/Badge";
 import {
@@ -237,6 +237,11 @@ export function M7TalleresPage() {
   const [itemImp, setItemImp] = useState("");
   const [itemObs, setItemObs] = useState("");
   const [itemTallerId, setItemTallerId] = useState("");
+  const [itemFormDirty, setItemFormDirty] = useState(false);
+  const itemSaveRef = useRef<(() => Promise<boolean>) | null>(null);
+  const registerItemSave = useCallback((fn: (() => Promise<boolean>) | null) => {
+    itemSaveRef.current = fn;
+  }, []);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -343,12 +348,18 @@ export function M7TalleresPage() {
   const ocultarMontos = vistaChofer;
   const hayCambiosPendientes = useMemo(() => {
     if (!ot) return false;
+    if (itemFormDirty) return true;
     return Object.entries(importeDrafts).some(([id, draft]) => {
       if (!Number.isFinite(draft) || draft < 0) return false;
       const item = (ot.items ?? []).find((i) => i.id === id);
       return !!item && item.importe !== draft;
     });
-  }, [ot, importeDrafts]);
+  }, [ot, importeDrafts, itemFormDirty]);
+
+  useEffect(() => {
+    setItemFormDirty(false);
+    itemSaveRef.current = null;
+  }, [ot?.id, displayStep]);
 
   function replaceOt(updated: OrdenTrabajo) {
     setOts((prev) =>
@@ -754,8 +765,13 @@ export function M7TalleresPage() {
                             tallerId={itemTallerId}
                             setTallerId={setItemTallerId}
                             busy={busy}
-                            onSaved={replaceOt}
+                            onSaved={(updated) => {
+                              replaceOt(updated);
+                              setItemFormDirty(false);
+                            }}
                             onError={setError}
+                            onDirtyChange={setItemFormDirty}
+                            onRegisterSave={registerItemSave}
                           />
                           {editandoPasoActual && puedeEditarTaller && (
                             <div className="rounded-lg border border-dashed border-[var(--vl-card-border)] p-3">
@@ -833,8 +849,13 @@ export function M7TalleresPage() {
                               tallerId={itemTallerId}
                               setTallerId={setItemTallerId}
                               busy={busy}
-                              onSaved={replaceOt}
+                              onSaved={(updated) => {
+                                replaceOt(updated);
+                                setItemFormDirty(false);
+                              }}
                               onError={setError}
+                              onDirtyChange={setItemFormDirty}
+                              onRegisterSave={registerItemSave}
                             />
                           </div>
                         ) : (
@@ -1064,6 +1085,20 @@ export function M7TalleresPage() {
                           disabled={busy}
                           onClick={() => {
                             void (async () => {
+                              if (itemSaveRef.current && itemFormDirty) {
+                                setBusy(true);
+                                try {
+                                  const ok = await itemSaveRef.current();
+                                  if (!ok) {
+                                    setError(
+                                      "Completá los campos obligatorios del ítem para guardar"
+                                    );
+                                  }
+                                } finally {
+                                  setBusy(false);
+                                }
+                                return;
+                              }
                               if (isAjusteStep(ot.currentStep) && !ot.sinPresupuesto) {
                                 setBusy(true);
                                 try {
@@ -2164,6 +2199,7 @@ function AjusteImportesChecklist({
 
 function ItemsEditor({
   ot, token, talleres, tipo, setTipo, lockTipo, hideTotal, showSubtotales, requireClasif, readOnly, desc, setDesc, imp, setImp, obs, setObs, tallerId, setTallerId, busy, onSaved, onError,
+  onDirtyChange, onRegisterSave,
 }: {
   ot: OrdenTrabajo;
   token: string;
@@ -2183,6 +2219,8 @@ function ItemsEditor({
   busy: boolean;
   onSaved: (ot: OrdenTrabajo) => void;
   onError?: (msg: string | null) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onRegisterSave?: (fn: (() => Promise<boolean>) | null) => void;
 }) {
   const [clasificacion, setClasificacion] = useState<ClasificacionGasto | "">("");
   const [clasificacionOtro, setClasificacionOtro] = useState("");
@@ -2196,8 +2234,34 @@ function ItemsEditor({
   const proveedorObligatorio = tipo === "FACTURA" || !!showSubtotales;
   const verSubtotal = showSubtotales || !hideTotal;
 
-  async function add() {
-    if (!puedeSumar || saving) return;
+  const faltaClasif =
+    gastoRequiereClasif &&
+    (!clasificacion || (clasificacion === "OTRO" && clasificacionOtro.trim().length < 2));
+  const faltaProveedor = proveedorObligatorio && !tallerId;
+  const puedeSumar =
+    !!desc.trim() &&
+    !!imp &&
+    Number.isFinite(Number(imp)) &&
+    Number(imp) >= 0 &&
+    !faltaProveedor &&
+    !faltaClasif;
+
+  const formDirty =
+    !readOnly &&
+    (!!desc.trim() ||
+      !!imp.trim() ||
+      !!obs.trim() ||
+      !!tallerId ||
+      !!clasificacion ||
+      !!clasificacionOtro.trim());
+
+  useEffect(() => {
+    onDirtyChange?.(formDirty);
+    return () => onDirtyChange?.(false);
+  }, [formDirty, onDirtyChange]);
+
+  async function add(): Promise<boolean> {
+    if (!puedeSumar || saving) return false;
     setSaving(true);
     onError?.(null);
     try {
@@ -2218,12 +2282,27 @@ function ItemsEditor({
       setDesc(""); setImp(""); setObs("");
       setClasificacion(""); setClasificacionOtro("");
       setFecha(todayInputDate());
+      onDirtyChange?.(false);
+      return true;
     } catch (err) {
       onError?.(err instanceof ApiError ? err.message : "No se pudo guardar el ítem");
+      return false;
     } finally {
       setSaving(false);
     }
   }
+
+  const addRef = useRef(add);
+  addRef.current = add;
+
+  useEffect(() => {
+    if (readOnly) {
+      onRegisterSave?.(null);
+      return () => onRegisterSave?.(null);
+    }
+    onRegisterSave?.(() => addRef.current());
+    return () => onRegisterSave?.(null);
+  }, [readOnly, onRegisterSave]);
 
   async function remove(id: string) {
     const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, { method: "DELETE" }, token);
@@ -2235,18 +2314,6 @@ function ItemsEditor({
     if (i.clasificacion === "OTRO") return i.clasificacionOtro || "Otro";
     return CLASIFICACION_LABEL[i.clasificacion];
   }
-
-  const faltaClasif =
-    gastoRequiereClasif &&
-    (!clasificacion || (clasificacion === "OTRO" && clasificacionOtro.trim().length < 2));
-  const faltaProveedor = proveedorObligatorio && !tallerId;
-  const puedeSumar =
-    !!desc.trim() &&
-    !!imp &&
-    Number.isFinite(Number(imp)) &&
-    Number(imp) >= 0 &&
-    !faltaProveedor &&
-    !faltaClasif;
 
   return (
     <div className={readOnly ? "rounded-lg border border-slate-200 bg-slate-50/80 p-3 opacity-80 dark:border-slate-700 dark:bg-slate-900/40" : undefined}>
