@@ -230,6 +230,7 @@ export function M7TalleresPage() {
   const [importeDrafts, setImporteDrafts] = useState<Record<string, number>>({});
   const [confirmCerrar, setConfirmCerrar] = useState(false);
   const [confirmSinPresupuesto, setConfirmSinPresupuesto] = useState(false);
+  const [confirmAvanzarSinGuardar, setConfirmAvanzarSinGuardar] = useState(false);
   const puedeEditarTaller = isOps(rol);
 
   const [itemDesc, setItemDesc] = useState("");
@@ -320,6 +321,7 @@ export function M7TalleresPage() {
     setImporteDrafts({});
     setConfirmCerrar(false);
     setConfirmSinPresupuesto(false);
+    setConfirmAvanzarSinGuardar(false);
   }, [ot?.id]);
 
   const displayStep = browseStep ?? ot?.currentStep ?? 0;
@@ -1149,6 +1151,10 @@ export function M7TalleresPage() {
                               (puedeEditarTaller ||
                                 canAdvanceFromStep(rol, ot.currentStep));
                             if (puedeAvanzar) {
+                              if (hayCambiosPendientes) {
+                                setConfirmAvanzarSinGuardar(true);
+                                return;
+                              }
                               const sinItems =
                                 isAsignacionOPresupuestoStep(ot.currentStep) &&
                                 (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO")
