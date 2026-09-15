@@ -1049,7 +1049,11 @@ export function M7TalleresPage() {
                               setBrowseStep(next);
                             }
                           }}
-                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] text-sm font-semibold"
+                          className={`inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 text-sm font-semibold ${
+                            guardadoOk
+                              ? "border-slate-400 bg-slate-400 text-white dark:border-slate-500 dark:bg-slate-500"
+                              : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"
+                          }`}
                         >
                           <ChevronLeft size={22} />
                         </button>
@@ -1095,9 +1099,11 @@ export function M7TalleresPage() {
                             })();
                           }}
                           className={`inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 px-3 text-sm font-semibold disabled:opacity-50 ${
-                            hayCambiosPendientes && !guardadoOk
-                              ? "border-[#1e4080] bg-[#1e4080] text-white"
-                              : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"
+                            guardadoOk
+                              ? "border-slate-400 bg-slate-400 text-white dark:border-slate-500 dark:bg-slate-500"
+                              : hayCambiosPendientes
+                                ? "border-[#1e4080] bg-[#1e4080] text-white"
+                                : "border-[var(--vl-card-border)] bg-[var(--vl-page)] text-[var(--vl-text)]"
                           }`}
                         >
                           {guardadoOk ? "Guardado" : "Guardar"}
@@ -1174,7 +1180,11 @@ export function M7TalleresPage() {
                               setBrowseStep(next);
                             }
                           }}
-                          className="inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] text-sm font-semibold text-white disabled:opacity-50"
+                          className={`inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 text-sm font-semibold disabled:opacity-50 ${
+                            guardadoOk
+                              ? "border-slate-400 bg-slate-400 text-white dark:border-slate-500 dark:bg-slate-500"
+                              : "border-[#1e4080] bg-[#1e4080] text-white"
+                          }`}
                         >
                           <ChevronRight size={22} />
                         </button>
