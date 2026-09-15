@@ -2324,9 +2324,11 @@ function ItemsEditor({
   const [clasificacionOtro, setClasificacionOtro] = useState("");
   const [fecha, setFecha] = useState(todayInputDate);
   const [saving, setSaving] = useState(false);
-  const items = (ot.items ?? []).filter((i) =>
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+  const allItems = (ot.items ?? []).filter((i) =>
     tipo === "PRESUPUESTO" ? i.tipo === "PRESUPUESTO" : i.tipo !== "PRESUPUESTO"
   );
+  const items = allItems.filter((i) => !pendingDeleteIds.includes(i.id));
   const total = items.reduce((a, i) => a + i.importe, 0);
   const gastoRequiereClasif = tipo === "FACTURA" || !!requireClasif;
   const proveedorObligatorio = tipo === "FACTURA" || !!showSubtotales;
@@ -2344,19 +2346,34 @@ function ItemsEditor({
     !faltaProveedor &&
     !faltaClasif;
 
-  const formDirty =
-    !readOnly &&
-    (!!desc.trim() ||
-      !!imp.trim() ||
-      !!obs.trim() ||
-      !!tallerId ||
-      !!clasificacion ||
-      !!clasificacionOtro.trim());
+  const fieldsDirty =
+    !!desc.trim() ||
+    !!imp.trim() ||
+    !!obs.trim() ||
+    !!tallerId ||
+    !!clasificacion ||
+    !!clasificacionOtro.trim();
+  const formDirty = !readOnly && (fieldsDirty || pendingDeleteIds.length > 0);
 
   useEffect(() => {
     onDirtyChange?.(formDirty);
     return () => onDirtyChange?.(false);
   }, [formDirty, onDirtyChange]);
+
+  // Si el servidor ya no tiene el ítem, limpiar pending.
+  useEffect(() => {
+    const ids = new Set(
+      (ot.items ?? [])
+        .filter((i) =>
+          tipo === "PRESUPUESTO" ? i.tipo === "PRESUPUESTO" : i.tipo !== "PRESUPUESTO"
+        )
+        .map((i) => i.id)
+    );
+    setPendingDeleteIds((prev) => {
+      const next = prev.filter((id) => ids.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [ot.items, tipo]);
 
   async function add(): Promise<boolean> {
     if (!puedeSumar || saving) return false;
@@ -2380,7 +2397,6 @@ function ItemsEditor({
       setDesc(""); setImp(""); setObs("");
       setClasificacion(""); setClasificacionOtro("");
       setFecha(todayInputDate());
-      onDirtyChange?.(false);
       return true;
     } catch (err) {
       onError?.(err instanceof ApiError ? err.message : "No se pudo guardar el ítem");
@@ -2390,21 +2406,54 @@ function ItemsEditor({
     }
   }
 
-  const addRef = useRef(add);
-  addRef.current = add;
+  async function persistPendingDeletes(): Promise<boolean> {
+    if (pendingDeleteIds.length === 0) return true;
+    try {
+      let last: OrdenTrabajo | null = null;
+      for (const id of pendingDeleteIds) {
+        last = await apiFetch<OrdenTrabajo>(
+          `/api/talleres/${ot.id}/items/${id}`,
+          { method: "DELETE" },
+          token
+        );
+      }
+      if (last) onSaved(last);
+      setPendingDeleteIds([]);
+      return true;
+    } catch (err) {
+      onError?.(err instanceof ApiError ? err.message : "No se pudo eliminar el ítem");
+      return false;
+    }
+  }
+
+  async function saveAll(): Promise<boolean> {
+    if (saving) return false;
+    onError?.(null);
+    const deleted = await persistPendingDeletes();
+    if (!deleted) return false;
+    if (!fieldsDirty) {
+      onDirtyChange?.(false);
+      return true;
+    }
+    if (!puedeSumar) return false;
+    return add();
+  }
+
+  const saveRef = useRef(saveAll);
+  saveRef.current = saveAll;
 
   useEffect(() => {
     if (readOnly) {
       onRegisterSave?.(null);
       return () => onRegisterSave?.(null);
     }
-    onRegisterSave?.(() => addRef.current());
+    onRegisterSave?.(() => saveRef.current());
     return () => onRegisterSave?.(null);
   }, [readOnly, onRegisterSave]);
 
-  async function remove(id: string) {
-    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, { method: "DELETE" }, token);
-    onSaved(updated);
+  function remove(id: string) {
+    if (readOnly) return;
+    setPendingDeleteIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }
 
   function clasifLabel(i: OtItem) {
@@ -2445,7 +2494,7 @@ function ItemsEditor({
                   <td>{clasifLabel(i)}</td>
                   {!showSubtotales && <td>{money(i.importe)}</td>}
                   {!readOnly && (
-                    <td><button type="button" className="underline" onClick={() => void remove(i.id)}>Eliminar</button></td>
+                    <td><button type="button" className="underline" onClick={() => remove(i.id)}>Eliminar</button></td>
                   )}
                 </tr>
               ))}
@@ -2499,7 +2548,7 @@ function ItemsEditor({
         )}
         <input className="sm:col-span-2 rounded-md border p-2 text-sm" placeholder="Observación (proveedor / n° factura)" value={obs} onChange={(e) => setObs(e.target.value)} />
       </div>
-      {!puedeSumar && (
+      {!puedeSumar && fieldsDirty && (
         <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
           Completá{" "}
           {[
@@ -2513,11 +2562,20 @@ function ItemsEditor({
           para guardar.
         </p>
       )}
+      {pendingDeleteIds.length > 0 && (
+        <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
+          Hay ítems marcados para eliminar. Confirmá con Guardar.
+        </p>
+      )}
       <button
         type="button"
-        disabled={busy || saving || !puedeSumar}
+        disabled={
+          busy ||
+          saving ||
+          (fieldsDirty ? !puedeSumar : pendingDeleteIds.length === 0)
+        }
         className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
-        onClick={() => void add()}
+        onClick={() => void saveAll()}
       >
         {saving ? "Guardando…" : "Guardar ítem"}
       </button>
