@@ -228,6 +228,7 @@ export function M7TalleresPage() {
   const [comentarioTexto, setComentarioTexto] = useState("");
   const [browseStep, setBrowseStep] = useState<number | null>(null);
   const [importeDrafts, setImporteDrafts] = useState<Record<string, number>>({});
+  const [aprobadoDrafts, setAprobadoDrafts] = useState<Record<string, boolean>>({});
   const [confirmCerrar, setConfirmCerrar] = useState(false);
   const [confirmSinPresupuesto, setConfirmSinPresupuesto] = useState(false);
   const [confirmAvanzarSinGuardar, setConfirmAvanzarSinGuardar] = useState(false);
@@ -324,6 +325,7 @@ export function M7TalleresPage() {
     if (!ot) return;
     setBrowseStep(null);
     setImporteDrafts({});
+    setAprobadoDrafts({});
     setConfirmCerrar(false);
     setConfirmSinPresupuesto(false);
     setConfirmAvanzarSinGuardar(false);
@@ -349,16 +351,27 @@ export function M7TalleresPage() {
   const hayCambiosPendientes = useMemo(() => {
     if (!ot) return false;
     if (itemFormDirty) return true;
+    const items = ot.items ?? [];
+    if (
+      Object.entries(aprobadoDrafts).some(([id, draft]) => {
+        const item = items.find((i) => i.id === id);
+        return !!item && !!item.aprobado !== draft;
+      })
+    ) {
+      return true;
+    }
     return Object.entries(importeDrafts).some(([id, draft]) => {
       if (!Number.isFinite(draft) || draft < 0) return false;
-      const item = (ot.items ?? []).find((i) => i.id === id);
+      const item = items.find((i) => i.id === id);
       return !!item && item.importe !== draft;
     });
-  }, [ot, importeDrafts, itemFormDirty]);
+  }, [ot, importeDrafts, aprobadoDrafts, itemFormDirty]);
 
   useEffect(() => {
     setItemFormDirty(false);
     itemSaveRef.current = null;
+    setAprobadoDrafts({});
+    setImporteDrafts({});
   }, [ot?.id, displayStep]);
 
   function replaceOt(updated: OrdenTrabajo) {
@@ -366,6 +379,7 @@ export function M7TalleresPage() {
       prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o))
     );
     setImporteDrafts({});
+    setAprobadoDrafts({});
   }
 
   async function call(path: string, init: RequestInit) {
@@ -384,6 +398,27 @@ export function M7TalleresPage() {
     }
   }
 
+  /** Ops: vuelve a una etapa ya recorrida para poder editarla. */
+  async function irAEtapaParaEditar(step: number) {
+    if (!ot || !puedeEditarTaller || ot.cerradaAt) {
+      setBrowseStep(step);
+      return;
+    }
+    if (step === ot.currentStep) {
+      setBrowseStep(null);
+      return;
+    }
+    if (step < 0 || step > ot.currentStep) {
+      setBrowseStep(step);
+      return;
+    }
+    const updated = await call(`/api/talleres/${ot.id}/ir-a-etapa`, {
+      method: "POST",
+      body: JSON.stringify({ step }),
+    });
+    if (updated) setBrowseStep(null);
+  }
+
   async function exportarExcel() {
     if (!token) return;
     setExportando(true);
@@ -398,7 +433,9 @@ export function M7TalleresPage() {
   const itemsPresupuesto = itemsAll.filter((i) => i.tipo === "PRESUPUESTO");
   /** Solo ítems tildados (aprobado) — cambia al marcar / editar. */
   const totTildados = itemsPresupuesto
-    .filter((i) => i.aprobado === true)
+    .filter((i) =>
+      aprobadoDrafts[i.id] !== undefined ? aprobadoDrafts[i.id] : i.aprobado === true
+    )
     .reduce((a, i) => {
       const draft = importeDrafts[i.id];
       const val =
@@ -624,6 +661,13 @@ export function M7TalleresPage() {
                               i === ot.currentStep
                             ) {
                               setBrowseStep(null);
+                            } else if (
+                              !vistaBrowse &&
+                              !ot.cerradaAt &&
+                              puedeEditarTaller &&
+                              i < ot.currentStep
+                            ) {
+                              void irAEtapaParaEditar(i);
                             } else {
                               setBrowseStep(i);
                             }
@@ -686,12 +730,7 @@ export function M7TalleresPage() {
                                 disabled={busy}
                                 className="inline-flex min-h-10 items-center justify-center rounded-lg border-2 border-[#1e4080] bg-[#1e4080] px-3 text-xs font-semibold text-white disabled:opacity-50"
                                 onClick={() => {
-                                  void call(`/api/talleres/${ot.id}/ir-a-etapa`, {
-                                    method: "POST",
-                                    body: JSON.stringify({ step: displayStep }),
-                                  }).then((updated) => {
-                                    if (updated) setBrowseStep(null);
-                                  });
+                                  void irAEtapaParaEditar(displayStep);
                                 }}
                               >
                                 Editar esta etapa
@@ -802,13 +841,13 @@ export function M7TalleresPage() {
                         ) : (
                         <SeleccionChecklist
                           ot={ot}
-                          token={token!}
-                          onSaved={replaceOt}
                           soloLectura={!editandoPasoActual || !puedeEditarTaller}
                           ocultarMontos={ocultarMontos}
                           esEmpresa={
                             esDuenoEmpresa
                           }
+                          aprobadoDrafts={aprobadoDrafts}
+                          setAprobadoDraft={setAprobadoDrafts}
                         />
                         )
                       )}
@@ -868,6 +907,8 @@ export function M7TalleresPage() {
                             setImporteDraft={setImporteDrafts}
                             readOnly={!editandoPasoActual || !puedeEditarTaller}
                             ocultarMontos={false}
+                            onDirtyChange={setItemFormDirty}
+                            onRegisterSave={registerItemSave}
                           />
                         )
                       )}
@@ -1064,6 +1105,15 @@ export function M7TalleresPage() {
                             if (
                               !vistaBrowse &&
                               !ot.cerradaAt &&
+                              puedeEditarTaller &&
+                              next < ot.currentStep
+                            ) {
+                              void irAEtapaParaEditar(next);
+                              return;
+                            }
+                            if (
+                              !vistaBrowse &&
+                              !ot.cerradaAt &&
                               next === ot.currentStep
                             ) {
                               setBrowseStep(null);
@@ -1085,23 +1135,37 @@ export function M7TalleresPage() {
                           disabled={busy}
                           onClick={() => {
                             void (async () => {
-                              if (itemSaveRef.current && itemFormDirty) {
-                                setBusy(true);
-                                try {
+                              setBusy(true);
+                              try {
+                                if (itemSaveRef.current && itemFormDirty) {
                                   const ok = await itemSaveRef.current();
                                   if (!ok) {
                                     setError(
                                       "Completá los campos obligatorios del ítem para guardar"
                                     );
+                                    return;
                                   }
-                                } finally {
-                                  setBusy(false);
                                 }
-                                return;
-                              }
-                              if (isAjusteStep(ot.currentStep) && !ot.sinPresupuesto) {
-                                setBusy(true);
-                                try {
+
+                                let needReload = false;
+                                for (const [id, aprobado] of Object.entries(aprobadoDrafts)) {
+                                  const item = (ot.items ?? []).find((i) => i.id === id);
+                                  if (!item || !!item.aprobado === aprobado) continue;
+                                  await apiFetch(
+                                    `/api/talleres/${ot.id}/items/${id}`,
+                                    {
+                                      method: "PATCH",
+                                      body: JSON.stringify({
+                                        aprobado,
+                                        sugeridoEmpresa: aprobado,
+                                      }),
+                                    },
+                                    token!
+                                  );
+                                  needReload = true;
+                                }
+
+                                if (isAjusteStep(ot.currentStep) && !ot.sinPresupuesto) {
                                   for (const [id, draft] of Object.entries(importeDrafts)) {
                                     if (!Number.isFinite(draft) || draft < 0) continue;
                                     const item = (ot.items ?? []).find((i) => i.id === id);
@@ -1114,20 +1178,21 @@ export function M7TalleresPage() {
                                       },
                                       token!
                                     );
+                                    needReload = true;
                                   }
-                                  await load();
-                                  setImporteDrafts({});
-                                } catch (err) {
-                                  setError(
-                                    err instanceof ApiError
-                                      ? err.message
-                                      : "Error al guardar"
-                                  );
-                                } finally {
-                                  setBusy(false);
                                 }
-                              } else {
+
+                                if (needReload) await load();
+                                setAprobadoDrafts({});
                                 setImporteDrafts({});
+                              } catch (err) {
+                                setError(
+                                  err instanceof ApiError
+                                    ? err.message
+                                    : "Error al guardar"
+                                );
+                              } finally {
+                                setBusy(false);
                               }
                             })();
                           }}
@@ -1587,36 +1652,28 @@ function groupByTaller<T extends { tallerNombre: string; importe: number }>(item
 }
 
 function SeleccionChecklist({
-  ot, token, onSaved, soloLectura, esEmpresa, ocultarMontos,
+  ot, soloLectura, esEmpresa, ocultarMontos,
+  aprobadoDrafts, setAprobadoDraft,
 }: {
   ot: OrdenTrabajo;
-  token: string;
-  onSaved: (ot: OrdenTrabajo) => void;
   soloLectura?: boolean;
   esEmpresa?: boolean;
   ocultarMontos?: boolean;
+  aprobadoDrafts: Record<string, boolean>;
+  setAprobadoDraft: Dispatch<SetStateAction<Record<string, boolean>>>;
 }) {
   const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
-  const marcados = items.filter((i) => i.aprobado);
+  const isMarcado = (i: OtItem) =>
+    aprobadoDrafts[i.id] !== undefined ? aprobadoDrafts[i.id] : !!i.aprobado;
+  const marcados = items.filter(isMarcado);
   const totalAprobado = marcados.reduce(
     (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
     0
   );
-  const [busyId, setBusyId] = useState<string | null>(null);
 
-  async function setAprobado(id: string, aprobado: boolean) {
-    if (soloLectura || busyId) return;
-    setBusyId(id);
-    try {
-      const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
-        method: "PATCH",
-        // Destildar limpia también sugeridoEmpresa para que el checkbox responda.
-        body: JSON.stringify({ aprobado, sugeridoEmpresa: aprobado }),
-      }, token);
-      onSaved(updated);
-    } finally {
-      setBusyId(null);
-    }
+  function toggleAprobado(id: string, aprobado: boolean) {
+    if (soloLectura) return;
+    setAprobadoDraft((prev) => ({ ...prev, [id]: aprobado }));
   }
 
   if (items.length === 0) {
@@ -1651,7 +1708,7 @@ function SeleccionChecklist({
       <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
         {soloLectura
           ? "Presupuestos seleccionados (solo lectura)."
-          : "Tildá o destildá los presupuestos / proveedores aprobados. El importe no se edita en este paso."}
+          : "Tildá o destildá los presupuestos / proveedores aprobados. El importe no se edita en este paso. Guardá con el botón de abajo."}
       </p>
       {ot.sugerenciaChofer && (
         <p className="mb-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-950 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
@@ -1662,7 +1719,16 @@ function SeleccionChecklist({
         <div key={g.nombre} className="mb-3">
           <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
             <span>{g.nombre}</span>
-            {!ocultarMontos && <span>Presupuesto original {money(g.subtotal)}</span>}
+            {!ocultarMontos && (
+              <span>
+                Presupuesto original{" "}
+                {money(
+                  g.items
+                    .filter(isMarcado)
+                    .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0)
+                )}
+              </span>
+            )}
           </div>
           <table className="w-full text-left text-xs">
             <thead>
@@ -1680,9 +1746,9 @@ function SeleccionChecklist({
                     <label className="inline-flex items-center">
                       <input
                         type="checkbox"
-                        disabled={!!soloLectura || busyId === i.id}
-                        checked={!!i.aprobado}
-                        onChange={(e) => void setAprobado(i.id, e.target.checked)}
+                        disabled={!!soloLectura}
+                        checked={isMarcado(i)}
+                        onChange={(e) => toggleAprobado(i.id, e.target.checked)}
                       />
                       <span className="sr-only">Aprobar presupuesto</span>
                     </label>
@@ -1811,6 +1877,8 @@ function AjusteImportesChecklist({
   setImporteDraft,
   readOnly,
   ocultarMontos,
+  onDirtyChange,
+  onRegisterSave,
 }: {
   ot: OrdenTrabajo;
   token: string;
@@ -1820,6 +1888,8 @@ function AjusteImportesChecklist({
   setImporteDraft: Dispatch<SetStateAction<Record<string, number>>>;
   readOnly?: boolean;
   ocultarMontos?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
+  onRegisterSave?: (fn: (() => Promise<boolean>) | null) => void;
 }) {
   const items = (ot.items ?? []).filter(
     (i) => i.tipo === "PRESUPUESTO" && i.aprobado
@@ -1835,7 +1905,7 @@ function AjusteImportesChecklist({
   const original =
     ot.valorAprobado != null && ot.valorAprobado > 0 ? ot.valorAprobado : total;
   const [cats, setCats] = useState<CatDiag[]>([]);
-  const [conceptoBusy, setConceptoBusy] = useState(false);
+  const [conceptoDrafts, setConceptoDrafts] = useState<Record<string, string | null>>({});
   const [showAdic, setShowAdic] = useState(false);
   const [adicDesc, setAdicDesc] = useState("");
   const [adicImp, setAdicImp] = useState("");
@@ -1843,12 +1913,16 @@ function AjusteImportesChecklist({
   const [adicConceptoId, setAdicConceptoId] = useState<string | null>(null);
   const [adicSaving, setAdicSaving] = useState(false);
 
-  /** Concepto general: de los ítems no adicionales. */
+  function conceptoActual(i: OtItem) {
+    return conceptoDrafts[i.id] !== undefined
+      ? conceptoDrafts[i.id]
+      : i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
+  }
+
+  /** Concepto general: de los ítems no adicionales (con drafts). */
   const sharedConceptoId = (() => {
     const pool = itemsBase.length > 0 ? itemsBase : items;
-    const ids = pool
-      .map((i) => i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null)
-      .filter(Boolean) as string[];
+    const ids = pool.map(conceptoActual).filter(Boolean) as string[];
     if (ids.length === 0) return null;
     const first = ids[0];
     return ids.every((id) => id === first) ? first : null;
@@ -1866,52 +1940,39 @@ function AjusteImportesChecklist({
     }
   }, [showAdic, sharedConceptoId, adicConceptoId]);
 
-  async function guardarImporte(id: string) {
+  const conceptoDirty = items.some((i) => {
+    if (conceptoDrafts[i.id] === undefined) return false;
+    const server = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
+    return conceptoDrafts[i.id] !== server;
+  });
+  const adicFormDirty =
+    !readOnly &&
+    showAdic &&
+    (!!adicDesc.trim() || !!adicImp.trim() || !!adicTallerId);
+  const formDirty = !readOnly && (conceptoDirty || adicFormDirty);
+
+  useEffect(() => {
+    onDirtyChange?.(formDirty);
+    return () => onDirtyChange?.(false);
+  }, [formDirty, onDirtyChange]);
+
+  function setConceptoTodos(categoriaDiagnosticoId: string | null) {
+    if (readOnly || itemsBase.length === 0) return;
+    setConceptoDrafts((prev) => {
+      const next = { ...prev };
+      for (const i of itemsBase) next[i.id] = categoriaDiagnosticoId;
+      return next;
+    });
+  }
+
+  function setConceptoItem(id: string, categoriaDiagnosticoId: string | null) {
     if (readOnly) return;
-    const draft = importeDrafts[id];
-    if (draft === undefined) return;
-    if (!Number.isFinite(draft) || draft < 0) return;
-    const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ importe: draft }),
-    }, token);
-    onSaved(updated);
+    setConceptoDrafts((prev) => ({ ...prev, [id]: categoriaDiagnosticoId }));
   }
 
-  async function setConceptoTodos(categoriaDiagnosticoId: string | null) {
-    if (readOnly || conceptoBusy || itemsBase.length === 0) return;
-    setConceptoBusy(true);
-    try {
-      let last: OrdenTrabajo | null = null;
-      for (const i of itemsBase) {
-        last = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${i.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ categoriaDiagnosticoId }),
-        }, token);
-      }
-      if (last) onSaved(last);
-    } finally {
-      setConceptoBusy(false);
-    }
-  }
-
-  async function setConceptoItem(id: string, categoriaDiagnosticoId: string | null) {
-    if (readOnly || conceptoBusy) return;
-    setConceptoBusy(true);
-    try {
-      const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ categoriaDiagnosticoId }),
-      }, token);
-      onSaved(updated);
-    } finally {
-      setConceptoBusy(false);
-    }
-  }
-
-  async function agregarAdicional() {
-    if (readOnly || adicSaving) return;
-    if (!adicDesc.trim() || !adicImp || !Number.isFinite(Number(adicImp))) return;
+  async function agregarAdicional(): Promise<boolean> {
+    if (readOnly || adicSaving) return false;
+    if (!adicDesc.trim() || !adicImp || !Number.isFinite(Number(adicImp))) return false;
     setAdicSaving(true);
     try {
       const updated = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items`, {
@@ -1932,10 +1993,52 @@ function AjusteImportesChecklist({
       setAdicTallerId("");
       setAdicConceptoId(sharedConceptoId);
       setShowAdic(false);
+      return true;
+    } catch {
+      return false;
     } finally {
       setAdicSaving(false);
     }
   }
+
+  async function persistirConceptosYAdic(): Promise<boolean> {
+    if (readOnly) return true;
+    try {
+      let last: OrdenTrabajo | null = null;
+      for (const i of items) {
+        if (conceptoDrafts[i.id] === undefined) continue;
+        const server = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
+        if (conceptoDrafts[i.id] === server) continue;
+        last = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${i.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ categoriaDiagnosticoId: conceptoDrafts[i.id] }),
+        }, token);
+      }
+      if (last) {
+        onSaved(last);
+        setConceptoDrafts({});
+      }
+      if (adicFormDirty) {
+        const ok = await agregarAdicional();
+        if (!ok) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const saveRef = useRef(persistirConceptosYAdic);
+  saveRef.current = persistirConceptosYAdic;
+
+  useEffect(() => {
+    if (readOnly) {
+      onRegisterSave?.(null);
+      return () => onRegisterSave?.(null);
+    }
+    onRegisterSave?.(() => saveRef.current());
+    return () => onRegisterSave?.(null);
+  }, [readOnly, onRegisterSave]);
 
   if (items.length === 0 && !readOnly) {
     return (
@@ -2059,12 +2162,9 @@ function AjusteImportesChecklist({
             cats={cats}
             valueId={sharedConceptoId}
             onPick={(leafId) => {
-              if (!readOnly) void setConceptoTodos(leafId);
+              if (!readOnly) setConceptoTodos(leafId);
             }}
           />
-          {conceptoBusy && (
-            <p className="mt-1 text-[10px] text-[var(--vl-text-muted)]">Aplicando concepto…</p>
-          )}
         </div>
       )}
       {groupByTaller(itemsBase).map((g) => {
@@ -2117,7 +2217,6 @@ function AjusteImportesChecklist({
                               [i.id]: e.target.value === "" ? NaN : n,
                             }));
                           }}
-                          onBlur={() => void guardarImporte(i.id)}
                         />
                       )}
                     </td>
@@ -2163,7 +2262,6 @@ function AjusteImportesChecklist({
                           [i.id]: e.target.value === "" ? NaN : n,
                         }));
                       }}
-                      onBlur={() => void guardarImporte(i.id)}
                     />
                   )
                 )}
@@ -2175,9 +2273,9 @@ function AjusteImportesChecklist({
                   </div>
                   <ConceptoCascada
                     cats={cats}
-                    valueId={i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id}
+                    valueId={conceptoActual(i)}
                     onPick={(leafId) => {
-                      if (!readOnly) void setConceptoItem(i.id, leafId);
+                      if (!readOnly) setConceptoItem(i.id, leafId);
                     }}
                   />
                 </div>
