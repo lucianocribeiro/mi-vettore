@@ -11,6 +11,7 @@ CREATE TYPE "Role_new" AS ENUM (
 );
 
 ALTER TABLE "Usuario" ALTER COLUMN "rol" DROP DEFAULT;
+ALTER TABLE "AvisoInterno" ALTER COLUMN "rolDestino" DROP DEFAULT;
 ALTER TABLE "Usuario"
   ALTER COLUMN "rol" TYPE "Role_new"
   USING (
@@ -22,6 +23,19 @@ ALTER TABLE "Usuario"
       WHEN 'FACU' THEN 'OPERACIONES'
       WHEN 'CARLA' THEN 'OPERACIONES'
       ELSE "rol"::text
+    END
+  )::"Role_new";
+ALTER TABLE "AvisoInterno"
+  ALTER COLUMN "rolDestino" TYPE "Role_new"
+  USING (
+    CASE "rolDestino"::text
+      WHEN 'PATRICIO' THEN 'ADMINISTRADOR'
+      WHEN 'JULIETA' THEN 'ADMINISTRADOR'
+      WHEN 'PABLO' THEN 'OPERACIONES'
+      WHEN 'SILVINA' THEN 'OPERACIONES'
+      WHEN 'FACU' THEN 'OPERACIONES'
+      WHEN 'CARLA' THEN 'OPERACIONES'
+      ELSE "rolDestino"::text
     END
   )::"Role_new";
 
@@ -167,6 +181,21 @@ SET "dni" = regexp_replace(c.dni, '\D', '', 'g')
 FROM "Chofer" AS c
 WHERE u."choferId" = c.id
   AND (u."dni" IS NULL OR btrim(u."dni") = '');
+
+-- Si varios usuarios comparten el DNI del chofer, solo uno lo usa para login.
+WITH ranked AS (
+  SELECT id,
+    ROW_NUMBER() OVER (
+      PARTITION BY regexp_replace("dni", '\D', '', 'g')
+      ORDER BY ("rol"::text = 'CHOFER') DESC, "createdAt" ASC
+    ) AS n
+  FROM "Usuario"
+  WHERE "dni" IS NOT NULL AND btrim("dni") <> ''
+)
+UPDATE "Usuario" AS u
+SET "dni" = NULL
+FROM ranked
+WHERE u.id = ranked.id AND ranked.n > 1;
 
 UPDATE "Usuario" AS u
 SET "empresaId" = c."empresaId"
