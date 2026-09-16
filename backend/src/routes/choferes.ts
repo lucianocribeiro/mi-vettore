@@ -61,6 +61,19 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       res.json(self);
       return;
     }
+    if (req.user!.rol === "EMPRESA") {
+      const me = await prisma.usuario.findUnique({
+        where: { id: req.user!.id },
+        select: { empresaId: true },
+      });
+      const items = await prisma.chofer.findMany({
+        where: { empresaId: me?.empresaId ?? "", ...(whereBase ?? {}) },
+        orderBy: { nombre: "asc" },
+        include: includeAsignaciones,
+      });
+      res.json(items);
+      return;
+    }
     const items = await prisma.chofer.findMany({
       where: whereBase,
       orderBy: { nombre: "asc" },
@@ -248,6 +261,17 @@ router.put("/:id", ...write, async (req, res) => {
     }
     const data: Record<string, unknown> = {};
     if (req.body?.nombre !== undefined) data.nombre = String(req.body.nombre).trim();
+    if (req.body?.apellido !== undefined) data.apellido = String(req.body.apellido).trim();
+    if (req.body?.empresaId !== undefined) {
+      const empresa = await prisma.empresaTransporte.findFirst({
+        where: { id: String(req.body.empresaId), activo: true },
+      });
+      if (!empresa) {
+        res.status(400).json({ error: "La empresa no existe o está inactiva" });
+        return;
+      }
+      data.empresaId = empresa.id;
+    }
     if (req.body?.dni !== undefined) data.dni = String(req.body.dni).trim();
     if (req.body?.cuil !== undefined) {
       data.cuil = req.body.cuil

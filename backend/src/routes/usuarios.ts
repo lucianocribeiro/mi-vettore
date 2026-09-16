@@ -1,6 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { Role, UserStatus } from "@prisma/client";
+import { Prisma, Role, UserStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { generateTempPassword } from "../lib/temp-password.js";
@@ -11,11 +11,14 @@ const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
 
 const includeChoferList = {
+  empresa: { select: { id: true, nombre: true } },
   chofer: {
     select: {
       id: true,
       telefono: true,
       nombre: true,
+      apellido: true,
+      empresaId: true,
       esDuenoFlota: true,
       asignaciones: {
         where: { periodoHasta: null },
@@ -35,14 +38,19 @@ type UsuarioConChofer = {
   email: string;
   rol: Role;
   nombre: string | null;
+  dni: string | null;
   estado: UserStatus;
   choferId: string | null;
+  empresaId: string | null;
   createdAt: Date;
   updatedAt: Date;
+  empresa?: { id: string; nombre: string } | null;
   chofer?: {
     id: string;
     telefono: string | null;
     nombre: string;
+    apellido: string | null;
+    empresaId: string;
     esDuenoFlota: boolean;
     asignaciones: Array<{
       empresaId: string;
@@ -59,12 +67,14 @@ function publicUser(u: UsuarioConChofer) {
     email: u.email,
     rol: u.rol,
     nombre: u.nombre ?? u.chofer?.nombre ?? null,
+    apellido: u.chofer?.apellido ?? null,
+    dni: u.dni,
     estado: u.estado,
     choferId: u.choferId ?? null,
     telefono: u.chofer?.telefono ?? null,
     esDuenoFlota: u.chofer?.esDuenoFlota ?? false,
-    empresaId: empresa?.id ?? asig?.empresaId ?? null,
-    empresaNombre: empresa?.nombre ?? null,
+    empresaId: u.empresaId ?? u.empresa?.id ?? u.chofer?.empresaId ?? empresa?.id ?? null,
+    empresaNombre: u.empresa?.nombre ?? empresa?.nombre ?? null,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
   };
@@ -160,8 +170,8 @@ router.post("/", ...write, async (req, res) => {
       res.status(400).json({ error: "DNI obligatorio" });
       return;
     }
-    if ((rolRaw === "EMPRESA" || rolRaw === "CHOFER") && !empresaId) {
-      res.status(400).json({ error: "Empresa obligatoria" });
+    if (!empresaId) {
+      res.status(400).json({ error: "Todo usuario se asigna a una empresa en el alta" });
       return;
     }
     if (rolRaw === "CHOFER") {
@@ -226,13 +236,7 @@ router.put("/:id", ...write, async (req, res) => {
       res.status(404).json({ error: "Usuario no encontrado" });
       return;
     }
-    const data: {
-      email?: string;
-      passwordHash?: string;
-      rol?: Role;
-      nombre?: string | null;
-      estado?: UserStatus;
-    } = {};
+    const data: Prisma.UsuarioUncheckedUpdateInput = {};
     if (req.body?.email !== undefined) {
       data.email = String(req.body.email).trim().toLowerCase();
     }
@@ -258,6 +262,19 @@ router.put("/:id", ...write, async (req, res) => {
       }
       data.estado = s as UserStatus;
     }
+    if (req.body?.dni !== undefined) {
+      const dni = String(req.body.dni).replace(/\D/g, "");
+      data.dni = dni || null;
+      if (dni && (data.rol ?? existing.rol) !== Role.EMPRESA) {
+        data.loginIdentificador = dni;
+      }
+    }
+    if (req.body?.empresaId !== undefined) {
+      data.empresaId = req.body.empresaId ? String(req.body.empresaId) : null;
+    }
+    if (req.body?.choferId !== undefined) {
+      data.choferId = req.body.choferId ? String(req.body.choferId) : null;
+    }
     const item = await prisma.usuario.update({
       where: { id: req.params.id },
       data,
@@ -269,7 +286,17 @@ router.put("/:id", ...write, async (req, res) => {
         : null;
       await prisma.chofer.update({
         where: { id: item.choferId },
-        data: { telefono },
+        data: {
+          telefono,
+          ...(req.body?.apellido !== undefined
+            ? { apellido: String(req.body.apellido).trim() }
+            : {}),
+        },
+      });
+    } else if (req.body?.apellido !== undefined && item.choferId) {
+      await prisma.chofer.update({
+        where: { id: item.choferId },
+        data: { apellido: String(req.body.apellido).trim() },
       });
     }
     const refreshed = await prisma.usuario.findUnique({

@@ -14,6 +14,8 @@ export type User = {
   email: string;
   rol: Role;
   nombre: string | null;
+  apellido?: string | null;
+  dni?: string | null;
   estado: "ACTIVO" | "INACTIVO";
   clienteId?: string | null;
   choferId?: string | null;
@@ -121,7 +123,6 @@ export const TIPOS_DOCUMENTO_CON_VENCIMIENTO: TipoDocumento[] = [
   "VTV",
   "SENASA",
   "SEGURO",
-  "HOMOLOGACION",
 ];
 
 export const TIPOS_DOCUMENTO_CHOFER: TipoDocumento[] = [
@@ -283,6 +284,8 @@ export type AsignacionFlota = {
 export type Chofer = {
   id: string;
   nombre: string;
+  apellido?: string | null;
+  empresaId?: string | null;
   dni: string;
   cuil: string | null;
   licencia: string | null;

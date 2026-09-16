@@ -32,7 +32,6 @@ import {
   type MarcaCamioneta,
   type Role,
   type TallerProveedor,
-  type TipoEmpresa,
   type TipoServicio,
   type TipoTaller,
   type User,
@@ -102,6 +101,7 @@ function whatsappDigits(raw: string | null | undefined): string | null {
 export function M5FichaPage() {
   const { token, user } = useAuth();
   const canEdit = canWriteMaster(user?.rol);
+  const canAssign = canEdit || user?.rol === "EMPRESA";
 
   const [tab, setTab] = useState<Tab>("camioneta");
   const [loading, setLoading] = useState(true);
@@ -148,7 +148,6 @@ export function M5FichaPage() {
   const [fEstadoChofer, setFEstadoChofer] = useState<"ACTIVO" | "INACTIVO">(
     "ACTIVO"
   );
-  const [fTipoEmpresa, setFTipoEmpresa] = useState<TipoEmpresa>("PROPIA");
   const [fApellido, setFApellido] = useState("");
   const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
@@ -182,6 +181,7 @@ export function M5FichaPage() {
   const [fEmail, setFEmail] = useState("");
   const [fPassword, setFPassword] = useState("");
   const [fRol, setFRol] = useState<Role>("CHOFER");
+  const [fUserChoferId, setFUserChoferId] = useState("");
   const [fEstadoUser, setFEstadoUser] = useState<"ACTIVO" | "INACTIVO">(
     "ACTIVO"
   );
@@ -245,7 +245,11 @@ export function M5FichaPage() {
     try {
       const [cami, chof, emp, usu, tServ, tall, tallMeta] =
         await Promise.all([
-          apiFetch<Camioneta[]>("/api/camionetas", {}, token),
+          apiFetch<Camioneta[]>(
+            canEdit ? "/api/camionetas?incluirInactivas=1" : "/api/camionetas",
+            {},
+            token
+          ),
           apiFetch<Chofer[]>(
             canEdit ? "/api/choferes?incluirBajas=1" : "/api/choferes",
             {},
@@ -296,7 +300,6 @@ export function M5FichaPage() {
     setFVerMant(true);
     setFVerTaller(true);
     setFEstadoChofer("ACTIVO");
-    setFTipoEmpresa("PROPIA");
     setFCuit("");
     setFContactoEmpresa("");
     setFPermiteMultiCamioneta(true);
@@ -324,6 +327,9 @@ export function M5FichaPage() {
     setFEmail("");
     setFPassword("");
     setFRol("CHOFER");
+    setFUserChoferId("");
+    setFApellido("");
+    setFChoferEmpresaId("");
     setFEstadoUser("ACTIVO");
     setFTsNombre("");
     setFTsOrden("0");
@@ -341,6 +347,8 @@ export function M5FichaPage() {
   function openEditChofer(item: Chofer) {
     setFormError(null);
     setFNombre(item.nombre);
+    setFApellido(item.apellido ?? "");
+    setFChoferEmpresaId(item.empresaId ?? "");
     setFDni(item.dni);
     setFCuil(item.cuil ?? "");
     setFLicencia(item.licencia ?? "");
@@ -361,7 +369,6 @@ export function M5FichaPage() {
   function openEditEmpresa(item: Empresa) {
     setFormError(null);
     setFNombre(item.nombre);
-    setFTipoEmpresa(item.tipo);
     setFCuit(item.cuit ?? "");
     setFContactoEmpresa(item.contacto ?? "");
     setFPermiteMultiCamioneta(!!item.permiteMultiCamioneta);
@@ -413,6 +420,10 @@ export function M5FichaPage() {
   function openEditUsuario(item: User) {
     setFormError(null);
     setFNombre(item.nombre ?? "");
+    setFApellido(item.apellido ?? "");
+    setFDni(item.dni ?? "");
+    setFChoferEmpresaId(item.empresaId ?? "");
+    setFUserChoferId(item.choferId ?? "");
     setFEmail(item.email);
     setFPassword("");
     setFTelefono(item.telefono ?? "");
@@ -426,6 +437,10 @@ export function M5FichaPage() {
     setFormError(null);
     try {
       if (form.kind === "chofer") {
+        if (!fChoferEmpresaId) {
+          setFormError("El chofer se asigna a una empresa existente");
+          return;
+        }
         const body = {
           nombre: fNombre,
           apellido: fApellido,
@@ -468,7 +483,6 @@ export function M5FichaPage() {
       if (form.kind === "empresa") {
         const body = {
           nombre: fNombre,
-          tipo: fTipoEmpresa,
           cuit: fCuit || null,
           contacto: fContactoEmpresa || null,
           password: fPasswordEmpresa || undefined,
@@ -496,6 +510,10 @@ export function M5FichaPage() {
       }
 
       if (form.kind === "camioneta") {
+        if (!fEmpresaId) {
+          setFormError("La unidad se asigna a una empresa existente");
+          return;
+        }
         const body = {
           patente: fPatente,
           marca: fMarca || null,
@@ -613,10 +631,22 @@ export function M5FichaPage() {
           email: fEmail,
           rol: fRol,
           nombre: fNombre || null,
+          apellido: fApellido || null,
+          dni: fDni || null,
+          empresaId: fChoferEmpresaId || null,
+          choferId: fRol === "CHOFER" ? fUserChoferId || null : null,
           estado: fEstadoUser,
           telefono: fTelefono.trim() || null,
         };
         if (fPassword) body.password = fPassword;
+        if (!form.item && !fChoferEmpresaId) {
+          setFormError("Elegí la empresa del usuario");
+          return;
+        }
+        if (!form.item && fRol === "CHOFER" && !fUserChoferId) {
+          setFormError("Elegí el chofer de esa empresa");
+          return;
+        }
         if (form.item) {
           const updated = await apiFetch<User>(
             `/api/usuarios/${form.item.id}`,
@@ -636,16 +666,16 @@ export function M5FichaPage() {
             );
           }
         } else {
-          if (!fPassword) {
-            setFormError("Password obligatorio para usuarios nuevos");
-            return;
-          }
-          body.password = fPassword;
-          const created = await apiFetch<User>(
+          const created = await apiFetch<User & { credencialTemporal?: string }>(
             "/api/usuarios",
             { method: "POST", body: JSON.stringify(body) },
             token
           );
+          if (created.credencialTemporal) {
+            alert(
+              `Usuario creado. Contraseña temporal (se muestra una sola vez): ${created.credencialTemporal}`
+            );
+          }
           setUsuarios((prev) =>
             [...prev, created].sort((a, b) => a.email.localeCompare(b.email))
           );
@@ -675,6 +705,20 @@ export function M5FichaPage() {
   }
 
   /** Baja lógica: chofer → INACTIVO (DELETE /choferes/:id), camioneta → FUERA_SERVICIO (POST /baja). */
+  async function reactivarUnidad(id: string) {
+    if (!token || !canEdit) return;
+    try {
+      const updated = await apiFetch<Camioneta>(
+        `/api/camionetas/${id}/reactivar`,
+        { method: "POST" },
+        token
+      );
+      setCamionetas((prev) => prev.map((c) => (c.id === id ? updated : c)));
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo reactivar");
+    }
+  }
+
   async function darDeBaja(tipo: "camioneta" | "chofer", id: string) {
     if (!token || !canEdit) return;
     if (
@@ -774,15 +818,19 @@ export function M5FichaPage() {
     { id: "equiposFrio", label: "Equipo de frío" },
   ];
 
-  const camionetasFiltradas = useMemo(
-    () => filterCamionetas(camionetas, unitFilters),
-    [camionetas, unitFilters]
-  );
+  const camionetasFiltradas = useMemo(() => {
+    const visibles =
+      unitFilters.estado.length === 0
+        ? camionetas.filter((c) => c.estado !== "INACTIVA")
+        : camionetas;
+    return filterCamionetas(visibles, unitFilters);
+  }, [camionetas, unitFilters]);
 
   const unidadesDeEmpresaAsig = useMemo(() => {
     if (!asigEmpresaId) return [] as Camioneta[];
     return camionetas
       .filter((c) => {
+        if (c.estado === "INACTIVA" || c.estado === "FUERA_SERVICIO") return false;
         if (c.empresaId === asigEmpresaId) return true;
         const a = currentAsignacion(c);
         return a?.empresaId === asigEmpresaId;
@@ -810,21 +858,7 @@ export function M5FichaPage() {
   const choferesDeEmpresaAsig = useMemo(() => {
     if (!asigEmpresaId) return [] as Chofer[];
     return choferes
-      .filter((ch) => {
-        if (ch.estado !== "ACTIVO") return false;
-        const asgs = ch.asignaciones ?? [];
-        const abiertas = asgs.filter((a) => !a.periodoHasta);
-        const enOtraEmpresa = abiertas.some(
-          (a) => (a.empresaId || a.empresa?.id) !== asigEmpresaId
-        );
-        if (enOtraEmpresa) return false;
-        const deEstaEmpresa = asgs.some(
-          (a) => (a.empresaId || a.empresa?.id) === asigEmpresaId
-        );
-        if (deEstaEmpresa) return true;
-        // Libre (sin asignación abierta): puede incorporarse a esta empresa
-        return abiertas.length === 0;
-      })
+      .filter((ch) => ch.estado === "ACTIVO" && ch.empresaId === asigEmpresaId)
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [choferes, asigEmpresaId]);
 
@@ -990,7 +1024,7 @@ export function M5FichaPage() {
         </div>
       )}
 
-      {!canEdit && (
+      {!canEdit && user?.rol !== "EMPRESA" && (
         <p className="mb-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
           Solo lectura: tu rol no puede crear ni editar datos maestros.
         </p>
@@ -1086,7 +1120,20 @@ export function M5FichaPage() {
                           Editar
                         </span>
                       )}
-                      {canEdit && c.estado !== "FUERA_SERVICIO" && (
+                      {canEdit && c.estado === "INACTIVA" && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void reactivarUnidad(c.id);
+                          }}
+                          className="text-emerald-700 underline-offset-2 hover:underline"
+                        >
+                          Reactivar
+                        </span>
+                      )}
+                      {canEdit && c.estado !== "FUERA_SERVICIO" && c.estado !== "INACTIVA" && (
                         <span
                           role="button"
                           tabIndex={0}
@@ -1323,7 +1370,7 @@ export function M5FichaPage() {
                                 [c.id]: e.target.value,
                               }))
                             }
-                            disabled={!canEdit}
+                            disabled={!canAssign}
                           >
                             <option value="">—</option>
                             {choferesDeEmpresaAsig.map((ch) => {
@@ -1356,7 +1403,7 @@ export function M5FichaPage() {
                           </select>
                         </td>
                         <td className="px-3 py-2 text-right">
-                          {canEdit && (
+                          {canAssign && (
                             <button
                               type="button"
                               disabled={
@@ -1383,14 +1430,22 @@ export function M5FichaPage() {
 
       {!loading && !error && tab === "empresas" && (
         <EntityTable
-          headers={["Nombre", "CUIT", "Contacto", "Tipo", ""]}
+          headers={["Nombre", "CUIT", "Choferes", "Unidades", ""]}
           rows={empresas.map((e) => {
             const wa = whatsappDigits(e.contacto);
+            const choferesEmp = e.choferes ?? [];
+            const unidadesEmp = e.unidades ?? [];
             return [
               e.nombre,
               e.cuit || "—",
-              e.contacto || "—",
-              e.tipo.toLowerCase(),
+              choferesEmp.length
+                ? choferesEmp
+                    .map((c) => `${c.apellido ? `${c.apellido}, ` : ""}${c.nombre} (${c.dni})`)
+                    .join(" · ")
+                : "Sin choferes",
+              unidadesEmp.length
+                ? unidadesEmp.map((u) => u.patente).join(", ")
+                : "Sin unidades",
               <div key={e.id} className="flex flex-wrap items-center justify-end gap-2 text-xs">
                 {wa && (
                   <a
@@ -1634,7 +1689,7 @@ export function M5FichaPage() {
                 className={inputClass}
                 value={fNombre}
                 onChange={(e) => setFNombre(e.target.value)}
-                required={form.kind !== "usuario"}
+                required
               />
             </Field>
           )}
@@ -1648,6 +1703,31 @@ export function M5FichaPage() {
                   onChange={(e) => setFDni(e.target.value)}
                   required
                 />
+              </Field>
+              <Field label="Apellido">
+                <input
+                  className={inputClass}
+                  value={fApellido}
+                  onChange={(e) => setFApellido(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Empresa">
+                <select
+                  className={inputClass}
+                  value={fChoferEmpresaId}
+                  onChange={(e) => setFChoferEmpresaId(e.target.value)}
+                  required
+                >
+                  <option value="">Elegí empresa…</option>
+                  {empresas
+                    .filter((e) => e.activo !== false)
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.nombre} · {e.cuit || "sin CUIT"}
+                      </option>
+                    ))}
+                </select>
               </Field>
               <Field label="CUIL">
                 <input
@@ -1734,18 +1814,8 @@ export function M5FichaPage() {
                   className={inputClass}
                   value={fCuit}
                   onChange={(e) => setFCuit(e.target.value)}
+                  required
                 />
-              </Field>
-              <Field label="Apellido">
-                <input className={inputClass} value={fApellido} onChange={(e) => setFApellido(e.target.value)} />
-              </Field>
-              <Field label="Empresa">
-                <select className={inputClass} value={fChoferEmpresaId} onChange={(e) => setFChoferEmpresaId(e.target.value)}>
-                  <option value="">Elegí empresa…</option>
-                  {empresas.filter((e) => e.activo !== false).map((e) => (
-                    <option key={e.id} value={e.id}>{e.nombre} · {e.cuit || "sin CUIT"}</option>
-                  ))}
-                </select>
               </Field>
               <Field label="Contacto">
                 <input
@@ -1762,18 +1832,6 @@ export function M5FichaPage() {
                   placeholder={form.item ? "Vacío = no cambiar" : "Vacío = generar temporal"}
                   onChange={(e) => setFPasswordEmpresa(e.target.value)}
                 />
-              </Field>
-              <Field label="Tipo">
-                <select
-                  className={inputClass}
-                  value={fTipoEmpresa}
-                  onChange={(e) =>
-                    setFTipoEmpresa(e.target.value as TipoEmpresa)
-                  }
-                >
-                  <option value="PROPIA">Propia</option>
-                  <option value="ALIADA">Aliada</option>
-                </select>
               </Field>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -2068,18 +2126,21 @@ export function M5FichaPage() {
                   </p>
                 </>
               )}
-              <Field label="Empresa de transporte (propietaria)">
+              <Field label="Empresa de transporte">
                 <select
                   className={inputClass}
                   value={fEmpresaId}
                   onChange={(e) => setFEmpresaId(e.target.value)}
+                  required
                 >
-                  <option value="">—</option>
-                  {empresas.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.nombre}
-                    </option>
-                  ))}
+                  <option value="">Elegí la empresa…</option>
+                  {empresas
+                    .filter((e) => e.activo !== false)
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.nombre}
+                      </option>
+                    ))}
                 </select>
               </Field>
               {!form.item && (
@@ -2226,6 +2287,65 @@ export function M5FichaPage() {
 
           {form.kind === "usuario" && (
             <>
+              <Field label="Apellido">
+                <input
+                  className={inputClass}
+                  value={fApellido}
+                  onChange={(e) => setFApellido(e.target.value)}
+                />
+              </Field>
+              <Field label="DNI">
+                <input
+                  className={inputClass}
+                  value={fDni}
+                  onChange={(e) => setFDni(e.target.value)}
+                  required={fRol !== "EMPRESA"}
+                />
+              </Field>
+              <Field label="Empresa">
+                <select
+                  className={inputClass}
+                  value={fChoferEmpresaId}
+                  onChange={(e) => {
+                    setFChoferEmpresaId(e.target.value);
+                    setFUserChoferId("");
+                  }}
+                  required
+                >
+                  <option value="">Elegí empresa…</option>
+                  {empresas
+                    .filter((e) => e.activo !== false)
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.nombre} · {e.cuit || "sin CUIT"}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              {fRol === "CHOFER" && (
+                <Field label="Chofer">
+                  <select
+                    className={inputClass}
+                    value={fUserChoferId}
+                    onChange={(e) => setFUserChoferId(e.target.value)}
+                    required
+                  >
+                    <option value="">Elegí chofer de la empresa…</option>
+                    {choferes
+                      .filter(
+                        (c) =>
+                          c.empresaId === fChoferEmpresaId &&
+                          c.estado === "ACTIVO"
+                      )
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.apellido ? `${c.apellido}, ` : ""}
+                          {c.nombre} · {c.dni}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              )}
               <Field label="Teléfono / WhatsApp">
                 <input
                   type="tel"
@@ -2262,7 +2382,7 @@ export function M5FichaPage() {
                   className={inputClass}
                   value={fPassword}
                   onChange={(e) => setFPassword(e.target.value)}
-                  required={!form.item}
+                  placeholder={form.item ? "" : "Vacío = generar temporal"}
                 />
               </Field>
               <Field label="Rol">

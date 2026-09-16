@@ -10,9 +10,18 @@ import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
 
-router.get("/", authenticate, async (_req, res) => {
+router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
+    let scope: { id: string } | undefined;
+    if (req.user!.rol === Role.EMPRESA) {
+      const actor = await prisma.usuario.findUnique({
+        where: { id: req.user!.id },
+        select: { empresaId: true },
+      });
+      scope = { id: actor?.empresaId ?? "" };
+    }
     const items = await prisma.empresaTransporte.findMany({
+      where: scope,
       orderBy: { nombre: "asc" },
       include: {
         choferes: { orderBy: { apellido: "asc" }, select: { id: true, nombre: true, apellido: true, dni: true, estado: true } },

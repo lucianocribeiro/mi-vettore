@@ -74,6 +74,18 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       res.json(items);
       return;
     }
+    if (me?.rol === "EMPRESA") {
+      const items = await prisma.camioneta.findMany({
+        where: {
+          empresaId: me.empresaId ?? "",
+          ...(incluirBajas ? {} : { estado: { notIn: ["FUERA_SERVICIO" as const, "INACTIVA" as const] } }),
+        },
+        orderBy: { patente: "asc" },
+        include: includeAsignaciones,
+      });
+      res.json(items);
+      return;
+    }
 
     const incluirInactivas = String(req.query.incluirInactivas ?? "") === "1" || incluirBajas;
     const items = await prisma.camioneta.findMany({
