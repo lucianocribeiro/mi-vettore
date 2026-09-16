@@ -535,11 +535,13 @@ export function DocumentacionPage() {
                         <div className="font-semibold text-[var(--vl-heading)]">
                           {c.patente}
                         </div>
-                        <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                          {actual?.chofer
-                            ? `Chofer: ${actual.chofer.nombre}`
-                            : "Sin chofer"}
-                        </div>
+                        {!ops && (
+                          <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                            {actual?.chofer
+                              ? `Chofer: ${actual.chofer.nombre}`
+                              : "Sin chofer"}
+                          </div>
+                        )}
                       </button>
                       {esPerfilEmpresa && (
                         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -673,13 +675,19 @@ export function DocumentacionPage() {
                       }`}
                     >
                       <div className="font-semibold text-[var(--vl-heading)]">
-                        {c.nombre}
+                        {ops
+                          ? [c.nombre, c.apellido && c.apellido !== "-" ? c.apellido : ""]
+                              .filter(Boolean)
+                              .join(" ")
+                          : c.nombre}
                       </div>
-                      <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                        {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
-                        {" · "}
-                        {unidadDeChofer(c.id)?.patente ?? "Sin unidad"}
-                      </div>
+                      {!ops && (
+                        <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                          {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
+                          {" · "}
+                          {unidadDeChofer(c.id)?.patente ?? "Sin unidad"}
+                        </div>
+                      )}
                     </button>
                     {esPerfilEmpresa && (
                       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--vl-card-border)] p-3">
