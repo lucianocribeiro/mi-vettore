@@ -12,7 +12,7 @@ type Aviso = {
   ot?: { id: string; numeroOT: string } | null;
 };
 
-const AVISO_ROLES: Role[] = ["SILVINA", "CARLA", "PABLO", "FACU"];
+const AVISO_ROLES: Role[] = ["ADMINISTRADOR", "OPERACIONES"];
 
 /** Banner de avisos de cierre de OT para ops (no dueños). */
 export function AvisosBanner() {

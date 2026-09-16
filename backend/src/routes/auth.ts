@@ -34,6 +34,10 @@ function publicUser(
     estado: UserStatus;
     clienteId?: string | null;
     choferId?: string | null;
+    dni?: string | null;
+    loginIdentificador?: string | null;
+    empresaId?: string | null;
+    debeCambiarPassword?: boolean;
   },
   chofer?: {
     esDuenoFlota: boolean;
@@ -50,6 +54,10 @@ function publicUser(
     estado: user.estado,
     clienteId: user.clienteId ?? null,
     choferId: user.choferId ?? null,
+    dni: user.dni ?? null,
+    loginIdentificador: user.loginIdentificador ?? null,
+    empresaId: user.empresaId ?? null,
+    debeCambiarPassword: user.debeCambiarPassword ?? false,
     esDuenoFlota: chofer?.esDuenoFlota ?? false,
     verMantenimiento: chofer?.verMantenimiento ?? true,
     verTaller: chofer?.verTaller ?? true,
@@ -59,22 +67,37 @@ function publicUser(
 
 router.post("/login", async (req, res) => {
   try {
-    const email = String(req.body?.email ?? "")
+    const identificador = String(
+      req.body?.identificador ?? req.body?.email ?? ""
+    )
       .trim()
-      .toLowerCase();
+      .toLowerCase()
+      .replace(/[^\d@.a-z-]/g, "");
     const password = String(req.body?.password ?? "");
 
-    if (!email || !password) {
-      res.status(400).json({ error: "Email y password son obligatorios" });
+    if (!identificador || !password) {
+      res.status(400).json({ error: "Identificador y password son obligatorios" });
       return;
     }
 
-    const user = await prisma.usuario.findUnique({
-      where: { email },
-      include: { chofer: true },
+    const digits = identificador.replace(/\D/g, "");
+    const user = await prisma.usuario.findFirst({
+      where: {
+        OR: [
+          { loginIdentificador: identificador },
+          ...(digits ? [{ loginIdentificador: digits }, { dni: digits }] : []),
+          { email: identificador },
+        ],
+      },
+      include: { chofer: true, empresa: true },
     });
     if (!user) {
       res.status(401).json({ error: "Credenciales inválidas" });
+      return;
+    }
+
+    if (user.rol === Role.CLIENTE) {
+      res.status(403).json({ error: "El perfil cliente quedó fuera del MVP v1" });
       return;
     }
 
@@ -109,7 +132,10 @@ router.post("/login", async (req, res) => {
       }
     }
 
-    const empresaNombre = await empresaNombreForChofer(choferId);
+    const empresaNombre =
+      user.rol === Role.EMPRESA
+        ? user.empresa?.nombre ?? null
+        : await empresaNombreForChofer(choferId);
     res.json({
       token,
       user: publicUser(
@@ -172,6 +198,7 @@ router.post("/register", async (req, res) => {
         passwordHash,
         rol: rolRaw as Role,
         nombre,
+        loginIdentificador: email,
       },
     });
 
@@ -254,7 +281,7 @@ router.get("/me", authenticate, async (req: AuthedRequest, res) => {
   try {
     const user = await prisma.usuario.findUnique({
       where: { id: req.user!.id },
-      include: { chofer: true },
+      include: { chofer: true, empresa: true },
     });
     if (!user || user.estado !== UserStatus.ACTIVO) {
       res.status(401).json({ error: "Sesión inválida" });
@@ -273,7 +300,10 @@ router.get("/me", authenticate, async (req: AuthedRequest, res) => {
         chofer = await prisma.chofer.findUnique({ where: { id: choferId } });
       }
     }
-    const empresaNombre = await empresaNombreForChofer(choferId);
+    const empresaNombre =
+      user.rol === Role.EMPRESA
+        ? user.empresa?.nombre ?? null
+        : await empresaNombreForChofer(choferId);
     res.json({
       user: publicUser(
         { ...user, choferId },
@@ -290,6 +320,38 @@ router.get("/me", authenticate, async (req: AuthedRequest, res) => {
   } catch (err) {
     console.error("me error", err);
     res.status(500).json({ error: "Error interno" });
+  }
+});
+
+router.post("/cambiar-password", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const actual = String(req.body?.actual ?? "");
+    const nueva = String(req.body?.nueva ?? "");
+    if (nueva.length < 8) {
+      res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
+      return;
+    }
+    const user = await prisma.usuario.findUnique({ where: { id: req.user!.id } });
+    if (!user) {
+      res.status(401).json({ error: "Sesión inválida" });
+      return;
+    }
+    const ok = await bcrypt.compare(actual, user.passwordHash);
+    if (!ok) {
+      res.status(401).json({ error: "Contraseña actual inválida" });
+      return;
+    }
+    await prisma.usuario.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await bcrypt.hash(nueva, 10),
+        debeCambiarPassword: false,
+      },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "No se pudo cambiar la contraseña" });
   }
 });
 

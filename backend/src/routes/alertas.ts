@@ -20,7 +20,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
     const [unidades, choferes] = await Promise.all([
       prisma.camioneta.findMany({
         where: {
-          estado: { not: "FUERA_SERVICIO" },
+          estado: { notIn: ["FUERA_SERVICIO", "INACTIVA"] },
           OR: [
             { vtbVencimiento: { not: null, lte: limite } },
             { seguroVencimiento: { not: null, lte: limite } },
@@ -108,7 +108,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
     const [unidades, choferes] = await Promise.all([
       prisma.camioneta.findMany({
         where: {
-          estado: { not: "FUERA_SERVICIO" },
+          estado: { notIn: ["FUERA_SERVICIO", "INACTIVA"] },
           OR: [
             { vtbVencimiento: { not: null, lte: limite } },
             { seguroVencimiento: { not: null, lte: limite } },

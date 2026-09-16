@@ -149,6 +149,10 @@ export function M5FichaPage() {
     "ACTIVO"
   );
   const [fTipoEmpresa, setFTipoEmpresa] = useState<TipoEmpresa>("PROPIA");
+  const [fApellido, setFApellido] = useState("");
+  const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
+  const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
+  const [fCedulaFoto, setFCedulaFoto] = useState("");
   const [fCuit, setFCuit] = useState("");
   const [fContactoEmpresa, setFContactoEmpresa] = useState("");
   const [fPermiteMultiCamioneta, setFPermiteMultiCamioneta] = useState(true);
@@ -170,7 +174,7 @@ export function M5FichaPage() {
   const [fSeguroVenc, setFSeguroVenc] = useState("");
   const [fVtbVenc, setFVtbVenc] = useState("");
   const [fEstadoCam, setFEstadoCam] = useState<
-    "OPERATIVA" | "EN_TALLER" | "DE_VACACIONES" | "FUERA_SERVICIO"
+    "OPERATIVA" | "EN_TALLER" | "DE_VACACIONES" | "FUERA_SERVICIO" | "INACTIVA"
   >("OPERATIVA");
   const [fEstadoDesde, setFEstadoDesde] = useState("");
   const [fEstadoHasta, setFEstadoHasta] = useState("");
@@ -424,6 +428,8 @@ export function M5FichaPage() {
       if (form.kind === "chofer") {
         const body = {
           nombre: fNombre,
+          apellido: fApellido,
+          empresaId: fChoferEmpresaId,
           dni: fDni,
           cuil: fCuil || null,
           licencia: fLicencia || null,
@@ -465,6 +471,7 @@ export function M5FichaPage() {
           tipo: fTipoEmpresa,
           cuit: fCuit || null,
           contacto: fContactoEmpresa || null,
+          password: fPasswordEmpresa || undefined,
           permiteMultiCamioneta: fPermiteMultiCamioneta,
         };
         if (form.item) {
@@ -511,6 +518,7 @@ export function M5FichaPage() {
           estadoDesde: fEstadoCam === "OPERATIVA" ? null : fEstadoDesde || null,
           estadoHasta: fEstadoCam === "OPERATIVA" ? null : fEstadoHasta || null,
           empresaId: fEmpresaId || null,
+          cedulaFoto: fCedulaFoto || undefined,
         };
         if (form.item) {
           const updated = await apiFetch<Camioneta>(
@@ -1728,12 +1736,31 @@ export function M5FichaPage() {
                   onChange={(e) => setFCuit(e.target.value)}
                 />
               </Field>
-              <Field label="Mail contacto">
+              <Field label="Apellido">
+                <input className={inputClass} value={fApellido} onChange={(e) => setFApellido(e.target.value)} />
+              </Field>
+              <Field label="Empresa">
+                <select className={inputClass} value={fChoferEmpresaId} onChange={(e) => setFChoferEmpresaId(e.target.value)}>
+                  <option value="">Elegí empresa…</option>
+                  {empresas.filter((e) => e.activo !== false).map((e) => (
+                    <option key={e.id} value={e.id}>{e.nombre} · {e.cuit || "sin CUIT"}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Contacto">
                 <input
-                  type="email"
                   className={inputClass}
                   value={fContactoEmpresa}
                   onChange={(e) => setFContactoEmpresa(e.target.value)}
+                />
+              </Field>
+              <Field label="Contraseña de acceso (CUIT)">
+                <input
+                  type="password"
+                  className={inputClass}
+                  value={fPasswordEmpresa}
+                  placeholder={form.item ? "Vacío = no cambiar" : "Vacío = generar temporal"}
+                  onChange={(e) => setFPasswordEmpresa(e.target.value)}
                 />
               </Field>
               <Field label="Tipo">
@@ -2013,6 +2040,7 @@ export function M5FichaPage() {
                   <option value="EN_TALLER">En taller</option>
                   <option value="DE_VACACIONES">De vacaciones</option>
                   <option value="FUERA_SERVICIO">Fuera de servicio</option>
+                  <option value="INACTIVA">Inactiva (baja definitiva)</option>
                 </select>
               </Field>
               {fEstadoCam !== "OPERATIVA" && (
@@ -2054,6 +2082,22 @@ export function M5FichaPage() {
                   ))}
                 </select>
               </Field>
+              {!form.item && (
+                <Field label="Foto de cédula (obligatoria)">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className={inputClass}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => setFCedulaFoto(String(reader.result ?? ""));
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </Field>
+              )}
             </>
           )}
 

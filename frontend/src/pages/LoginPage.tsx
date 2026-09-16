@@ -46,46 +46,18 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
     openPicker: "dueno",
   },
   {
-    email: "facu@vettore.test",
-    rol: "FACU",
-    label: "Facu · Ops / taller",
+    email: "operaciones@vettore.test",
+    rol: "OPERACIONES",
+    label: "Operaciones",
     home: "/m7",
-    note: "Notif. ops + elige presupuesto/taller",
+    note: "DNI + contraseña",
   },
   {
-    email: "silvina@vettore.test",
-    rol: "SILVINA",
-    label: "Silvina · Presupuestos",
+    email: "admin@vettore.test",
+    rol: "ADMINISTRADOR",
+    label: "Administrador",
     home: "/m7",
-    note: "Hasta 3 PDF + cierre de pago",
-  },
-  {
-    email: "pablo@vettore.test",
-    rol: "PABLO",
-    label: "Pablo · Ops",
-    home: "/m7",
-    note: "Notificación ops + ficha integral",
-  },
-  {
-    email: "patricio@vettore.test",
-    rol: "PATRICIO",
-    label: "Patricio · Aprobación",
-    home: "/m7",
-    note: "Aprueba gasto + factura PDF",
-  },
-  {
-    email: "julieta@vettore.test",
-    rol: "JULIETA",
-    label: "Julieta · Aprobación",
-    home: "/m7",
-    note: "Aprueba gasto + factura PDF",
-  },
-  {
-    email: "carla@vettore.test",
-    rol: "CARLA",
-    label: "Carla · Pago",
-    home: "/m7",
-    note: "Cierra pago / avisos finales",
+    note: "DNI + contraseña",
   },
   {
     email: "francisco@vettore.test",
@@ -381,14 +353,14 @@ export function LoginPage() {
                 </p>
                 <form onSubmit={onSubmit} className="space-y-3">
                   <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-                    Email
+                    DNI o CUIT
                     <input
                       type="email"
                       inputMode="email"
                       autoComplete="username"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="tu@email.com"
+                      placeholder="DNI o CUIT"
                       className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2.5 text-base text-[var(--vl-text)] outline-none focus:border-[#1e4080] sm:text-sm"
                       required
                     />

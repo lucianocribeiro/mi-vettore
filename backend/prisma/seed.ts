@@ -65,27 +65,11 @@ type FlotaJson = {
   }>;
 };
 
-const USERS: Array<{ email: string; rol: Role; nombre: string }> = [
+const USERS: Array<{ email: string; rol: Role; nombre: string; dni?: string }> = [
   { email: "cliente@vettore.test", rol: Role.CLIENTE, nombre: "Cliente Demo" },
-  { email: "chofer@vettore.test", rol: Role.CHOFER, nombre: "Chofer Demo" },
-  { email: "pablo@vettore.test", rol: Role.PABLO, nombre: "Pablo (Ops)" },
-  { email: "silvina@vettore.test", rol: Role.SILVINA, nombre: "Silvina (Flota)" },
-  { email: "facu@vettore.test", rol: Role.FACU, nombre: "Facu (Flota)" },
-  {
-    email: "patricio@vettore.test",
-    rol: Role.PATRICIO,
-    nombre: "Patricio (Dirección)",
-  },
-  {
-    email: "julieta@vettore.test",
-    rol: Role.JULIETA,
-    nombre: "Julieta (Dirección)",
-  },
-  {
-    email: "carla@vettore.test",
-    rol: Role.CARLA,
-    nombre: "Carla (Administración)",
-  },
+  { email: "chofer@vettore.test", rol: Role.CHOFER, nombre: "Chofer Demo", dni: "20000001" },
+  { email: "operaciones@vettore.test", rol: Role.OPERACIONES, nombre: "Operaciones", dni: "30000001" },
+  { email: "admin@vettore.test", rol: Role.ADMINISTRADOR, nombre: "Administrador", dni: "30000002" },
   {
     email: "francisco@vettore.test",
     rol: Role.SUGERENCIAS,
@@ -224,9 +208,15 @@ async function main() {
     if (!ch.dni) continue;
     const nombre = titleCaseNombre(ch.nombre);
     const empresaNombre = titleCaseNombre(ch.empresa);
+    const empresa = empresaByName.get(ch.empresa.trim()) ?? empresaByName.get(empresaNombre);
+    if (!empresa) continue;
+    const parts = nombre.split(/\s+/);
+    const apellido = parts.length > 1 ? parts.pop()! : "-";
     const created = await prisma.chofer.create({
       data: {
-        nombre,
+        nombre: parts.join(" ") || nombre,
+        apellido,
+        empresaId: empresa.id,
         dni: ch.dni,
         cuil: ch.cuil,
         email: ch.email?.toLowerCase() ?? null,
@@ -276,6 +266,7 @@ async function main() {
     const created = await prisma.camioneta.create({
       data: {
         patente: u.patente,
+        empresaId: emp.id,
         tipoTransporte: tipo,
         tipoServicioId: tipo ? tipoServicioByEnum.get(tipo) ?? null : null,
         datosTecnicos,
@@ -393,8 +384,11 @@ async function main() {
     rol: Role;
     choferId?: string;
     clienteId?: string;
+    empresaId?: string;
+    dni?: string;
     tipoAcceso: string;
   }) {
+    const dni = opts.dni?.replace(/\D/g, "") || null;
     await prisma.usuario.create({
       data: {
         email: opts.email,
@@ -403,6 +397,10 @@ async function main() {
         nombre: opts.nombre,
         choferId: opts.choferId ?? null,
         clienteId: opts.clienteId ?? null,
+        empresaId: opts.empresaId ?? null,
+        dni,
+        loginIdentificador: dni || opts.email.toLowerCase(),
+        estado: opts.rol === Role.CLIENTE ? "INACTIVO" : "ACTIVO",
       },
     });
     accesos.push({

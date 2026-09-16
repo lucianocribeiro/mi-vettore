@@ -7,15 +7,10 @@ import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.
 const router = Router();
 
 /** Roles que pueden operar el panel de tráfico (cambiar estado / exportar). */
-const TRAFICO_WRITE_ROLES: Role[] = [
-  Role.PABLO,
-  Role.SILVINA,
-  Role.FACU,
-  Role.PATRICIO,
-  Role.JULIETA,
-];
+const TRAFICO_WRITE_ROLES: Role[] = [Role.ADMINISTRADOR, Role.OPERACIONES];
 
 const UNIDADES_NO_ASIGNABLES: EstadoCamioneta[] = [
+  EstadoCamioneta.INACTIVA,
   EstadoCamioneta.EN_TALLER,
   EstadoCamioneta.DE_VACACIONES,
   EstadoCamioneta.FUERA_SERVICIO,

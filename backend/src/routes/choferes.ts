@@ -179,9 +179,16 @@ router.patch("/:id/dni", authenticate, async (req: AuthedRequest, res) => {
 router.post("/", ...write, async (req, res) => {
   try {
     const nombre = String(req.body?.nombre ?? "").trim();
-    const dni = String(req.body?.dni ?? "").trim();
-    if (!nombre || !dni) {
-      res.status(400).json({ error: "Nombre y DNI son obligatorios" });
+    const apellido = String(req.body?.apellido ?? "").trim();
+    const dni = String(req.body?.dni ?? "").replace(/\D/g, "");
+    const empresaId = String(req.body?.empresaId ?? "").trim();
+    if (!nombre || !apellido || !dni || !empresaId) {
+      res.status(400).json({ error: "Nombre, apellido, DNI y empresa son obligatorios" });
+      return;
+    }
+    const empresa = await prisma.empresaTransporte.findUnique({ where: { id: empresaId } });
+    if (!empresa || !empresa.activo) {
+      res.status(400).json({ error: "La empresa debe existir y estar activa" });
       return;
     }
     const estadoRaw = String(req.body?.estado ?? "ACTIVO").toUpperCase();
@@ -192,7 +199,9 @@ router.post("/", ...write, async (req, res) => {
     const item = await prisma.chofer.create({
       data: {
         nombre,
+        apellido,
         dni,
+        empresaId,
         cuil: req.body?.cuil ? String(req.body.cuil).replace(/\D/g, "") : null,
         licencia: req.body?.licencia ? String(req.body.licencia).trim() : null,
         licenciaVencimiento: parseDate(req.body?.licenciaVencimiento),
@@ -207,12 +216,14 @@ router.post("/", ...write, async (req, res) => {
       },
       include: includeAsignaciones,
     });
-    await ensureUsuarioForChofer({
+    const access = await ensureUsuarioForChofer({
       choferId: item.id,
       email: item.email,
-      nombre: item.nombre,
+      nombre: `${item.nombre} ${item.apellido}`.trim(),
+      dni: item.dni,
+      empresaId: item.empresaId,
     });
-    res.status(201).json(item);
+    res.status(201).json({ ...item, credencialTemporal: access.tempPassword ?? null });
   } catch (err: unknown) {
     if (
       typeof err === "object" &&

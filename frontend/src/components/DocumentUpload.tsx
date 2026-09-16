@@ -63,7 +63,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
   const [obligatorios, setObligatorios] = useState<TipoDocumento[]>(
     TIPOS_DOCUMENTO_OBLIGATORIOS
   );
-  const canValidate = user?.rol === "SILVINA";
+  const canValidate = user?.rol === "OPERACIONES" || user?.rol === "ADMINISTRADOR";
   const [dniNumero, setDniNumero] = useState("");
   const [dniGuardado, setDniGuardado] = useState("");
   const [savingDni, setSavingDni] = useState(false);

@@ -28,6 +28,7 @@ export const ESTADOS_CAMIONETA: Array<{ value: EstadoCamioneta; label: string }>
     { value: "EN_TALLER", label: "En taller" },
     { value: "DE_VACACIONES", label: "De vacaciones" },
     { value: "FUERA_SERVICIO", label: "Fuera de servicio" },
+    { value: "INACTIVA", label: "Inactiva" },
   ];
 
 export const ESTADO_CAMIONETA_LABEL: Record<EstadoCamioneta, string> =

@@ -43,12 +43,8 @@ export function canAdvanceWithOverride(rol: Role, step: number): boolean {
 
 export function isOpsRole(rol: Role): boolean {
   return (
-    rol === "PABLO" ||
-    rol === "SILVINA" ||
-    rol === "FACU" ||
-    rol === "PATRICIO" ||
-    rol === "JULIETA" ||
-    rol === "CARLA"
+    rol === "ADMINISTRADOR" ||
+    rol === "OPERACIONES"
   );
 }
 

@@ -20,6 +20,7 @@ import {
   registrarCorreccionAdmin,
 } from "../lib/correccion-admin.js";
 import { parseDateOnly } from "../lib/date-only.js";
+import { DOCS_UNIDAD, metaDocUnidad } from "../lib/documentos-unidad.js";
 
 const router = Router();
 const upload = multer({
@@ -42,7 +43,6 @@ const CON_VENCIMIENTO = new Set<TipoDocumento>([
   TipoDocumento.VTV,
   TipoDocumento.SENASA,
   TipoDocumento.SEGURO,
-  TipoDocumento.HOMOLOGACION,
 ]);
 
 const TIPOS_CHOFER = new Set<TipoDocumento>([
@@ -88,8 +88,9 @@ router.get("/meta", authenticate, (_req, res) => {
     tipos: Object.values(TipoDocumento),
     tiposChofer: [...TIPOS_CHOFER],
     tiposUnidad: [...TIPOS_UNIDAD],
-    conVencimiento: [...CON_VENCIMIENTO],
-    obligatorios: [...TIPOS_OBLIGATORIOS],
+    conVencimiento: DOCS_UNIDAD.filter((d) => d.vencimiento).map((d) => d.tipo),
+    obligatorios: DOCS_UNIDAD.filter((d) => d.obligatorio).map((d) => d.tipo),
+    docsUnidad: DOCS_UNIDAD,
     storageConfigured: isSupabaseStorageConfigured(),
   });
 });
@@ -232,7 +233,7 @@ router.post(
             return;
           }
         }
-      } else if (!isMaster && rol !== Role.CARLA) {
+      } else if (!isMaster && rol !== Role.OPERACIONES && rol !== Role.ADMINISTRADOR && rol !== Role.EMPRESA) {
         res.status(403).json({ error: "Sin permiso" });
         return;
       }
@@ -241,9 +242,15 @@ router.post(
         res.status(400).json({ error: "Archivo obligatorio (PDF o imagen)" });
         return;
       }
+      const metaUnidad = metaDocUnidad(tipo);
+      if (metaUnidad?.soloImagen && !req.file.mimetype.startsWith("image/")) {
+        res.status(400).json({ error: "La cédula requiere una foto" });
+        return;
+      }
 
       let vencimiento: Date | null = null;
-      if (CON_VENCIMIENTO.has(tipo)) {
+      const requiereVenc = metaUnidad ? metaUnidad.vencimiento : CON_VENCIMIENTO.has(tipo);
+      if (requiereVenc) {
         if (!req.body?.vencimiento) {
           res.status(400).json({ error: "Vencimiento obligatorio para este tipo" });
           return;
@@ -290,12 +297,11 @@ router.post(
 router.post("/:id/validar", authenticate, async (req: AuthedRequest, res) => {
   try {
     if (
-      req.user!.rol !== Role.SILVINA &&
       !MASTER_WRITE_ROLES.includes(
         req.user!.rol as (typeof MASTER_WRITE_ROLES)[number]
       )
     ) {
-      res.status(403).json({ error: "Solo Silvina / ops pueden validar" });
+      res.status(403).json({ error: "Solo operaciones o administración pueden validar" });
       return;
     }
     const estado = String(req.body?.estado ?? "").toUpperCase();

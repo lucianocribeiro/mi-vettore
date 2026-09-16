@@ -18,12 +18,8 @@ import { sendExcel } from "../lib/excel-export.js";
 const router = Router();
 
 const OPS_ROLES = new Set([
-  "PABLO",
-  "SILVINA",
-  "FACU",
-  "PATRICIO",
-  "JULIETA",
-  "CARLA",
+  "ADMINISTRADOR",
+  "OPERACIONES",
 ]);
 
 const FLUJO = [

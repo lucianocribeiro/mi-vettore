@@ -3,11 +3,10 @@ import { prisma } from "./prisma.js";
 
 const MIN_MOTIVO = 3;
 
-/** Silvina, Patricio y Julieta pueden corregir/borrar con motivo obligatorio. */
+/** Administrador y operaciones pueden corregir/borrar con motivo obligatorio. */
 export const ADMIN_CORRECCION_ROLES: Role[] = [
-  Role.SILVINA,
-  Role.PATRICIO,
-  Role.JULIETA,
+  Role.ADMINISTRADOR,
+  Role.OPERACIONES,
 ];
 
 export function canAdminCorregir(rol: string | null | undefined): boolean {

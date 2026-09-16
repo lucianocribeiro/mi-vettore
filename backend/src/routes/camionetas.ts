@@ -1,7 +1,7 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import ExcelJS from "exceljs";
 import multer from "multer";
-import { EstadoCamioneta, TipoTransporte } from "@prisma/client";
+import { EstadoCamioneta, TipoDocumento, TipoTransporte } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import {
   camionetasParaUsuarioChofer,
@@ -19,6 +19,9 @@ import {
 import { canAdminCorregir } from "../lib/correccion-admin.js";
 import { parseDateOnly } from "../lib/date-only.js";
 import { applyKmUpdate } from "../lib/km.js";
+import { reasignarChoferUnidad } from "../lib/asignacion-flota.js";
+import { canAssignFleet } from "../lib/roles.js";
+import { uploadDocumento } from "../lib/supabase-storage.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -66,14 +69,15 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
         contextoAccesoFromReq(req)
       );
       if (!incluirBajas) {
-        items = items.filter((c) => c.estado !== "FUERA_SERVICIO");
+        items = items.filter((c) => c.estado !== "FUERA_SERVICIO" && c.estado !== "INACTIVA");
       }
       res.json(items);
       return;
     }
 
+    const incluirInactivas = String(req.query.incluirInactivas ?? "") === "1" || incluirBajas;
     const items = await prisma.camioneta.findMany({
-      where: incluirBajas ? undefined : { estado: { not: "FUERA_SERVICIO" } },
+      where: incluirInactivas ? undefined : { estado: { notIn: ["FUERA_SERVICIO", "INACTIVA"] } },
       orderBy: { patente: "asc" },
       include: includeAsignaciones,
     });
@@ -115,7 +119,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       { header: "Marca", key: "marca", width: 14 },
       { header: "Modelo", key: "modelo", width: 14 },
       { header: "Capacidad", key: "capacidad", width: 18 },
-      { header: "Equipo de frío", key: "equipoFrio", width: 18 },
+      { header: "Equipo de frÃ­o", key: "equipoFrio", width: 18 },
       { header: "Tipo servicio", key: "tipoServicio", width: 16 },
       { header: "Estado", key: "estado", width: 16 },
       { header: "Km", key: "km", width: 10 },
@@ -172,7 +176,7 @@ const MANT_HEADERS = [
   { header: "Taller", key: "taller", width: 24 },
 ] as const;
 
-/** Plantilla vacía para carga histórica de mantenimiento (reimportable). */
+/** Plantilla vacÃ­a para carga histÃ³rica de mantenimiento (reimportable). */
 router.get("/mantenimiento/plantilla", authenticate, async (req: AuthedRequest, res) => {
   try {
     if (!isInternalOpsRole(req.user!.rol)) {
@@ -257,7 +261,7 @@ router.post(
         return;
       }
       if (!req.file?.buffer) {
-        res.status(400).json({ error: "Subí un archivo Excel (.xlsx)" });
+        res.status(400).json({ error: "SubÃ­ un archivo Excel (.xlsx)" });
         return;
       }
       const modoRaw = String(req.body?.modo ?? req.query?.modo ?? "nuevos")
@@ -296,9 +300,9 @@ router.post(
       };
       const cPatente = col("patente", "unidad");
       const cFecha = col("fecha", "fecha evento", "fechaevento");
-      const cKm = col("km", "kilometros", "kilómetros");
+      const cKm = col("km", "kilometros", "kilÃ³metros");
       const cTipo = col("tipo");
-      const cDetalle = col("detalle", "descripcion", "descripción");
+      const cDetalle = col("detalle", "descripcion", "descripciÃ³n");
       const cTaller = col("taller");
       if (!cPatente || !cFecha) {
         res.status(400).json({
@@ -333,7 +337,7 @@ router.post(
         }
         if (!fecha) {
           omitidas++;
-          errores.push(`Fila ${r}: fecha inválida`);
+          errores.push(`Fila ${r}: fecha invÃ¡lida`);
           continue;
         }
         const camioneta = await prisma.camioneta.findFirst({
@@ -448,7 +452,7 @@ router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
         { header: "Km anterior", key: "kmAnterior", width: 12 },
         { header: "Km nuevo", key: "kmNuevo", width: 12 },
         { header: "Delta", key: "delta", width: 10 },
-        { header: "Anomalía", key: "anomalia", width: 10 },
+        { header: "AnomalÃ­a", key: "anomalia", width: 10 },
       ];
       sheet.getRow(1).font = { bold: true };
       for (const r of rows) {
@@ -458,7 +462,7 @@ router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
           kmAnterior: r.kmAnterior,
           kmNuevo: r.kmNuevo,
           delta: r.delta,
-          anomalia: r.anomalia ? "Sí" : "No",
+          anomalia: r.anomalia ? "SÃ­" : "No",
         });
       }
       const filename = `km_reporte_${new Date().toISOString().slice(0, 10)}.xlsx`;
@@ -546,7 +550,7 @@ router.get("/:id/reparaciones", authenticate, async (req: AuthedRequest, res) =>
       fuente: "OT",
       fecha: ot.cerradaAt,
       km: ot.kmAlMomento,
-      taller: ot.tallerAsignado || ot.tallerProveedor?.razonSocial || "—",
+      taller: ot.tallerAsignado || ot.tallerProveedor?.razonSocial || "â€”",
       detalle: ot.solicitud.falla,
       numeroOT: ot.numeroOT,
     }));
@@ -554,7 +558,7 @@ router.get("/:id/reparaciones", authenticate, async (req: AuthedRequest, res) =>
       fuente: h.fuente,
       fecha: h.fecha,
       km: h.km,
-      taller: h.tallerNombre || "—",
+      taller: h.tallerNombre || "â€”",
       detalle: h.detalle || h.tipo,
       numeroOT: h.otId,
     }));
@@ -575,7 +579,7 @@ function isoDay(d: Date | null | undefined): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Planilla Excel de un móvil (reunión 12/08: "enviar planillas"). */
+/** Planilla Excel de un mÃ³vil (reuniÃ³n 12/08: "enviar planillas"). */
 router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.camioneta.findUnique({
@@ -628,8 +632,8 @@ router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
       ["Patente", item.patente],
       ["Marca", item.marca ?? ""],
       ["Modelo", item.modelo ?? ""],
-      ["Año", item.anio ?? ""],
-      ["Equipo de frío", item.equipoFrio ?? ""],
+      ["AÃ±o", item.anio ?? ""],
+      ["Equipo de frÃ­o", item.equipoFrio ?? ""],
       [
         "Capacidad",
         formatCapacidad(item.capacidadValor, item.capacidadUnidad, item.capacidad),
@@ -640,8 +644,8 @@ router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
       ["Km actualizado", isoDay(item.kmActualizadoAt)],
       ["Aceite", isoDay(item.fechaUltimoAceite)],
       ["Correa", isoDay(item.fechaCambioCorrea)],
-      ["Neumáticos", isoDay(item.fechaCambioNeumaticos)],
-      ["Batería", isoDay(item.fechaCambioBateria)],
+      ["NeumÃ¡ticos", isoDay(item.fechaCambioNeumaticos)],
+      ["BaterÃ­a", isoDay(item.fechaCambioBateria)],
       ["Seguro", item.seguroCompania ?? ""],
       ["Seguro vence", isoDay(item.seguroVencimiento)],
       ["VTV vence", isoDay(item.vtbVencimiento)],
@@ -656,7 +660,7 @@ router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
       { header: "Km anterior", key: "antes", width: 14 },
       { header: "Km nuevo", key: "nuevo", width: 14 },
       { header: "Delta", key: "delta", width: 10 },
-      { header: "Anomalía", key: "anomalia", width: 12 },
+      { header: "AnomalÃ­a", key: "anomalia", width: 12 },
     ];
     kmSheet.getRow(1).font = { bold: true };
     for (const r of item.kmRegistros) {
@@ -665,7 +669,7 @@ router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
         antes: r.kmAnterior,
         nuevo: r.kmNuevo,
         delta: r.delta,
-        anomalia: r.anomalia ? "Sí" : "",
+        anomalia: r.anomalia ? "SÃ­" : "",
       });
     }
 
@@ -733,12 +737,12 @@ router.post("/", ...write, async (req, res) => {
     }
     const estadoRaw = String(req.body?.estado ?? "OPERATIVA").toUpperCase();
     if (!(estadoRaw in EstadoCamioneta)) {
-      res.status(400).json({ error: "Estado inválido" });
+      res.status(400).json({ error: "Estado invÃ¡lido" });
       return;
     }
     const tipo = parseTipoTransporte(req.body?.tipoTransporte);
     if (req.body?.tipoTransporte && tipo === undefined) {
-      res.status(400).json({ error: "Tipo de transporte inválido" });
+      res.status(400).json({ error: "Tipo de transporte invÃ¡lido" });
       return;
     }
     const km = Number(req.body?.km ?? 0);
@@ -762,15 +766,18 @@ router.post("/", ...write, async (req, res) => {
     }
     const capacidadUnidad = strOrNull(req.body?.capacidadUnidad);
     const kmInicial = Number.isFinite(km) ? Math.max(0, Math.floor(km)) : 0;
-    const empresaId = req.body?.empresaId ? String(req.body.empresaId) : null;
-    if (empresaId) {
-      const emp = await prisma.empresaTransporte.findUnique({
-        where: { id: empresaId },
-      });
-      if (!emp) {
-        res.status(400).json({ error: "Empresa de transporte no encontrada" });
-        return;
-      }
+    const empresaId = req.body?.empresaId ? String(req.body.empresaId) : "";
+    const emp = empresaId
+      ? await prisma.empresaTransporte.findUnique({ where: { id: empresaId } })
+      : null;
+    if (!emp || !emp.activo) {
+      res.status(400).json({ error: "La unidad debe asignarse a una empresa activa" });
+      return;
+    }
+    const cedulaFoto = String(req.body?.cedulaFoto ?? "");
+    if (!req.body?.omitirCedula && !cedulaFoto.startsWith("data:image/")) {
+      res.status(400).json({ error: "La cÃ©dula requiere una foto" });
+      return;
     }
     const item = await prisma.camioneta.create({
       data: {
@@ -807,6 +814,30 @@ router.post("/", ...write, async (req, res) => {
       },
       include: includeAsignaciones,
     });
+
+    if (cedulaFoto.startsWith("data:image/")) {
+      const mime = cedulaFoto.slice(5, cedulaFoto.indexOf(";"));
+      const b64 = cedulaFoto.slice(cedulaFoto.indexOf(",") + 1);
+      const up = await uploadDocumento({
+        path: `unidad/${item.id}/CEDULA_${Date.now()}.jpg`,
+        body: Buffer.from(b64, "base64"),
+        contentType: mime || "image/jpeg",
+      });
+      if (!up.ok) {
+        await prisma.camioneta.delete({ where: { id: item.id } });
+        res.status(503).json({ error: up.error });
+        return;
+      }
+      await prisma.documentoEntidad.create({
+        data: {
+          tipo: TipoDocumento.CEDULA,
+          camionetaId: item.id,
+          storagePath: up.path,
+          mimeType: mime || "image/jpeg",
+          nombreOriginal: "cedula.jpg",
+        },
+      });
+    }
 
     const choferId = req.body?.choferId ? String(req.body.choferId) : null;
     if (choferId && empresaId) {
@@ -907,7 +938,7 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
     if (req.body?.tipoTransporte !== undefined) {
       const tipo = parseTipoTransporte(req.body.tipoTransporte);
       if (tipo === undefined && req.body.tipoTransporte) {
-        res.status(400).json({ error: "Tipo de transporte inválido" });
+        res.status(400).json({ error: "Tipo de transporte invÃ¡lido" });
         return;
       }
       data.tipoTransporte = tipo ?? null;
@@ -919,7 +950,7 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
     if (req.body?.km !== undefined) {
       const km = Number(req.body.km);
       if (!Number.isFinite(km) || km < 0) {
-        res.status(400).json({ error: "Kilometraje inválido" });
+        res.status(400).json({ error: "Kilometraje invÃ¡lido" });
         return;
       }
       const next = Math.floor(km);
@@ -964,7 +995,7 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
     if (req.body?.estado !== undefined) {
       const s = String(req.body.estado).toUpperCase();
       if (!(s in EstadoCamioneta)) {
-        res.status(400).json({ error: "Estado inválido" });
+        res.status(400).json({ error: "Estado invÃ¡lido" });
         return;
       }
       data.estado = s as EstadoCamioneta;
@@ -1003,7 +1034,7 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
         ? {
             alertaKmAnomalia: true,
             mensaje:
-              "El salto de kilometraje es inusualmente alto; se registró una alerta (no se bloqueó la carga).",
+              "El salto de kilometraje es inusualmente alto; se registrÃ³ una alerta (no se bloqueÃ³ la carga).",
           }
         : {}),
     });
@@ -1040,10 +1071,10 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
     if (rol === "CHOFER") {
       const ok = await choferPuedeEditarCamioneta(req.user!.id, camionetaId, contextoAccesoFromReq(req));
       if (!ok) {
-        res.status(403).json({ error: "Solo podés actualizar unidades de tu flota" });
+        res.status(403).json({ error: "Solo podÃ©s actualizar unidades de tu flota" });
         return;
       }
-    } else if (!isMaster && rol !== "CARLA") {
+    } else if (!isMaster && rol !== "OPERACIONES" && rol !== "ADMINISTRADOR") {
       res.status(403).json({ error: "Sin permiso" });
       return;
     }
@@ -1053,7 +1084,7 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
     if (req.body?.km !== undefined) {
       const km = Number(req.body.km);
       if (!Number.isFinite(km) || km < 0) {
-        res.status(400).json({ error: "Kilometraje inválido" });
+        res.status(400).json({ error: "Kilometraje invÃ¡lido" });
         return;
       }
       const next = Math.floor(km);
@@ -1077,13 +1108,13 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
         await prisma.avisoInterno.createMany({
           data: [
             {
-              rolDestino: "SILVINA",
-              titulo: `Km anómalo — ${existing.patente}`,
-              mensaje: `Se cargaron ${applied.delta} km de golpe (umbral ${kmAnomaliaMaxDelta()}). No se bloqueó la carga.`,
+              rolDestino: "OPERACIONES",
+              titulo: `Km anÃ³malo â€” ${existing.patente}`,
+              mensaje: `Se cargaron ${applied.delta} km de golpe (umbral ${kmAnomaliaMaxDelta()}). No se bloqueÃ³ la carga.`,
             },
             {
-              rolDestino: "PABLO",
-              titulo: `Km anómalo — ${existing.patente}`,
+              rolDestino: "ADMINISTRADOR",
+              titulo: `Km anÃ³malo â€” ${existing.patente}`,
               mensaje: `Se cargaron ${applied.delta} km de golpe (umbral ${kmAnomaliaMaxDelta()}).`,
             },
           ],
@@ -1108,8 +1139,8 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
       res.status(400).json({
         error:
           rol === "CHOFER"
-            ? "Indicá el kilometraje actual"
-            : "Indicá km y/o fechas de mantenimiento (aceite, correa, neumáticos, batería)",
+            ? "IndicÃ¡ el kilometraje actual"
+            : "IndicÃ¡ km y/o fechas de mantenimiento (aceite, correa, neumÃ¡ticos, baterÃ­a)",
       });
       return;
     }
@@ -1125,7 +1156,7 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
         ? {
             alertaKmAnomalia: true,
             mensaje:
-              "El salto de kilometraje es inusualmente alto; se registró una alerta.",
+              "El salto de kilometraje es inusualmente alto; se registrÃ³ una alerta.",
           }
         : {}),
     });
@@ -1135,97 +1166,35 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
   }
 });
 
-router.post("/:id/asignacion", ...write, async (req, res) => {
+router.post("/:id/reactivar", ...write, async (req, res) => {
   try {
-    const camionetaId = req.params.id;
-    const camioneta = await prisma.camioneta.findUnique({
-      where: { id: camionetaId },
+    const item = await prisma.camioneta.update({
+      where: { id: req.params.id },
+      data: { estado: EstadoCamioneta.OPERATIVA, estadoDesde: null, estadoHasta: null },
+      include: includeAsignaciones,
     });
-    if (!camioneta) {
-      res.status(404).json({ error: "Camioneta no encontrada" });
-      return;
-    }
+    res.json(item);
+  } catch {
+    res.status(404).json({ error: "Camioneta no encontrada" });
+  }
+});
 
-    const choferId = String(req.body?.choferId ?? "");
-    const empresaId = String(req.body?.empresaId ?? "");
-    if (!choferId || !empresaId) {
-      res.status(400).json({ error: "choferId y empresaId son obligatorios" });
+router.post("/:id/asignacion", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!canAssignFleet(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso para reasignar" });
       return;
     }
-
-    const [chofer, empresa] = await Promise.all([
-      prisma.chofer.findUnique({ where: { id: choferId } }),
-      prisma.empresaTransporte.findUnique({ where: { id: empresaId } }),
-    ]);
-    if (!chofer) {
-      res.status(400).json({ error: "Chofer inválido" });
-      return;
-    }
-    if (!empresa) {
-      res.status(400).json({ error: "Empresa inválida" });
-      return;
-    }
-
-    // Un chofer con asignación abierta en otra empresa no puede manejar
-    // unidades de esta (evita cruzar flotas).
-    const abiertaOtra = await prisma.asignacionFlota.findFirst({
-      where: {
-        choferId,
-        periodoHasta: null,
-        empresaId: { not: empresaId },
-      },
-      select: { id: true, empresa: { select: { nombre: true } } },
+    const actor = await prisma.usuario.findUnique({ where: { id: req.user!.id } });
+    const result = await reasignarChoferUnidad({
+      camionetaId: req.params.id,
+      choferId: String(req.body?.choferId ?? ""),
+      actorEmpresaId: req.user!.rol === "EMPRESA" ? actor?.empresaId : null,
     });
-    if (abiertaOtra) {
-      res.status(400).json({
-        error: `Ese chofer ya está asignado en otra empresa${
-          abiertaOtra.empresa?.nombre ? ` (${abiertaOtra.empresa.nombre})` : ""
-        }. Liberá esa asignación antes de pasarlo.`,
-      });
-      return;
-    }
-
-    const now = new Date();
-    // TODO (miércoles): historial de patentes al cambiar de empresa —
-    // ¿transferir historial completo o baja + alta? No borrar datos hasta definición.
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.asignacionFlota.updateMany({
-        where: { camionetaId, periodoHasta: null },
-        data: { periodoHasta: now },
-      });
-      // Por defecto la empresa permite varias unidades por chofer (mismo
-      // empresaId). Si permiteMultiCamioneta=false, al reasignar se cierra la
-      // asignación abierta anterior de ese chofer en esta empresa.
-      if (!empresa.permiteMultiCamioneta) {
-        await tx.asignacionFlota.updateMany({
-          where: {
-            choferId,
-            empresaId,
-            periodoHasta: null,
-            camionetaId: { not: camionetaId },
-          },
-          data: { periodoHasta: now },
-        });
-      }
-      await tx.asignacionFlota.create({
-        data: {
-          camionetaId,
-          choferId,
-          empresaId,
-          periodoDesde: now,
-          periodoHasta: null,
-        },
-      });
-      return tx.camioneta.findUnique({
-        where: { id: camionetaId },
-        include: includeAsignaciones,
-      });
-    });
-
     res.json(result);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Error al reasignar flota" });
+    const status = err && typeof err === "object" && "status" in err ? Number((err as { status: number }).status) : 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : "Error al reasignar flota" });
   }
 });
 

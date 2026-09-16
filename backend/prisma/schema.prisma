@@ -22,12 +22,9 @@ datasource db {
 enum Role {
   CLIENTE
   CHOFER
-  PABLO
-  SILVINA
-  FACU
-  PATRICIO
-  JULIETA
-  CARLA
+  ADMINISTRADOR
+  OPERACIONES
+  EMPRESA
   SUGERENCIAS
 }
 
@@ -52,6 +49,8 @@ enum EstadoCamioneta {
   EN_TALLER
   DE_VACACIONES
   FUERA_SERVICIO
+  /// Baja definitiva / vendida. No se lista en vistas normales.
+  INACTIVA
 }
 
 enum TipoEmpresa {
@@ -122,23 +121,32 @@ enum EstadoValidacionDoc {
 model Usuario {
   id           String     @id @default(cuid())
   email        String     @unique
+  /// DNI de personas (admin, operaciones, chofer). Único cuando existe.
+  dni          String?    @unique
+  /// Identificador de login: DNI (personas) o CUIT (empresa). Legado puede ser email hasta cargar DNI.
+  loginIdentificador String @unique
   passwordHash String
+  debeCambiarPassword Boolean @default(false)
   rol          Role
   estado       UserStatus @default(ACTIVO)
   nombre       String?
   clienteId    String?
   choferId     String?
+  empresaId    String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   cliente              Cliente?           @relation(fields: [clienteId], references: [id])
   chofer               Chofer?            @relation(fields: [choferId], references: [id])
+  empresa              EmpresaTransporte? @relation(fields: [empresaId], references: [id])
   auditorias           OtAuditoria[]
   comentariosOt        OtComentario[]
   sugerencias          SugerenciaUsuario[]
   avisos               AvisoInterno[]     @relation("AvisoUsuario")
   docsValidados        DocumentoEntidad[] @relation("DocValidador")
   correccionesAdmin    CorreccionAdmin[]
+
+  @@index([empresaId])
 }
 
 model Cliente {
@@ -155,7 +163,9 @@ model Cliente {
 model Chofer {
   id                  String           @id @default(cuid())
   nombre              String
+  apellido            String
   dni                 String           @unique
+  empresaId           String
   cuil                String?
   licencia            String?
   licenciaVencimiento DateTime?
@@ -169,11 +179,14 @@ model Chofer {
   estado              EstadoChofer     @default(ACTIVO)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
+  empresa             EmpresaTransporte @relation(fields: [empresaId], references: [id])
   asignaciones        AsignacionFlota[]
   pedidos             Pedido[]
   usuarios            Usuario[]
   solicitudes         SolicitudTaller[]
   documentos          DocumentoEntidad[]
+
+  @@index([empresaId])
 }
 
 /// Catálogo configurable de tipos de servicio (congelado, seco, etc.).
@@ -219,8 +232,8 @@ model Camioneta {
   anio                   Int?
   /// Marca del equipo de frío (Carrier, Thermo King, etc.).
   equipoFrio             String?
-  /// Empresa de transporte propietaria de la unidad (ownership; distinta de AsignacionFlota).
-  empresaId              String?
+  /// Empresa de transporte propietaria de la unidad (obligatoria).
+  empresaId              String
   /// Número de capacidad (separado de unidad).
   capacidadValor         Int?
   /// Unidad libre: kilos, litros, canastos, baldes, etc.
@@ -251,7 +264,7 @@ model Camioneta {
   pedidos                Pedido[]
   solicitudes            SolicitudTaller[]
   tipoServicio           TipoServicio?    @relation(fields: [tipoServicioId], references: [id])
-  empresa                EmpresaTransporte? @relation("EmpresaUnidades", fields: [empresaId], references: [id])
+  empresa                EmpresaTransporte @relation("EmpresaUnidades", fields: [empresaId], references: [id])
   documentos             DocumentoEntidad[]
   kmRegistros            KmRegistro[]
   registrosMantenimiento RegistroMantenimiento[]
@@ -262,15 +275,18 @@ model Camioneta {
 model EmpresaTransporte {
   id                     String           @id @default(cuid())
   nombre                 String
-  cuit                   String?          @unique
+  cuit                   String           @unique
   contacto               String?
   tipo                   TipoEmpresa      @default(ALIADA)
   /// Si true, un mismo chofer puede tener varias camionetas activas de esta empresa.
   permiteMultiCamioneta  Boolean          @default(true)
+  activo                 Boolean          @default(true)
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   asignaciones           AsignacionFlota[]
   unidades               Camioneta[]      @relation("EmpresaUnidades")
+  choferes               Chofer[]
+  usuarios               Usuario[]
 }
 
 /// Vínculo ternario: chofer y patente al mismo nivel bajo la empresa (sin chofer↔patente fijo).

@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       "/api/auth/login",
       {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identificador: email, email, password }),
       }
     );
     localStorage.setItem(TOKEN_KEY, data.token);

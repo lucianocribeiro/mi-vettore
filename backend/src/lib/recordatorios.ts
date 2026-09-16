@@ -161,7 +161,7 @@ export async function runAlertaServicioKm() {
         titulo: `Servicio próximo — ${u.patente}`,
         mensaje: `${u.patente} recorrió ${delta.toLocaleString("es-AR")} km desde la última reparación (${lastKm.toLocaleString("es-AR")} km). Revisá mantenimiento.`,
         usuarioId: usuario?.id,
-        rolDestino: usuario?.id ? undefined : "SILVINA",
+        rolDestino: usuario?.id ? undefined : "OPERACIONES",
       },
     });
     n++;
@@ -273,7 +273,7 @@ export async function runAlertasDocumentos() {
     }
     await prisma.avisoInterno.create({
       data: {
-        rolDestino: "SILVINA",
+        rolDestino: "OPERACIONES",
         titulo: asunto,
         mensaje: cuerpo,
       },
@@ -340,8 +340,8 @@ export async function runAlertasVencimientos() {
     }
     await prisma.avisoInterno.createMany({
       data: [
-        { rolDestino: "PABLO", titulo: asunto, mensaje: cuerpo },
-        { rolDestino: "FACU", titulo: asunto, mensaje: cuerpo },
+        { rolDestino: "ADMINISTRADOR", titulo: asunto, mensaje: cuerpo },
+        { rolDestino: "OPERACIONES", titulo: asunto, mensaje: cuerpo },
       ],
     });
     vtv++;
@@ -389,8 +389,8 @@ export async function runAlertasVencimientos() {
     }
     await prisma.avisoInterno.createMany({
       data: [
-        { rolDestino: "PABLO", titulo: asunto, mensaje: cuerpo },
-        { rolDestino: "FACU", titulo: asunto, mensaje: cuerpo },
+        { rolDestino: "ADMINISTRADOR", titulo: asunto, mensaje: cuerpo },
+        { rolDestino: "OPERACIONES", titulo: asunto, mensaje: cuerpo },
       ],
     });
     lic++;

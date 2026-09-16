@@ -1,5 +1,7 @@
 import { Router } from "express";
-import { TipoEmpresa } from "@prisma/client";
+import { Role, TipoEmpresa } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import { generateTempPassword } from "../lib/temp-password.js";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendExcel } from "../lib/excel-export.js";
@@ -12,6 +14,10 @@ router.get("/", authenticate, async (_req, res) => {
   try {
     const items = await prisma.empresaTransporte.findMany({
       orderBy: { nombre: "asc" },
+      include: {
+        choferes: { orderBy: { apellido: "asc" }, select: { id: true, nombre: true, apellido: true, dni: true, estado: true } },
+        unidades: { orderBy: { patente: "asc" }, select: { id: true, patente: true, estado: true } },
+      },
     });
     res.json(items);
   } catch (err) {
@@ -55,6 +61,10 @@ router.get("/:id", authenticate, async (req, res) => {
   try {
     const item = await prisma.empresaTransporte.findUnique({
       where: { id: req.params.id },
+      include: {
+        choferes: { orderBy: { apellido: "asc" } },
+        unidades: { orderBy: { patente: "asc" } },
+      },
     });
     if (!item) {
       res.status(404).json({ error: "Empresa no encontrada" });
@@ -70,8 +80,9 @@ router.get("/:id", authenticate, async (req, res) => {
 router.post("/", ...write, async (req, res) => {
   try {
     const nombre = String(req.body?.nombre ?? "").trim();
-    if (!nombre) {
-      res.status(400).json({ error: "Nombre obligatorio" });
+    const cuit = String(req.body?.cuit ?? "").replace(/\D/g, "");
+    if (!nombre || cuit.length < 11) {
+      res.status(400).json({ error: "Nombre y CUIT (11 dígitos) son obligatorios" });
       return;
     }
     const tipoRaw = String(req.body?.tipo ?? "PROPIA").toUpperCase();
@@ -79,11 +90,13 @@ router.post("/", ...write, async (req, res) => {
       res.status(400).json({ error: "Tipo inválido" });
       return;
     }
-    const item = await prisma.empresaTransporte.create({
+    const password = String(req.body?.password ?? "") || generateTempPassword();
+    const item = await prisma.$transaction(async (tx) => {
+      const empresa = await tx.empresaTransporte.create({
       data: {
         nombre,
         tipo: tipoRaw as TipoEmpresa,
-        cuit: req.body?.cuit ? String(req.body.cuit).replace(/\D/g, "") : null,
+        cuit,
         contacto: req.body?.contacto
           ? String(req.body.contacto).trim()
           : null,
@@ -93,7 +106,20 @@ router.post("/", ...write, async (req, res) => {
             : Boolean(req.body.permiteMultiCamioneta),
       },
     });
-    res.status(201).json(item);
+      await tx.usuario.create({
+        data: {
+          email: `empresa-${cuit}@acceso.vettore.local`,
+          loginIdentificador: cuit,
+          passwordHash: await bcrypt.hash(password, 10),
+          rol: Role.EMPRESA,
+          nombre,
+          empresaId: empresa.id,
+          debeCambiarPassword: true,
+        },
+      });
+      return empresa;
+    });
+    res.status(201).json({ ...item, credencialTemporal: password });
   } catch (err: unknown) {
     if (
       typeof err === "object" &&
@@ -121,15 +147,19 @@ router.put("/:id", ...write, async (req, res) => {
     const data: {
       nombre?: string;
       tipo?: TipoEmpresa;
-      cuit?: string | null;
+      cuit?: string;
+      activo?: boolean;
       contacto?: string | null;
       permiteMultiCamioneta?: boolean;
     } = {};
     if (req.body?.nombre !== undefined) data.nombre = String(req.body.nombre).trim();
     if (req.body?.cuit !== undefined) {
-      data.cuit = req.body.cuit
-        ? String(req.body.cuit).replace(/\D/g, "")
-        : null;
+      const cuit = String(req.body.cuit).replace(/\D/g, "");
+      if (cuit.length < 11) {
+        res.status(400).json({ error: "CUIT inválido" });
+        return;
+      }
+      data.cuit = cuit;
     }
     if (req.body?.contacto !== undefined) {
       data.contacto = req.body.contacto
@@ -169,11 +199,37 @@ router.put("/:id", ...write, async (req, res) => {
 
 router.delete("/:id", ...write, async (req, res) => {
   try {
-    await prisma.asignacionFlota.deleteMany({ where: { empresaId: req.params.id } });
-    await prisma.empresaTransporte.delete({ where: { id: req.params.id } });
-    res.status(204).send();
+    const item = await prisma.empresaTransporte.update({
+      where: { id: req.params.id },
+      data: { activo: false },
+    });
+    await prisma.usuario.updateMany({
+      where: { empresaId: item.id, rol: Role.EMPRESA },
+      data: { estado: "INACTIVO" },
+    });
+    res.json(item);
   } catch {
     res.status(404).json({ error: "Empresa no encontrada" });
+  }
+});
+
+router.post("/:id/password", ...write, async (req, res) => {
+  try {
+    const empresa = await prisma.empresaTransporte.findUnique({ where: { id: req.params.id } });
+    if (!empresa) {
+      res.status(404).json({ error: "Empresa no encontrada" });
+      return;
+    }
+    const password = String(req.body?.password ?? "") || generateTempPassword();
+    const hash = await bcrypt.hash(password, 10);
+    await prisma.usuario.updateMany({
+      where: { empresaId: empresa.id, rol: Role.EMPRESA },
+      data: { passwordHash: hash, debeCambiarPassword: true, estado: "ACTIVO" },
+    });
+    res.json({ credencialTemporal: password });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "No se pudo actualizar la contraseña" });
   }
 });
 

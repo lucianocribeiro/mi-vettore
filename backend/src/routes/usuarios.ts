@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { Role, UserStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
+import { generateTempPassword } from "../lib/temp-password.js";
 import { sendExcel } from "../lib/excel-export.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 
@@ -143,29 +144,56 @@ router.post("/", ...write, async (req, res) => {
     const email = String(req.body?.email ?? "")
       .trim()
       .toLowerCase();
-    const password = String(req.body?.password ?? "");
     const rolRaw = String(req.body?.rol ?? "").toUpperCase();
-    if (!email || !password) {
-      res.status(400).json({ error: "Email y password son obligatorios" });
+    const dni = String(req.body?.dni ?? "").replace(/\D/g, "");
+    const empresaId = req.body?.empresaId ? String(req.body.empresaId) : null;
+    const choferId = req.body?.choferId ? String(req.body.choferId) : null;
+    if (!(rolRaw in Role) || rolRaw === "CLIENTE") {
+      res.status(400).json({ error: "Rol inválido" });
       return;
     }
-    if (!(rolRaw in Role)) {
-      res.status(400).json({ error: "Rol inválido", rolesValidos: Object.values(Role) });
+    if (!email) {
+      res.status(400).json({ error: "Email de contacto obligatorio" });
       return;
     }
-    if (rolRaw === "CLIENTE") {
-      res.status(400).json({
-        error: "El rol Cliente ya no se usa; los clientes no solicitan cambios por la app",
-      });
+    if (rolRaw !== "EMPRESA" && dni.length < 7) {
+      res.status(400).json({ error: "DNI obligatorio" });
       return;
     }
-    const passwordHash = await bcrypt.hash(password, 10);
+    if ((rolRaw === "EMPRESA" || rolRaw === "CHOFER") && !empresaId) {
+      res.status(400).json({ error: "Empresa obligatoria" });
+      return;
+    }
+    if (rolRaw === "CHOFER") {
+      if (!choferId) {
+        res.status(400).json({ error: "Chofer obligatorio" });
+        return;
+      }
+      const chofer = await prisma.chofer.findUnique({ where: { id: choferId } });
+      if (!chofer || chofer.empresaId !== empresaId) {
+        res.status(400).json({ error: "El chofer no pertenece a la empresa elegida" });
+        return;
+      }
+    }
+    const plain = String(req.body?.password ?? "") || generateTempPassword();
+    const loginIdentificador = rolRaw === "EMPRESA"
+      ? String((await prisma.empresaTransporte.findUnique({ where: { id: empresaId! } }))?.cuit ?? "")
+      : dni;
+    if (!loginIdentificador) {
+      res.status(400).json({ error: "No se pudo resolver el identificador de acceso" });
+      return;
+    }
     const item = await prisma.usuario.create({
       data: {
         email,
-        passwordHash,
+        passwordHash: await bcrypt.hash(plain, 10),
         rol: rolRaw as Role,
         nombre: req.body?.nombre ? String(req.body.nombre).trim() : null,
+        dni: rolRaw === "EMPRESA" ? null : dni,
+        loginIdentificador,
+        empresaId,
+        choferId: rolRaw === "CHOFER" ? choferId : null,
+        debeCambiarPassword: true,
         estado:
           String(req.body?.estado ?? "ACTIVO").toUpperCase() === "INACTIVO"
             ? UserStatus.INACTIVO
@@ -173,7 +201,7 @@ router.post("/", ...write, async (req, res) => {
       },
       include: includeChoferList,
     });
-    res.status(201).json(publicUser(item));
+    res.status(201).json({ ...publicUser(item), credencialTemporal: plain });
   } catch (err: unknown) {
     if (
       typeof err === "object" &&

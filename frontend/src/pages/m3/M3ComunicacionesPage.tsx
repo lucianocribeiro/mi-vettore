@@ -69,7 +69,7 @@ export function M3ComunicacionesPage() {
   const { token, user } = useAuth();
   const canTrigger =
     !!user?.rol &&
-    (MASTER_WRITE_ROLES.includes(user.rol as Role) || user.rol === "CARLA");
+    MASTER_WRITE_ROLES.includes(user.rol as Role);
 
   const [meta, setMeta] = useState<Meta | null>(null);
   const [items, setItems] = useState<Comunicacion[]>([]);

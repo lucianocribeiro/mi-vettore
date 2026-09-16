@@ -1,12 +1,9 @@
 export type Role =
   | "CLIENTE"
   | "CHOFER"
-  | "PABLO"
-  | "SILVINA"
-  | "FACU"
-  | "PATRICIO"
-  | "JULIETA"
-  | "CARLA"
+  | "ADMINISTRADOR"
+  | "OPERACIONES"
+  | "EMPRESA"
   | "SUGERENCIAS";
 
 export type ContextoAcceso = "CHOFER" | "EMPRESA";
@@ -34,36 +31,20 @@ export type User = {
 };
 
 export const ROLE_LABELS: Record<Role, string> = {
-  CLIENTE: "Cliente",
+  CLIENTE: "Cliente (legado)",
   CHOFER: "Chofer",
-  PABLO: "Pablo (Ops)",
-  SILVINA: "Silvina (Flota)",
-  FACU: "Facu (Flota)",
-  PATRICIO: "Patricio (Dirección)",
-  JULIETA: "Julieta (Dirección)",
-  CARLA: "Carla (Administración)",
+  ADMINISTRADOR: "Administrador",
+  OPERACIONES: "Operaciones",
+  EMPRESA: "Empresa",
   SUGERENCIAS: "Sugerencias",
 };
 
 export const ALL_ROLES = Object.keys(ROLE_LABELS) as Role[];
 
-export const MASTER_WRITE_ROLES: Role[] = [
-  "PABLO",
-  "SILVINA",
-  "FACU",
-  "PATRICIO",
-  "JULIETA",
-];
+export const MASTER_WRITE_ROLES: Role[] = ["ADMINISTRADOR", "OPERACIONES"];
 
 /** Ops internos (incluye Carla): export Excel y paneles de operación. */
-export const INTERNAL_OPS_ROLES: Role[] = [
-  "PABLO",
-  "SILVINA",
-  "FACU",
-  "PATRICIO",
-  "JULIETA",
-  "CARLA",
-];
+export const INTERNAL_OPS_ROLES: Role[] = ["ADMINISTRADOR", "OPERACIONES"];
 
 /** Solo el rol SUGERENCIAS ve el inbox de feedback. */
 export const SUGERENCIAS_VIEW_ROLES: Role[] = ["SUGERENCIAS"];
@@ -85,11 +66,7 @@ export function isSugerenciasOnly(rol?: Role | null): boolean {
 }
 
 /** Silvina, Patricio y Julieta pueden corregir/borrar con motivo. */
-export const ADMIN_CORRECCION_ROLES: Role[] = [
-  "SILVINA",
-  "PATRICIO",
-  "JULIETA",
-];
+export const ADMIN_CORRECCION_ROLES: Role[] = ["ADMINISTRADOR", "OPERACIONES"];
 
 export function canAdminCorregir(rol?: Role | null): boolean {
   return !!rol && ADMIN_CORRECCION_ROLES.includes(rol);
@@ -101,7 +78,8 @@ export type EstadoCamioneta =
   | "OPERATIVA"
   | "EN_TALLER"
   | "DE_VACACIONES"
-  | "FUERA_SERVICIO";
+  | "FUERA_SERVICIO"
+  | "INACTIVA";
 export type TipoEmpresa = "PROPIA" | "ALIADA";
 export type TipoTransporte =
   | "CONGELADO"
@@ -156,10 +134,10 @@ export const TIPOS_DOCUMENTO_CHOFER: TipoDocumento[] = [
 ];
 
 export const TIPOS_DOCUMENTO_UNIDAD: TipoDocumento[] = [
+  "CEDULA",
+  "SEGURO",
   "VTV",
   "SENASA",
-  "SEGURO",
-  "CEDULA",
   "HOMOLOGACION",
   "OTRA_DOCUMENTACION",
   "FOTO_VEHICULO",
@@ -285,6 +263,9 @@ export type Empresa = {
   tipo: TipoEmpresa;
   /** Si true, un mismo chofer puede tener varias camionetas activas de esta empresa. */
   permiteMultiCamioneta?: boolean;
+  activo?: boolean;
+  choferes?: Array<{ id: string; nombre: string; apellido?: string; dni: string; estado: string }>;
+  unidades?: Array<{ id: string; patente: string; estado: string }>;
 };
 
 export type AsignacionFlota = {

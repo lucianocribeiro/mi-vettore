@@ -19,7 +19,7 @@ router.get("/dashboard", authenticate, (req: AuthedRequest, res) => {
 router.get(
   "/trafico",
   authenticate,
-  authorize(Role.PABLO),
+  authorize(Role.OPERACIONES, Role.ADMINISTRADOR),
   (req: AuthedRequest, res) => {
     res.json({
       message: "Acceso a coordinación de tráfico",

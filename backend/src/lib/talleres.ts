@@ -46,53 +46,25 @@ export const OT_STEPS = [
     key: 1,
     code: "presupuesto",
     label: "Presupuesto",
-    ownerRoles: [
-      Role.PABLO,
-      Role.SILVINA,
-      Role.FACU,
-      Role.PATRICIO,
-      Role.JULIETA,
-      Role.CARLA,
-    ] as Role[] | null,
+    ownerRoles: [Role.ADMINISTRADOR, Role.OPERACIONES] as Role[] | null,
   },
   {
     key: 2,
     code: "seleccion",
     label: "Selección",
-    ownerRoles: [
-      Role.PABLO,
-      Role.SILVINA,
-      Role.FACU,
-      Role.PATRICIO,
-      Role.JULIETA,
-      Role.CARLA,
-    ],
+    ownerRoles: [Role.ADMINISTRADOR, Role.OPERACIONES],
   },
   {
     key: 3,
     code: "ajuste",
     label: "Ajuste de importes",
-    ownerRoles: [
-      Role.PABLO,
-      Role.SILVINA,
-      Role.FACU,
-      Role.PATRICIO,
-      Role.JULIETA,
-      Role.CARLA,
-    ],
+    ownerRoles: [Role.ADMINISTRADOR, Role.OPERACIONES],
   },
   {
     key: 4,
     code: "cierre",
     label: "Comparación y cierre",
-    ownerRoles: [
-      Role.PABLO,
-      Role.SILVINA,
-      Role.FACU,
-      Role.PATRICIO,
-      Role.JULIETA,
-      Role.CARLA,
-    ],
+    ownerRoles: [Role.ADMINISTRADOR, Role.OPERACIONES],
   },
 ] as const;
 
@@ -119,9 +91,9 @@ export function migrateLegacyOtStep(step: number, opts?: { forceSeven?: boolean 
   return step;
 }
 
-/** Facu y Silvina (legado / labels “habitual”). */
+/** Operaciones de flota (antes Facu / Silvina). */
 export function isFacuOrSilvina(rol: Role | string | null | undefined): boolean {
-  return rol === Role.FACU || rol === Role.SILVINA || rol === "FACU" || rol === "SILVINA";
+  return rol === Role.OPERACIONES || rol === Role.ADMINISTRADOR || rol === "OPERACIONES" || rol === "ADMINISTRADOR";
 }
 
 /** Todos los perfiles Vettore internos pueden editar talleres por completo. */
@@ -195,10 +167,10 @@ export function canCerrarOt(rol: Role): boolean {
 }
 
 /** Aviso al crear la solicitud: Pablo y Silvina (notif automática, reunión 12/08). */
-export const NOTIF_OPS_ROLES: Role[] = [Role.PABLO, Role.SILVINA, Role.FACU];
+export const NOTIF_OPS_ROLES: Role[] = [Role.OPERACIONES, Role.ADMINISTRADOR];
 
 /** Notificación final de pago. */
-export const CIERRE_AVISO_ROLES: Role[] = [Role.SILVINA, Role.FACU, Role.CARLA];
+export const CIERRE_AVISO_ROLES: Role[] = [Role.OPERACIONES, Role.ADMINISTRADOR];
 
 /** Retroceder: solo staff interno, nunca el chofer. */
 export function canRetreat(rol: Role): boolean {
