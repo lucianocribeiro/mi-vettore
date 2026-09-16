@@ -98,9 +98,15 @@ export function DocumentacionPage() {
   const [selectedCam, setSelectedCam] = useState<string | null>(null);
   const [selectedChofer, setSelectedChofer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [draftChofer, setDraftChofer] = useState<Record<string, string>>({});
+  const [draftUnidad, setDraftUnidad] = useState<Record<string, string>>({});
   const [advanced, setAdvanced] = useState(false);
   const [adv, setAdv] = useState<AdvFilters>(EMPTY_ADV);
   const ops = isInternalOps(user?.rol);
+  const esPerfilEmpresa =
+    user?.rol === "EMPRESA" ||
+    (!!user?.esDuenoFlota && contextoAcceso === "EMPRESA");
 
   const setQuery = (next: string) => {
     const params = new URLSearchParams(searchParams);
@@ -109,15 +115,17 @@ export function DocumentacionPage() {
     setSearchParams(params, { replace: true });
   };
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (keepSelection = false) => {
     if (!token) return;
-    setSelectedCam(null);
-    setSelectedChofer(null);
+    if (!keepSelection) {
+      setSelectedCam(null);
+      setSelectedChofer(null);
+    }
     try {
       const cams = await apiFetch<Camioneta[]>("/api/camionetas", {}, token);
       setCamionetas(cams);
-      if (cams.length === 1) setSelectedCam(cams[0].id);
-      if (ops || user?.esDuenoFlota) {
+      if (!keepSelection && cams.length === 1) setSelectedCam(cams[0].id);
+      if (ops || user?.esDuenoFlota || user?.rol === "EMPRESA") {
         const ch = await apiFetch<Chofer[]>("/api/choferes", {}, token);
         setChoferes(ch);
       } else if (user?.choferId) {
@@ -127,11 +135,57 @@ export function DocumentacionPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar");
     }
-  }, [token, ops, user?.choferId, user?.nombre, user?.esDuenoFlota, contextoAcceso]);
+  }, [token, ops, user?.choferId, user?.nombre, user?.esDuenoFlota, user?.rol, contextoAcceso]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  function unidadDeChofer(choferId: string): Camioneta | null {
+    return (
+      camionetas.find((c) => currentAsignacion(c)?.choferId === choferId) ?? null
+    );
+  }
+
+  function nombreChofer(choferId: string): string {
+    const ch = choferes.find((c) => c.id === choferId);
+    if (!ch) return "el chofer";
+    return [ch.apellido, ch.nombre].filter(Boolean).join(", ") || ch.nombre;
+  }
+
+  async function asignarChofer(camionetaId: string, choferId: string) {
+    if (!token || !choferId) return;
+    const unidad = camionetas.find((c) => c.id === camionetaId);
+    const actual = unidad ? currentAsignacion(unidad)?.choferId : null;
+    if (actual === choferId) return;
+    const otra = unidadDeChofer(choferId);
+    const nombre = nombreChofer(choferId);
+    const destino = unidad?.patente ?? "esta unidad";
+    let mensaje = `¿Asignar a ${nombre} en ${destino}?`;
+    if (actual && actual !== choferId && otra && otra.id !== camionetaId) {
+      mensaje = `¿Reemplazar el chofer de ${destino} y pasar a ${nombre} desde ${otra.patente}?`;
+    } else if (actual && actual !== choferId) {
+      mensaje = `¿Reemplazar el chofer de ${destino} por ${nombre}?`;
+    } else if (otra && otra.id !== camionetaId) {
+      mensaje = `${nombre} está en ${otra.patente}. ¿Lo pasás a ${destino}?`;
+    }
+    if (!confirm(mensaje)) return;
+    setSavingId(camionetaId);
+    setError(null);
+    try {
+      await apiFetch(
+        `/api/camionetas/${camionetaId}/asignacion`,
+        { method: "POST", body: JSON.stringify({ choferId }) },
+        token
+      );
+      setDraftChofer((prev) => ({ ...prev, [camionetaId]: choferId }));
+      await load(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo cambiar el chofer");
+    } finally {
+      setSavingId(null);
+    }
+  }
 
   const filteredCams = useMemo(() => {
     const empresaQ = adv.empresa.trim().toLowerCase();
@@ -231,9 +285,11 @@ export function DocumentacionPage() {
       <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
         {ops
           ? "Chofer: DNI, licencia frente/dorso, habilitación y seguro de accidentes (opcional). Unidad: RTO/VTV, SENASA (opcional), seguro, cédula (sin vencimiento), homologación (opcional), otra documentación (opcional) y foto del vehículo. La documentación de empleados de empresas tercerizadas la carga administración (Pablo/Silvina)."
-          : user?.esDuenoFlota
-            ? "Como empresa de transporte podés ver y cargar la documentación de tus choferes y de tus unidades."
-            : "Podés cargar DNI, licencia frente/dorso, habilitación y seguro de accidentes (opcional), y los documentos de tu unidad (RTO/VTV, SENASA opcional, seguro, cédula sin vencimiento, homologación opcional, otra doc. y foto). La ficha de otros choferes la carga Vettore."}
+          : esPerfilEmpresa
+            ? "En el perfil empresa podés asignar, reemplazar o pasar un chofer a otra unidad de tu flota, y cargar la documentación."
+            : user?.esDuenoFlota
+              ? "Estás en modo conductor. Para asignar o cambiar choferes de las unidades, pasá al perfil Empresa."
+              : "Podés cargar DNI, licencia frente/dorso, habilitación y seguro de accidentes (opcional), y los documentos de tu unidad (RTO/VTV, SENASA opcional, seguro, cédula sin vencimiento, homologación opcional, otra doc. y foto). La ficha de otros choferes la carga Vettore."}
       </p>
 
       <div className="mt-4 flex gap-2">
@@ -257,7 +313,7 @@ export function DocumentacionPage() {
               : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
           }`}
         >
-          {ops || user?.esDuenoFlota ? "Choferes" : "Mi documentación"}
+          {ops || user?.esDuenoFlota || user?.rol === "EMPRESA" ? "Choferes" : "Mi documentación"}
         </button>
       </div>
 
@@ -448,28 +504,134 @@ export function DocumentacionPage() {
             ) : (
               filteredCams.map((c) => {
                 const active = selectedCam === c.id;
+                const actual = currentAsignacion(c);
+                const elegido = draftChofer[c.id] ?? actual?.choferId ?? "";
+                const otra = elegido ? unidadDeChofer(elegido) : null;
+                const accion =
+                  otra && otra.id !== c.id
+                    ? "Pasar a esta unidad"
+                    : actual?.choferId && actual.choferId !== elegido
+                      ? "Reemplazar"
+                      : "Asignar";
                 return (
                   <div
                     key={c.id}
                     className={`grid gap-2 ${active ? "lg:grid-cols-2" : ""}`}
                   >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedCam((prev) => (prev === c.id ? null : c.id))
-                      }
-                      className={`w-full rounded-xl border p-3 text-left text-sm ${
+                    <div
+                      className={`self-start rounded-xl border p-3 text-sm ${
                         active
                           ? "border-slate-900 dark:border-slate-100"
                           : "border-[var(--vl-card-border)]"
                       }`}
                     >
-                      <div className="font-semibold text-[var(--vl-heading)]">
-                        {c.patente}
-                      </div>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedCam((prev) => (prev === c.id ? null : c.id))
+                        }
+                        className="w-full text-left"
+                      >
+                        <div className="font-semibold text-[var(--vl-heading)]">
+                          {c.patente}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                          {actual?.chofer
+                            ? `Chofer: ${actual.chofer.nombre}`
+                            : "Sin chofer"}
+                        </div>
+                      </button>
+                      {esPerfilEmpresa && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <select
+                            className="min-w-0 flex-1 rounded-md border border-[var(--vl-card-border)] bg-transparent px-2 py-1.5 text-xs"
+                            value={elegido}
+                            onChange={(e) =>
+                              setDraftChofer((prev) => ({
+                                ...prev,
+                                [c.id]: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Elegí chofer…</option>
+                            {choferes
+                              .filter((ch) => ch.estado !== "INACTIVO")
+                              .map((ch) => {
+                                const patente = unidadDeChofer(ch.id)?.patente;
+                                return (
+                                  <option key={ch.id} value={ch.id}>
+                                    {ch.apellido ? `${ch.apellido}, ` : ""}
+                                    {ch.nombre}
+                                    {patente ? ` · ${patente}` : " · sin unidad"}
+                                  </option>
+                                );
+                              })}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={
+                              !elegido ||
+                              elegido === actual?.choferId ||
+                              savingId === c.id
+                            }
+                            onClick={() => void asignarChofer(c.id, elegido)}
+                            className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+                          >
+                            {savingId === c.id ? "Guardando…" : accion}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     {active && (
                       <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
+                        {esPerfilEmpresa && (
+                          <div className="mb-4 rounded-lg border border-[var(--vl-card-border)] p-3">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+                              Chofer de esta unidad
+                            </div>
+                            <p className="mt-1 text-sm text-[var(--vl-heading)]">
+                              {actual?.chofer?.nombre ?? "Sin chofer"}
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <select
+                                className="min-w-[12rem] flex-1 rounded-md border border-[var(--vl-card-border)] bg-transparent px-2 py-1.5 text-xs"
+                                value={elegido}
+                                onChange={(e) =>
+                                  setDraftChofer((prev) => ({
+                                    ...prev,
+                                    [c.id]: e.target.value,
+                                  }))
+                                }
+                              >
+                                <option value="">Elegí chofer…</option>
+                                {choferes
+                                  .filter((ch) => ch.estado !== "INACTIVO")
+                                  .map((ch) => {
+                                    const patente = unidadDeChofer(ch.id)?.patente;
+                                    return (
+                                      <option key={ch.id} value={ch.id}>
+                                        {ch.apellido ? `${ch.apellido}, ` : ""}
+                                        {ch.nombre}
+                                        {patente ? ` · ${patente}` : " · sin unidad"}
+                                      </option>
+                                    );
+                                  })}
+                              </select>
+                              <button
+                                type="button"
+                                disabled={
+                                  !elegido ||
+                                  elegido === actual?.choferId ||
+                                  savingId === c.id
+                                }
+                                onClick={() => void asignarChofer(c.id, elegido)}
+                                className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+                              >
+                                {savingId === c.id ? "Guardando…" : accion}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         <DocumentUpload camionetaId={c.id} />
                       </div>
                     )}
@@ -515,8 +677,52 @@ export function DocumentacionPage() {
                       </div>
                       <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
                         {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
+                        {" · "}
+                        {unidadDeChofer(c.id)?.patente ?? "Sin unidad"}
                       </div>
                     </button>
+                    {esPerfilEmpresa && (
+                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--vl-card-border)] p-3">
+                        <select
+                          className="min-w-0 flex-1 rounded-md border border-[var(--vl-card-border)] bg-transparent px-2 py-1.5 text-xs"
+                          value={draftUnidad[c.id] ?? unidadDeChofer(c.id)?.id ?? ""}
+                          onChange={(e) =>
+                            setDraftUnidad((prev) => ({
+                              ...prev,
+                              [c.id]: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Elegí unidad…</option>
+                          {camionetas.map((cam) => (
+                            <option key={cam.id} value={cam.id}>
+                              {cam.patente}
+                              {currentAsignacion(cam)?.chofer
+                                ? ` · ${currentAsignacion(cam)?.chofer?.nombre}`
+                                : " · sin chofer"}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={
+                            !(draftUnidad[c.id] ?? "") ||
+                            (draftUnidad[c.id] ?? "") === unidadDeChofer(c.id)?.id ||
+                            savingId === (draftUnidad[c.id] ?? "")
+                          }
+                          onClick={() =>
+                            void asignarChofer(draftUnidad[c.id] ?? "", c.id)
+                          }
+                          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+                        >
+                          {savingId === draftUnidad[c.id]
+                            ? "Guardando…"
+                            : unidadDeChofer(c.id)
+                              ? "Cambiar de unidad"
+                              : "Asignar unidad"}
+                        </button>
+                      </div>
+                    )}
                   </Fragment>
                 );
               })

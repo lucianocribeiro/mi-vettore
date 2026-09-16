@@ -45,7 +45,13 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
         const ids = new Set(asig.map((a) => a.choferId));
         if (me.choferId) ids.add(me.choferId);
         const items = await prisma.chofer.findMany({
-          where: { id: { in: [...ids] }, ...(whereBase ?? {}) },
+          where: {
+            ...(whereBase ?? {}),
+            OR: [
+              ...(empresas.length ? [{ empresaId: { in: empresas } }] : []),
+              { id: { in: [...ids] } },
+            ],
+          },
           orderBy: { nombre: "asc" },
           include: includeAsignaciones,
         });

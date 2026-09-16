@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import {
   camionetasParaUsuarioChofer,
   choferPuedeEditarCamioneta,
+  empresaIdsDeDueno,
 } from "../lib/flota.js";
 import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
@@ -20,7 +21,6 @@ import { canAdminCorregir } from "../lib/correccion-admin.js";
 import { parseDateOnly } from "../lib/date-only.js";
 import { applyKmUpdate } from "../lib/km.js";
 import { reasignarChoferUnidad } from "../lib/asignacion-flota.js";
-import { canAssignFleet } from "../lib/roles.js";
 import { uploadDocumento } from "../lib/supabase-storage.js";
 
 const router = Router();
@@ -1193,15 +1193,42 @@ router.post("/:id/reactivar", ...write, async (req, res) => {
 
 router.post("/:id/asignacion", authenticate, async (req: AuthedRequest, res) => {
   try {
-    if (!canAssignFleet(req.user!.rol)) {
+    const actor = await prisma.usuario.findUnique({
+      where: { id: req.user!.id },
+      include: { chofer: true },
+    });
+    const contexto = contextoAccesoFromReq(req);
+    const esVettore =
+      actor?.rol === "ADMINISTRADOR" || actor?.rol === "OPERACIONES";
+    const esRolEmpresa = actor?.rol === "EMPRESA";
+    const esDueno =
+      actor?.rol === "CHOFER" &&
+      !!actor.chofer?.esDuenoFlota &&
+      contexto === "EMPRESA";
+    if (!esVettore && !esRolEmpresa && !esDueno) {
       res.status(403).json({ error: "Sin permiso para reasignar" });
       return;
     }
-    const actor = await prisma.usuario.findUnique({ where: { id: req.user!.id } });
+    let actorEmpresaId: string | null = null;
+    if (!esVettore) {
+      const empresas =
+        esRolEmpresa && actor?.empresaId
+          ? [actor.empresaId]
+          : await empresaIdsDeDueno(req.user!.id);
+      const cam = await prisma.camioneta.findUnique({
+        where: { id: req.params.id },
+        select: { empresaId: true },
+      });
+      if (!cam?.empresaId || !empresas.includes(cam.empresaId)) {
+        res.status(403).json({ error: "Solo podés reasignar unidades de tu empresa" });
+        return;
+      }
+      actorEmpresaId = cam.empresaId;
+    }
     const result = await reasignarChoferUnidad({
       camionetaId: req.params.id,
       choferId: String(req.body?.choferId ?? ""),
-      actorEmpresaId: req.user!.rol === "EMPRESA" ? actor?.empresaId : null,
+      actorEmpresaId,
     });
     res.json(result);
   } catch (err) {

@@ -29,27 +29,31 @@ export async function camionetasParaUsuarioChofer(
   });
   if (!me?.choferId || !me.chofer) return [];
 
-  const misAsig = await prisma.asignacionFlota.findMany({
-    where: { choferId: me.choferId, periodoHasta: null },
-    select: { empresaId: true, camionetaId: true },
-  });
-  if (misAsig.length === 0) return [];
-
   if (me.chofer.esDuenoFlota && contexto === "EMPRESA") {
-    const empresaIds = [...new Set(misAsig.map((a) => a.empresaId))];
+    const empresaIds = await empresaIdsDeDueno(userId);
+    if (empresaIds.length === 0) return [];
     return prisma.camioneta.findMany({
       where: {
-        asignaciones: {
-          some: {
-            empresaId: { in: empresaIds },
-            periodoHasta: null,
+        estado: { notIn: ["INACTIVA", "FUERA_SERVICIO"] },
+        OR: [
+          { empresaId: { in: empresaIds } },
+          {
+            asignaciones: {
+              some: { empresaId: { in: empresaIds }, periodoHasta: null },
+            },
           },
-        },
+        ],
       },
       orderBy: { patente: "asc" },
       include: includeAsignaciones,
     });
   }
+
+  const misAsig = await prisma.asignacionFlota.findMany({
+    where: { choferId: me.choferId, periodoHasta: null },
+    select: { empresaId: true, camionetaId: true },
+  });
+  if (misAsig.length === 0) return [];
 
   const camionetaIds = [...new Set(misAsig.map((a) => a.camionetaId))];
   return prisma.camioneta.findMany({
@@ -64,12 +68,18 @@ export async function empresaIdsDeDueno(userId: string): Promise<string[]> {
     where: { id: userId },
     include: { chofer: true },
   });
-  if (!me?.choferId || !me.chofer?.esDuenoFlota) return [];
-  const misAsig = await prisma.asignacionFlota.findMany({
-    where: { choferId: me.choferId, periodoHasta: null },
-    select: { empresaId: true },
-  });
-  return [...new Set(misAsig.map((a) => a.empresaId))];
+  if (!me) return [];
+  const ids = new Set<string>();
+  if (me.rol === "EMPRESA" && me.empresaId) ids.add(me.empresaId);
+  if (me.chofer?.esDuenoFlota && me.chofer.empresaId) ids.add(me.chofer.empresaId);
+  if (me.choferId && me.chofer?.esDuenoFlota) {
+    const misAsig = await prisma.asignacionFlota.findMany({
+      where: { choferId: me.choferId, periodoHasta: null },
+      select: { empresaId: true },
+    });
+    for (const a of misAsig) ids.add(a.empresaId);
+  }
+  return [...ids];
 }
 
 export async function choferPuedeVerChofer(
