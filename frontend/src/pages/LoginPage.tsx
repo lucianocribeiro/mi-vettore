@@ -50,14 +50,14 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
     rol: "OPERACIONES",
     label: "Operaciones",
     home: "/m7",
-    note: "DNI + contraseña",
+    note: "Mismo panel que Silvina, Facu y Pablo",
   },
   {
     email: "admin@vettore.test",
     rol: "ADMINISTRADOR",
     label: "Administrador",
     home: "/m7",
-    note: "DNI + contraseña",
+    note: "Mismo panel que Patricio y Julieta",
   },
   {
     email: "francisco@vettore.test",

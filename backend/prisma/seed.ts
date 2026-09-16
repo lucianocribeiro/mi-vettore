@@ -419,6 +419,7 @@ async function main() {
       email,
       nombre: u.nombre,
       rol: u.rol,
+      dni: u.dni,
       tipoAcceso: "administrativo",
     });
   }
