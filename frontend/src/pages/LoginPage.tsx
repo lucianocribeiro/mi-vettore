@@ -69,7 +69,7 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
 ];
 
 export function LoginPage() {
-  const { user, loading, login, setContextoAcceso } = useAuth();
+  const { user, loading, login } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -136,20 +136,11 @@ export function LoginPage() {
     return <Navigate to={homePathForUser(user)} replace />;
   }
 
-  async function doLogin(
-    nextEmail: string,
-    nextPassword: string,
-    contexto?: "CHOFER" | "EMPRESA"
-  ) {
+  async function doLogin(nextEmail: string, nextPassword: string) {
     setError(null);
     setSubmitting(true);
     try {
-      const logged = await login(nextEmail.trim(), nextPassword);
-      if (contexto === "EMPRESA" && logged.esDuenoFlota) {
-        setContextoAcceso("EMPRESA");
-      } else {
-        setContextoAcceso("CHOFER");
-      }
+      await login(nextEmail.trim(), nextPassword);
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "No se pudo iniciar sesión"
@@ -182,11 +173,7 @@ export function LoginPage() {
     setEmail(ch.email);
     setPassword(DEMO_PASSWORD);
     setQuickEmail(ch.email);
-    await doLogin(
-      ch.email,
-      DEMO_PASSWORD,
-      pickerMode === "dueno" ? "EMPRESA" : "CHOFER"
-    );
+    await doLogin(ch.email, DEMO_PASSWORD);
   }
 
   const pickerTitle =

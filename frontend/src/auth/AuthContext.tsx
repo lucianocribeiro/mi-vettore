@@ -13,6 +13,10 @@ import { CONTEXTO_ACCESO_KEY } from "../types";
 
 const TOKEN_KEY = "mi-vettore-token";
 
+function contextoParaUsuario(user: User): ContextoAcceso {
+  return user.esDuenoFlota || user.rol === "EMPRESA" ? "EMPRESA" : "CHOFER";
+}
+
 type AuthContextValue = {
   user: User | null;
   token: string | null;
@@ -46,7 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setContextoAcceso = useCallback(
     (c: ContextoAcceso) => {
-      if (c === "EMPRESA" && user && !user.esDuenoFlota) return;
+      if (user) {
+        const contextoObligatorio = contextoParaUsuario(user);
+        if (c !== contextoObligatorio) return;
+      }
       localStorage.setItem(CONTEXTO_ACCESO_KEY, c);
       setContextoAccesoState(c);
       window.dispatchEvent(
@@ -57,10 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (user && !user.esDuenoFlota && contextoAcceso === "EMPRESA") {
-      localStorage.setItem(CONTEXTO_ACCESO_KEY, "CHOFER");
-      setContextoAccesoState("CHOFER");
-    }
+    if (!user) return;
+    const contextoObligatorio = contextoParaUsuario(user);
+    if (contextoAcceso === contextoObligatorio) return;
+    localStorage.setItem(CONTEXTO_ACCESO_KEY, contextoObligatorio);
+    setContextoAccesoState(contextoObligatorio);
   }, [user, contextoAcceso]);
 
   const refreshMe = useCallback(async () => {
@@ -72,10 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await apiFetch<{ user: User }>("/api/auth/me", {}, token);
       setUser(data.user);
-      if (!data.user.esDuenoFlota) {
-        localStorage.setItem(CONTEXTO_ACCESO_KEY, "CHOFER");
-        setContextoAccesoState("CHOFER");
-      }
+      const contexto = contextoParaUsuario(data.user);
+      localStorage.setItem(CONTEXTO_ACCESO_KEY, contexto);
+      setContextoAccesoState(contexto);
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         logout();
@@ -100,10 +107,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(TOKEN_KEY, data.token);
     setToken(data.token);
     setUser(data.user);
-    if (!data.user.esDuenoFlota) {
-      localStorage.setItem(CONTEXTO_ACCESO_KEY, "CHOFER");
-      setContextoAccesoState("CHOFER");
-    }
+    const contexto = contextoParaUsuario(data.user);
+    localStorage.setItem(CONTEXTO_ACCESO_KEY, contexto);
+    setContextoAccesoState(contexto);
     return data.user;
   }, []);
 

@@ -120,13 +120,14 @@ type Props = {
 };
 
 export function Sidebar({ open, onClose }: Props) {
-  const { user, logout, contextoAcceso, setContextoAcceso } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [q, setQ] = useState("");
   const isDev = import.meta.env.DEV;
   const rol = user?.rol;
+  const esAccesoEmpresa = user?.rol === "EMPRESA" || !!user?.esDuenoFlota;
   const items = NAV.filter((n) => {
     if (n.roles && !(rol && n.roles.includes(rol))) return false;
     if (rol === "CHOFER") {
@@ -160,16 +161,16 @@ export function Sidebar({ open, onClose }: Props) {
             <div className="truncate text-sm font-bold leading-tight text-[#e8edf5]">
               Mi Vettore
             </div>
-            {user?.esDuenoFlota && (
+            {esAccesoEmpresa && (
               <span className="shrink-0 rounded bg-[#1e4080] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
-                {contextoAcceso === "EMPRESA" ? "Empresa" : "Conductor"}
+                Empresa
               </span>
             )}
           </div>
           <div className="truncate text-[10px] leading-tight text-[var(--vl-brand-sub)]">
             {user?.empresaNombre
               ? user.empresaNombre
-              : user?.esDuenoFlota
+              : esAccesoEmpresa
                 ? "Empresa de transporte"
                 : "Vettore Logística"}
           </div>
@@ -253,38 +254,12 @@ export function Sidebar({ open, onClose }: Props) {
       </nav>
 
       <div className="border-t border-[var(--vl-sidebar-border)] px-4 py-3 safe-bottom">
-        {user?.esDuenoFlota && (
-          <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg bg-[#0b182c] p-1">
-            <button
-              type="button"
-              onClick={() => setContextoAcceso("CHOFER")}
-              className={`rounded-md px-2 py-1.5 text-[10px] font-semibold ${
-                contextoAcceso === "CHOFER"
-                  ? "bg-[#1e4080] text-white"
-                  : "text-[#8aabc8]"
-              }`}
-            >
-              Conductor
-            </button>
-            <button
-              type="button"
-              onClick={() => setContextoAcceso("EMPRESA")}
-              className={`rounded-md px-2 py-1.5 text-[10px] font-semibold ${
-                contextoAcceso === "EMPRESA"
-                  ? "bg-[#1e4080] text-white"
-                  : "text-[#8aabc8]"
-              }`}
-            >
-              Empresa
-            </button>
-          </div>
-        )}
         <div className="text-xs text-[#a8c4dc]">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="min-w-0 truncate font-medium text-[#e8edf5]">
               {user?.nombre || (user ? ROLE_LABELS[user.rol] : "—")}
             </span>
-            {user?.esDuenoFlota && (
+            {esAccesoEmpresa && (
               <span className="shrink-0 rounded bg-[#1e4080] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
                 Empresa transp.
               </span>
@@ -296,7 +271,7 @@ export function Sidebar({ open, onClose }: Props) {
               : user
                 ? ROLE_LABELS[user.rol]
                 : ""}
-            {user?.esDuenoFlota ? " · empresa de transporte" : ""}
+            {esAccesoEmpresa ? " · empresa de transporte" : ""}
           </div>
         </div>
 
