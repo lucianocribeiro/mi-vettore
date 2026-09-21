@@ -75,7 +75,7 @@ const CREATE_KIND_BY_TAB: Record<Tab, CreateKind | null> = {
 };
 
 const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
-  camioneta: "camioneta",
+  camioneta: "unidad",
   chofer: "chofer",
   empresas: "empresa",
   usuarios: "usuario",
@@ -1018,7 +1018,9 @@ export function M5FichaPage() {
               className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
             >
               <Plus size={14} />
-              Nuevo {CREATE_LABEL_BY_TAB[tab]}
+              {tab === "camioneta"
+                ? "Nueva unidad"
+                : `Nuevo ${CREATE_LABEL_BY_TAB[tab]}`}
             </button>
           )}
         </div>
@@ -1675,7 +1677,9 @@ export function M5FichaPage() {
           title={
             form.item
               ? `Editar ${form.kind === "tipoServicio" ? "tipo de servicio" : form.kind}`
-              : `Nuevo ${form.kind === "tipoServicio" ? "tipo de servicio" : form.kind}`
+              : form.kind === "camioneta"
+                ? "Nueva unidad"
+                : `Nuevo ${form.kind === "tipoServicio" ? "tipo de servicio" : form.kind}`
           }
           onClose={() => setForm(null)}
           onSubmit={submitForm}
