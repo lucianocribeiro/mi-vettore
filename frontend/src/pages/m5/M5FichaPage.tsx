@@ -809,7 +809,7 @@ export function M5FichaPage() {
   }
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: "camioneta", label: "Vista por camioneta" },
+    { id: "camioneta", label: "Vista por unidad" },
     { id: "chofer", label: "Vista por chofer" },
     { id: "asignacion", label: "Asignación flota" },
     { id: "empresas", label: "Empresas" },
