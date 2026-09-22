@@ -85,7 +85,13 @@ router.post("/login", async (req, res) => {
       where: {
         OR: [
           { loginIdentificador: identificador },
-          ...(digits ? [{ loginIdentificador: digits }, { dni: digits }] : []),
+          ...(digits
+            ? [
+                { loginIdentificador: digits },
+                { dni: digits },
+                { empresa: { cuit: digits } },
+              ]
+            : []),
           { email: identificador },
         ],
       },
