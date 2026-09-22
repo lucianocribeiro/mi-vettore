@@ -133,6 +133,9 @@ export function LoginPage() {
   }, [pool, choferQuery]);
 
   if (!loading && user) {
+    if (user.debeCambiarPassword) {
+      return <Navigate to="/cambiar-password" replace />;
+    }
     return <Navigate to={homePathForUser(user)} replace />;
   }
 

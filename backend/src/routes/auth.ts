@@ -336,10 +336,16 @@ router.post("/cambiar-password", authenticate, async (req: AuthedRequest, res) =
       res.status(401).json({ error: "Sesión inválida" });
       return;
     }
-    const ok = await bcrypt.compare(actual, user.passwordHash);
-    if (!ok) {
-      res.status(401).json({ error: "Contraseña actual inválida" });
-      return;
+    if (!user.debeCambiarPassword) {
+      if (!actual) {
+        res.status(400).json({ error: "Contraseña actual obligatoria" });
+        return;
+      }
+      const ok = await bcrypt.compare(actual, user.passwordHash);
+      if (!ok) {
+        res.status(401).json({ error: "Contraseña actual inválida" });
+        return;
+      }
     }
     await prisma.usuario.update({
       where: { id: user.id },

@@ -153,7 +153,6 @@ export function M5FichaPage() {
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
   const [fCedulaFoto, setFCedulaFoto] = useState("");
   const [fCuit, setFCuit] = useState("");
-  const [fContactoEmpresa, setFContactoEmpresa] = useState("");
   const [fPermiteMultiCamioneta, setFPermiteMultiCamioneta] = useState(true);
   const [fPatente, setFPatente] = useState("");
   const [fMarca, setFMarca] = useState("");
@@ -181,7 +180,6 @@ export function M5FichaPage() {
   const [fEmail, setFEmail] = useState("");
   const [fPassword, setFPassword] = useState("");
   const [fRol, setFRol] = useState<Role>("CHOFER");
-  const [fUserChoferId, setFUserChoferId] = useState("");
   const [fEstadoUser, setFEstadoUser] = useState<"ACTIVO" | "INACTIVO">(
     "ACTIVO"
   );
@@ -301,7 +299,6 @@ export function M5FichaPage() {
     setFVerTaller(true);
     setFEstadoChofer("ACTIVO");
     setFCuit("");
-    setFContactoEmpresa("");
     setFPermiteMultiCamioneta(true);
     setFPatente("");
     setFMarca("");
@@ -327,7 +324,6 @@ export function M5FichaPage() {
     setFEmail("");
     setFPassword("");
     setFRol("CHOFER");
-    setFUserChoferId("");
     setFApellido("");
     setFChoferEmpresaId("");
     setFEstadoUser("ACTIVO");
@@ -370,7 +366,6 @@ export function M5FichaPage() {
     setFormError(null);
     setFNombre(item.nombre);
     setFCuit(item.cuit ?? "");
-    setFContactoEmpresa(item.contacto ?? "");
     setFPermiteMultiCamioneta(!!item.permiteMultiCamioneta);
     setForm({ kind: "empresa", item });
   }
@@ -423,7 +418,6 @@ export function M5FichaPage() {
     setFApellido(item.apellido ?? "");
     setFDni(item.dni ?? "");
     setFChoferEmpresaId(item.empresaId ?? "");
-    setFUserChoferId(item.choferId ?? "");
     setFEmail(item.email);
     setFPassword("");
     setFTelefono(item.telefono ?? "");
@@ -484,7 +478,6 @@ export function M5FichaPage() {
         const body = {
           nombre: fNombre,
           cuit: fCuit || null,
-          contacto: fContactoEmpresa || null,
           password: fPasswordEmpresa || undefined,
           permiteMultiCamioneta: fPermiteMultiCamioneta,
         };
@@ -634,17 +627,12 @@ export function M5FichaPage() {
           apellido: fApellido || null,
           dni: fDni || null,
           empresaId: fChoferEmpresaId || null,
-          choferId: fRol === "CHOFER" ? fUserChoferId || null : null,
           estado: fEstadoUser,
           telefono: fTelefono.trim() || null,
         };
         if (fPassword) body.password = fPassword;
         if (!form.item && !fChoferEmpresaId) {
           setFormError("Elegí la empresa del usuario");
-          return;
-        }
-        if (!form.item && fRol === "CHOFER" && !fUserChoferId) {
-          setFormError("Elegí el chofer de esa empresa");
           return;
         }
         if (form.item) {
@@ -1821,13 +1809,6 @@ export function M5FichaPage() {
                   required
                 />
               </Field>
-              <Field label="Contacto">
-                <input
-                  className={inputClass}
-                  value={fContactoEmpresa}
-                  onChange={(e) => setFContactoEmpresa(e.target.value)}
-                />
-              </Field>
               <Field label="Contraseña de acceso (CUIT)">
                 <input
                   type="password"
@@ -2310,10 +2291,7 @@ export function M5FichaPage() {
                 <select
                   className={inputClass}
                   value={fChoferEmpresaId}
-                  onChange={(e) => {
-                    setFChoferEmpresaId(e.target.value);
-                    setFUserChoferId("");
-                  }}
+                  onChange={(e) => setFChoferEmpresaId(e.target.value)}
                   required
                 >
                   <option value="">Elegí empresa…</option>
@@ -2326,30 +2304,6 @@ export function M5FichaPage() {
                     ))}
                 </select>
               </Field>
-              {fRol === "CHOFER" && (
-                <Field label="Chofer">
-                  <select
-                    className={inputClass}
-                    value={fUserChoferId}
-                    onChange={(e) => setFUserChoferId(e.target.value)}
-                    required
-                  >
-                    <option value="">Elegí chofer de la empresa…</option>
-                    {choferes
-                      .filter(
-                        (c) =>
-                          c.empresaId === fChoferEmpresaId &&
-                          c.estado === "ACTIVO"
-                      )
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.apellido ? `${c.apellido}, ` : ""}
-                          {c.nombre} · {c.dni}
-                        </option>
-                      ))}
-                  </select>
-                </Field>
-              )}
               <Field label="Teléfono / WhatsApp">
                 <input
                   type="tel"

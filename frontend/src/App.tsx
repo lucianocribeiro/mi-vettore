@@ -6,6 +6,7 @@ import { AppLayout } from "./components/AppLayout";
 import { AppLogo } from "./components/AppLogo";
 import { homePathForUser } from "./lib/homePath";
 import { LoginPage } from "./pages/LoginPage";
+import { CambiarPasswordPage } from "./pages/CambiarPasswordPage";
 import { M4AlertasPage } from "./pages/m4/M4AlertasPage";
 import { M5FichaPage } from "./pages/m5/M5FichaPage";
 import { M3ComunicacionesPage } from "./pages/m3/M3ComunicacionesPage";
@@ -34,6 +35,10 @@ function RootEntry() {
     return <Navigate to="/login" replace />;
   }
 
+  if (user.debeCambiarPassword) {
+    return <Navigate to="/cambiar-password" replace />;
+  }
+
   return <Navigate to={homePathForUser(user)} replace />;
 }
 
@@ -53,6 +58,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<RootEntry />} />
         <Route element={<ProtectedRoute />}>
+          <Route path="/cambiar-password" element={<CambiarPasswordPage />} />
           <Route element={<AppLayout />}>
             <Route path="/m1" element={<Navigate to="/" replace />} />
             <Route path="/m2" element={<Navigate to="/" replace />} />

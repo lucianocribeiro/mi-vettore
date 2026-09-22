@@ -28,6 +28,8 @@ export type User = {
   /** Empresa de transporte vigente (asignación actual) */
   empresaId?: string | null;
   empresaNombre?: string | null;
+  /** True si el usuario debe elegir contraseña propia en el primer ingreso. */
+  debeCambiarPassword?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };

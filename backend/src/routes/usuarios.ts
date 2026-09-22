@@ -157,7 +157,6 @@ router.post("/", ...write, async (req, res) => {
     const rolRaw = String(req.body?.rol ?? "").toUpperCase();
     const dni = String(req.body?.dni ?? "").replace(/\D/g, "");
     const empresaId = req.body?.empresaId ? String(req.body.empresaId) : null;
-    const choferId = req.body?.choferId ? String(req.body.choferId) : null;
     if (!(rolRaw in Role) || rolRaw === "CLIENTE") {
       res.status(400).json({ error: "Rol inválido" });
       return;
@@ -174,16 +173,12 @@ router.post("/", ...write, async (req, res) => {
       res.status(400).json({ error: "Todo usuario se asigna a una empresa en el alta" });
       return;
     }
+    let choferId: string | null = null;
     if (rolRaw === "CHOFER") {
-      if (!choferId) {
-        res.status(400).json({ error: "Chofer obligatorio" });
-        return;
-      }
-      const chofer = await prisma.chofer.findUnique({ where: { id: choferId } });
-      if (!chofer || chofer.empresaId !== empresaId) {
-        res.status(400).json({ error: "El chofer no pertenece a la empresa elegida" });
-        return;
-      }
+      const chofer = await prisma.chofer.findFirst({
+        where: { dni, empresaId },
+      });
+      choferId = chofer?.id ?? null;
     }
     const plain = String(req.body?.password ?? "") || generateTempPassword();
     const loginIdentificador = rolRaw === "EMPRESA"
@@ -202,7 +197,7 @@ router.post("/", ...write, async (req, res) => {
         dni: rolRaw === "EMPRESA" ? null : dni,
         loginIdentificador,
         empresaId,
-        choferId: rolRaw === "CHOFER" ? choferId : null,
+        choferId,
         debeCambiarPassword: true,
         estado:
           String(req.body?.estado ?? "ACTIVO").toUpperCase() === "INACTIVO"
