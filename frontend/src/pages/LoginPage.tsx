@@ -345,12 +345,12 @@ export function LoginPage() {
                   <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
                     DNI o CUIT
                     <input
-                      type="email"
-                      inputMode="email"
+                      type="text"
+                      inputMode="numeric"
                       autoComplete="username"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="DNI o CUIT"
+                      placeholder="DNI del chofer o CUIT de la empresa"
                       className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2.5 text-base text-[var(--vl-text)] outline-none focus:border-[#1e4080] sm:text-sm"
                       required
                     />
