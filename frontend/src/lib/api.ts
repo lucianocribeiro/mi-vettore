@@ -34,16 +34,36 @@ export async function apiFetch<T>(
     /* ignore */
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    throw new ApiError("No se pudo conectar con el servidor", 0);
+  }
 
   if (res.status === 204) {
     return undefined as T;
   }
 
-  const data = await res.json().catch(() => ({}));
+  const text = await res.text().catch(() => "");
+  let data: unknown = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new ApiError(
+        res.ok
+          ? "Respuesta inválida del servidor"
+          : res.status >= 500
+            ? "El servidor no está disponible"
+            : "Error de red",
+        res.status || 502
+      );
+    }
+  }
 
   if (!res.ok) {
     throw new ApiError(

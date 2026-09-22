@@ -14,10 +14,14 @@ const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
 
 const includeAsignaciones = {
   asignaciones: {
+    where: { periodoHasta: null },
     orderBy: { periodoDesde: "desc" as const },
+    take: 5,
     include: {
-      camioneta: true,
-      empresa: true,
+      camioneta: {
+        select: { id: true, patente: true, estado: true, empresaId: true },
+      },
+      empresa: { select: { id: true, nombre: true, cuit: true } },
     },
   },
 };

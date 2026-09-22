@@ -34,10 +34,12 @@ const includeAsignaciones = {
   tipoServicio: true,
   empresa: true,
   asignaciones: {
+    where: { periodoHasta: null },
     orderBy: { periodoDesde: "desc" as const },
+    take: 3,
     include: {
-      chofer: true,
-      empresa: true,
+      chofer: { select: { id: true, nombre: true, apellido: true, dni: true, estado: true } },
+      empresa: { select: { id: true, nombre: true, cuit: true } },
     },
   },
 };

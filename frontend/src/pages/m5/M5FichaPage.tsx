@@ -263,12 +263,12 @@ export function M5FichaPage() {
             token
           ).catch(() => ({ tipos: Object.keys(TIPO_TALLER_LABEL) as TipoTaller[] })),
         ]);
-      setCamionetas(cami);
-      setChoferes(chof);
-      setEmpresas(emp);
-      setUsuarios(usu);
-      setTiposServicio(tServ);
-      setTalleres(tall);
+      setCamionetas(Array.isArray(cami) ? cami : []);
+      setChoferes(Array.isArray(chof) ? chof : []);
+      setEmpresas(Array.isArray(emp) ? emp : []);
+      setUsuarios(Array.isArray(usu) ? usu : []);
+      setTiposServicio(Array.isArray(tServ) ? tServ : []);
+      setTalleres(Array.isArray(tall) ? tall : []);
       setTiposTallerMeta(
         tallMeta.tipos?.length
           ? tallMeta.tipos
@@ -807,16 +807,17 @@ export function M5FichaPage() {
   ];
 
   const camionetasFiltradas = useMemo(() => {
+    const list = Array.isArray(camionetas) ? camionetas : [];
     const visibles =
       unitFilters.estado.length === 0
-        ? camionetas.filter((c) => c.estado !== "INACTIVA")
-        : camionetas;
+        ? list.filter((c) => c.estado !== "INACTIVA")
+        : list;
     return filterCamionetas(visibles, unitFilters);
   }, [camionetas, unitFilters]);
 
   const unidadesDeEmpresaAsig = useMemo(() => {
     if (!asigEmpresaId) return [] as Camioneta[];
-    return camionetas
+    return (Array.isArray(camionetas) ? camionetas : [])
       .filter((c) => {
         if (c.estado === "INACTIVA" || c.estado === "FUERA_SERVICIO") return false;
         if (c.empresaId === asigEmpresaId) return true;
@@ -845,7 +846,7 @@ export function M5FichaPage() {
   /** Solo choferes de la empresa elegida (o libres para incorporar). No los de otra empresa. */
   const choferesDeEmpresaAsig = useMemo(() => {
     if (!asigEmpresaId) return [] as Chofer[];
-    return choferes
+    return (Array.isArray(choferes) ? choferes : [])
       .filter((ch) => ch.estado === "ACTIVO" && ch.empresaId === asigEmpresaId)
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [choferes, asigEmpresaId]);

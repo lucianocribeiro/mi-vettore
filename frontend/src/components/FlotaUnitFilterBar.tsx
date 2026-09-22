@@ -48,10 +48,11 @@ export function filterCamionetas(
   items: Camioneta[],
   f: FlotaUnitFilters
 ): Camioneta[] {
+  const list = Array.isArray(items) ? items : [];
   const q = f.query.trim().toLowerCase();
   const modeloQ = f.modelo.trim().toLowerCase();
   const capacidadQ = f.capacidad.trim().toLowerCase();
-  return items.filter((c) => {
+  return list.filter((c) => {
     if (f.estado.length > 0 && !f.estado.includes(c.estado)) return false;
     if (f.tipo.length > 0) {
       const matchTipo = f.tipo.some((t) => {
