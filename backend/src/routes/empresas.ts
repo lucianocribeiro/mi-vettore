@@ -261,6 +261,78 @@ router.post("/:id/reactivar", ...write, async (req, res) => {
   }
 });
 
+/** Borrado definitivo. Si hay pedidos u órdenes de taller, se bloquea (usar Inactivar). */
+router.post("/:id/eliminar", ...write, async (req, res) => {
+  try {
+    const empresa = await prisma.empresaTransporte.findUnique({
+      where: { id: req.params.id },
+      include: {
+        unidades: {
+          select: {
+            id: true,
+            _count: { select: { pedidos: true, solicitudes: true } },
+          },
+        },
+        choferes: {
+          select: {
+            id: true,
+            _count: { select: { pedidos: true, solicitudes: true } },
+          },
+        },
+      },
+    });
+    if (!empresa) {
+      res.status(404).json({ error: "Empresa no encontrada" });
+      return;
+    }
+    const bloqueada =
+      empresa.unidades.some((u) => u._count.pedidos > 0 || u._count.solicitudes > 0) ||
+      empresa.choferes.some((c) => c._count.pedidos > 0 || c._count.solicitudes > 0);
+    if (bloqueada) {
+      res.status(409).json({
+        error:
+          "No se puede eliminar: hay pedidos u órdenes de taller. Usá Inactivar para darla de baja sin perder historial.",
+      });
+      return;
+    }
+
+    const unidadIds = empresa.unidades.map((u) => u.id);
+    const choferIds = empresa.choferes.map((c) => c.id);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.asignacionFlota.deleteMany({ where: { empresaId: empresa.id } });
+      if (unidadIds.length) {
+        await tx.documentoEntidad.deleteMany({ where: { camionetaId: { in: unidadIds } } });
+        await tx.kmRegistro.deleteMany({ where: { camionetaId: { in: unidadIds } } });
+        await tx.registroMantenimiento.deleteMany({
+          where: { camionetaId: { in: unidadIds } },
+        });
+        await tx.camioneta.deleteMany({ where: { id: { in: unidadIds } } });
+      }
+      if (choferIds.length) {
+        await tx.documentoEntidad.deleteMany({ where: { choferId: { in: choferIds } } });
+        await tx.usuario.updateMany({
+          where: { choferId: { in: choferIds } },
+          data: { choferId: null },
+        });
+        await tx.chofer.deleteMany({ where: { id: { in: choferIds } } });
+      }
+      await tx.usuario.deleteMany({
+        where: { empresaId: empresa.id, rol: Role.EMPRESA },
+      });
+      await tx.usuario.updateMany({
+        where: { empresaId: empresa.id },
+        data: { empresaId: null },
+      });
+      await tx.empresaTransporte.delete({ where: { id: empresa.id } });
+    });
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "No se pudo eliminar la empresa" });
+  }
+});
+
 router.post("/:id/password", ...write, async (req, res) => {
   try {
     const empresa = await prisma.empresaTransporte.findUnique({ where: { id: req.params.id } });

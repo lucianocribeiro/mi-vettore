@@ -707,38 +707,38 @@ export function M5FichaPage() {
     }
   }
 
-  async function deleteEntity(kind: "empresa" | "usuario", id: string) {
+  async function deleteEntity(id: string) {
     if (!token || !canEdit) return;
-    const mensaje =
-      kind === "empresa"
-        ? "¿Inactivar esta empresa? Se conservan historial, choferes y unidades (quedan inactivos)."
-        : "¿Eliminar este registro?";
-    if (!confirm(mensaje)) return;
-    const paths = {
-      empresa: `/api/empresas/${id}`,
-      usuario: `/api/usuarios/${id}`,
-    };
+    if (!confirm("¿Eliminar este registro?")) return;
     try {
-      if (kind === "empresa") {
-        const updated = await apiFetch<Empresa>(
-          paths.empresa,
-          { method: "DELETE" },
-          token
-        );
-        setEmpresas((p) => p.map((x) => (x.id === id ? { ...x, ...updated, activo: false } : x)));
-        await load();
-      } else {
-        await apiFetch(paths.usuario, { method: "DELETE" }, token);
-        setUsuarios((p) => p.filter((x) => x.id !== id));
-      }
+      await apiFetch(`/api/usuarios/${id}`, { method: "DELETE" }, token);
+      setUsuarios((p) => p.filter((x) => x.id !== id));
     } catch (err) {
-      alert(
-        err instanceof ApiError
-          ? err.message
-          : kind === "empresa"
-            ? "No se pudo inactivar"
-            : "No se pudo eliminar"
+      alert(err instanceof ApiError ? err.message : "No se pudo eliminar");
+    }
+  }
+
+  async function inactivarEmpresa(id: string) {
+    if (!token || !canEdit) return;
+    if (
+      !confirm(
+        "¿Inactivar esta empresa? Se conservan historial, choferes y unidades (quedan inactivos)."
+      )
+    ) {
+      return;
+    }
+    try {
+      const updated = await apiFetch<Empresa>(
+        `/api/empresas/${id}`,
+        { method: "DELETE" },
+        token
       );
+      setEmpresas((p) =>
+        p.map((x) => (x.id === id ? { ...x, ...updated, activo: false } : x))
+      );
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo inactivar");
     }
   }
 
@@ -763,6 +763,24 @@ export function M5FichaPage() {
       await load();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo activar");
+    }
+  }
+
+  async function eliminarEmpresa(id: string) {
+    if (!token || !canEdit) return;
+    if (
+      !confirm(
+        "¿Eliminar definitivamente esta empresa? Se borran también sus choferes y unidades sin historial de pedidos/taller. Esta acción no se puede deshacer."
+      )
+    ) {
+      return;
+    }
+    try {
+      await apiFetch(`/api/empresas/${id}/eliminar`, { method: "POST" }, token);
+      setEmpresas((p) => p.filter((x) => x.id !== id));
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo eliminar");
     }
   }
 
@@ -1549,21 +1567,23 @@ export function M5FichaPage() {
                   </a>
                 )}
                 {canEdit ? (
-                  activa ? (
-                    <Actions
-                      onEdit={() => openEditEmpresa(e)}
-                      onDelete={() => void deleteEntity("empresa", e.id)}
-                      deleteLabel="Inactivar"
-                    />
-                  ) : (
-                    <div className="flex justify-end gap-2 text-xs">
+                  <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => openEditEmpresa(e)}
+                      className="text-slate-500 hover:text-slate-800"
+                    >
+                      Editar
+                    </button>
+                    {activa ? (
                       <button
                         type="button"
-                        onClick={() => openEditEmpresa(e)}
-                        className="text-slate-500 hover:text-slate-800"
+                        onClick={() => void inactivarEmpresa(e.id)}
+                        className="text-amber-700 hover:text-amber-900"
                       >
-                        Editar
+                        Inactivar
                       </button>
+                    ) : (
                       <button
                         type="button"
                         onClick={() => void reactivarEmpresa(e.id)}
@@ -1571,8 +1591,15 @@ export function M5FichaPage() {
                       >
                         Activar
                       </button>
-                    </div>
-                  )
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void eliminarEmpresa(e.id)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
                 ) : null}
               </div>,
             ];
@@ -1680,7 +1707,7 @@ export function M5FichaPage() {
                   {canEdit ? (
                     <Actions
                       onEdit={() => openEditUsuario(u)}
-                      onDelete={() => void deleteEntity("usuario", u.id)}
+                      onDelete={() => void deleteEntity(u.id)}
                     />
                   ) : null}
                 </div>,
