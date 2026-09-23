@@ -208,13 +208,24 @@ router.put("/:id", ...write, async (req, res) => {
 
 router.delete("/:id", ...write, async (req, res) => {
   try {
-    const item = await prisma.empresaTransporte.update({
-      where: { id: req.params.id },
-      data: { activo: false },
-    });
-    await prisma.usuario.updateMany({
-      where: { empresaId: item.id, rol: Role.EMPRESA },
-      data: { estado: "INACTIVO" },
+    const item = await prisma.$transaction(async (tx) => {
+      const empresa = await tx.empresaTransporte.update({
+        where: { id: req.params.id },
+        data: { activo: false },
+      });
+      await tx.usuario.updateMany({
+        where: { empresaId: empresa.id, rol: Role.EMPRESA },
+        data: { estado: "INACTIVO" },
+      });
+      await tx.chofer.updateMany({
+        where: { empresaId: empresa.id },
+        data: { estado: "INACTIVO" },
+      });
+      await tx.camioneta.updateMany({
+        where: { empresaId: empresa.id },
+        data: { estado: "INACTIVA" },
+      });
+      return empresa;
     });
     res.json(item);
   } catch {

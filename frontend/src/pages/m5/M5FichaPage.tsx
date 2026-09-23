@@ -15,7 +15,6 @@ import {
 import { Download, Plus } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
 import {
-  ALL_ROLES,
   EQUIPO_FRIO_MARCAS,
   MARCAS_CAMIONETA,
   MARCA_MODELO_CAMIONETA,
@@ -78,7 +77,7 @@ const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
   camioneta: "unidad",
   chofer: "chofer",
   empresas: "empresa",
-  usuarios: "usuario",
+  usuarios: "usuario especial",
   tiposServicio: "tipo de servicio",
   equiposFrio: "equipo de frío",
   talleres: "taller",
@@ -103,7 +102,7 @@ export function M5FichaPage() {
   const canEdit = canWriteMaster(user?.rol);
   const canAssign = canEdit || user?.rol === "EMPRESA";
 
-  const [tab, setTab] = useState<Tab>("camioneta");
+  const [tab, setTab] = useState<Tab>("empresas");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -138,7 +137,6 @@ export function M5FichaPage() {
   const [fNombre, setFNombre] = useState("");
   const [fDni, setFDni] = useState("");
   const [fCuil, setFCuil] = useState("");
-  const [fLicencia, setFLicencia] = useState("");
   const [fLicenciaVenc, setFLicenciaVenc] = useState("");
   const [fTelefono, setFTelefono] = useState("");
   const [fEmailChofer, setFEmailChofer] = useState("");
@@ -153,7 +151,6 @@ export function M5FichaPage() {
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
   const [fCedulaFoto, setFCedulaFoto] = useState("");
   const [fCuit, setFCuit] = useState("");
-  const [fPermiteMultiCamioneta, setFPermiteMultiCamioneta] = useState(true);
   const [fPatente, setFPatente] = useState("");
   const [fMarca, setFMarca] = useState("");
   const [fModelo, setFModelo] = useState("");
@@ -179,7 +176,7 @@ export function M5FichaPage() {
   const [fEmpresaId, setFEmpresaId] = useState("");
   const [fEmail, setFEmail] = useState("");
   const [fPassword, setFPassword] = useState("");
-  const [fRol, setFRol] = useState<Role>("CHOFER");
+  const [fRol, setFRol] = useState<Role>("OPERACIONES");
   const [fEstadoUser, setFEstadoUser] = useState<"ACTIVO" | "INACTIVO">(
     "ACTIVO"
   );
@@ -290,7 +287,6 @@ export function M5FichaPage() {
     setFNombre("");
     setFDni("");
     setFCuil("");
-    setFLicencia("");
     setFLicenciaVenc("");
     setFTelefono("");
     setFEmailChofer("");
@@ -299,7 +295,8 @@ export function M5FichaPage() {
     setFVerTaller(true);
     setFEstadoChofer("ACTIVO");
     setFCuit("");
-    setFPermiteMultiCamioneta(true);
+    setFPasswordEmpresa("");
+    setFCedulaFoto("");
     setFPatente("");
     setFMarca("");
     setFModelo("");
@@ -323,7 +320,7 @@ export function M5FichaPage() {
     setFEmpresaId("");
     setFEmail("");
     setFPassword("");
-    setFRol("CHOFER");
+    setFRol("OPERACIONES");
     setFApellido("");
     setFChoferEmpresaId("");
     setFEstadoUser("ACTIVO");
@@ -347,7 +344,6 @@ export function M5FichaPage() {
     setFChoferEmpresaId(item.empresaId ?? "");
     setFDni(item.dni);
     setFCuil(item.cuil ?? "");
-    setFLicencia(item.licencia ?? "");
     setFLicenciaVenc(
       item.licenciaVencimiento
         ? item.licenciaVencimiento.slice(0, 10)
@@ -366,7 +362,7 @@ export function M5FichaPage() {
     setFormError(null);
     setFNombre(item.nombre);
     setFCuit(item.cuit ?? "");
-    setFPermiteMultiCamioneta(!!item.permiteMultiCamioneta);
+    setFPasswordEmpresa("");
     setForm({ kind: "empresa", item });
   }
 
@@ -441,7 +437,7 @@ export function M5FichaPage() {
           empresaId: fChoferEmpresaId,
           dni: fDni,
           cuil: fCuil || null,
-          licencia: fLicencia || null,
+          licencia: null,
           licenciaVencimiento: fLicenciaVenc || null,
           telefono: fTelefono || null,
           email: fEmailChofer || null,
@@ -479,7 +475,6 @@ export function M5FichaPage() {
           nombre: fNombre,
           cuit: fCuit || null,
           password: fPasswordEmpresa || undefined,
-          permiteMultiCamioneta: fPermiteMultiCamioneta,
         };
         if (form.item) {
           const updated = await apiFetch<Empresa>(
@@ -631,7 +626,7 @@ export function M5FichaPage() {
           telefono: fTelefono.trim() || null,
         };
         if (fPassword) body.password = fPassword;
-        if (!form.item && !fChoferEmpresaId) {
+        if (!form.item && !fChoferEmpresaId && (fRol === "EMPRESA" || fRol === "CHOFER")) {
           setFormError("Elegí la empresa del usuario");
           return;
         }
@@ -678,17 +673,36 @@ export function M5FichaPage() {
 
   async function deleteEntity(kind: "empresa" | "usuario", id: string) {
     if (!token || !canEdit) return;
-    if (!confirm("¿Eliminar este registro?")) return;
+    const mensaje =
+      kind === "empresa"
+        ? "¿Inactivar esta empresa? Se conservan historial, choferes y unidades (quedan inactivos)."
+        : "¿Eliminar este registro?";
+    if (!confirm(mensaje)) return;
     const paths = {
       empresa: `/api/empresas/${id}`,
       usuario: `/api/usuarios/${id}`,
     };
     try {
-      await apiFetch(paths[kind], { method: "DELETE" }, token);
-      if (kind === "empresa") setEmpresas((p) => p.filter((x) => x.id !== id));
-      if (kind === "usuario") setUsuarios((p) => p.filter((x) => x.id !== id));
+      if (kind === "empresa") {
+        const updated = await apiFetch<Empresa>(
+          paths.empresa,
+          { method: "DELETE" },
+          token
+        );
+        setEmpresas((p) => p.map((x) => (x.id === id ? { ...x, ...updated, activo: false } : x)));
+        await load();
+      } else {
+        await apiFetch(paths.usuario, { method: "DELETE" }, token);
+        setUsuarios((p) => p.filter((x) => x.id !== id));
+      }
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo eliminar");
+      alert(
+        err instanceof ApiError
+          ? err.message
+          : kind === "empresa"
+            ? "No se pudo inactivar"
+            : "No se pudo eliminar"
+      );
     }
   }
 
@@ -797,11 +811,11 @@ export function M5FichaPage() {
   }
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: "camioneta", label: "Vista por unidad" },
-    { id: "chofer", label: "Vista por chofer" },
-    { id: "asignacion", label: "Asignación flota" },
     { id: "empresas", label: "Empresas" },
-    { id: "usuarios", label: "Usuarios" },
+    { id: "camioneta", label: "Unidades" },
+    { id: "chofer", label: "Choferes" },
+    { id: "asignacion", label: "Asignación flota" },
+    { id: "usuarios", label: "Usuarios especiales" },
     { id: "tiposServicio", label: "Tipos de servicio" },
     { id: "equiposFrio", label: "Equipo de frío" },
   ];
@@ -929,9 +943,10 @@ export function M5FichaPage() {
   }, [choferes, choferQuery, choferEstadoFiltro]);
 
   const usuariosFiltrados = useMemo(() => {
+    const internos: Role[] = ["ADMINISTRADOR", "OPERACIONES", "SUGERENCIAS"];
     const q = userQuery.trim().toLowerCase();
     return usuarios.filter((u) => {
-      if (u.rol === "CLIENTE") return false;
+      if (!internos.includes(u.rol)) return false;
       if (userEmpresaId && u.empresaId !== userEmpresaId) return false;
       if (userRol && u.rol !== userRol) return false;
       if (!q) return true;
@@ -940,14 +955,13 @@ export function M5FichaPage() {
         u.nombre,
         u.telefono,
         u.empresaNombre,
+        u.rol,
         ROLE_LABELS[u.rol],
-        u.estado,
-        u.esDuenoFlota ? "empresa de transporte" : "",
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
-      return q.split(/\s+/).every((token) => hay.includes(token));
+      return hay.includes(q);
     });
   }, [usuarios, userQuery, userEmpresaId, userRol]);
 
@@ -1421,21 +1435,23 @@ export function M5FichaPage() {
 
       {!loading && !error && tab === "empresas" && (
         <EntityTable
-          headers={["Nombre", "CUIT", "Choferes", "Unidades", ""]}
+          headers={["Nombre", "CUIT", "Estado", "Choferes", "Patentes", ""]}
           rows={empresas.map((e) => {
             const wa = whatsappDigits(e.contacto);
             const choferesEmp = e.choferes ?? [];
             const unidadesEmp = e.unidades ?? [];
+            const activa = e.activo !== false;
             return [
               e.nombre,
               e.cuit || "—",
+              activa ? "Activa" : "Inactiva",
               choferesEmp.length
                 ? choferesEmp
                     .map((c) => `${c.apellido ? `${c.apellido}, ` : ""}${c.nombre} (${c.dni})`)
                     .join(" · ")
                 : "Sin choferes",
               unidadesEmp.length
-                ? unidadesEmp.map((u) => u.patente).join(", ")
+                ? unidadesEmp.map((u) => u.patente).join(" · ")
                 : "Sin unidades",
               <div key={e.id} className="flex flex-wrap items-center justify-end gap-2 text-xs">
                 {wa && (
@@ -1452,6 +1468,8 @@ export function M5FichaPage() {
                   <Actions
                     onEdit={() => openEditEmpresa(e)}
                     onDelete={() => void deleteEntity("empresa", e.id)}
+                    deleteLabel={activa ? "Inactivar" : undefined}
+                    deleteDisabled={!activa}
                   />
                 ) : null}
               </div>,
@@ -1505,7 +1523,7 @@ export function M5FichaPage() {
                     }
                   >
                     <option value="">Todos</option>
-                    {ALL_ROLES.filter((r) => r !== "CLIENTE").map((r) => (
+                    {(["ADMINISTRADOR", "OPERACIONES", "SUGERENCIAS"] as Role[]).map((r) => (
                       <option key={r} value={r}>
                         {ROLE_LABELS[r]}
                       </option>
@@ -1689,14 +1707,6 @@ export function M5FichaPage() {
 
           {form.kind === "chofer" && (
             <>
-              <Field label="DNI">
-                <input
-                  className={inputClass}
-                  value={fDni}
-                  onChange={(e) => setFDni(e.target.value)}
-                  required
-                />
-              </Field>
               <Field label="Apellido">
                 <input
                   className={inputClass}
@@ -1705,43 +1715,12 @@ export function M5FichaPage() {
                   required
                 />
               </Field>
-              <Field label="Empresa">
-                <select
+              <Field label="DNI">
+                <input
                   className={inputClass}
-                  value={fChoferEmpresaId}
-                  onChange={(e) => setFChoferEmpresaId(e.target.value)}
+                  value={fDni}
+                  onChange={(e) => setFDni(e.target.value)}
                   required
-                >
-                  <option value="">Elegí empresa…</option>
-                  {empresas
-                    .filter((e) => e.activo !== false)
-                    .map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.nombre} · {e.cuit || "sin CUIT"}
-                      </option>
-                    ))}
-                </select>
-              </Field>
-              <Field label="CUIL">
-                <input
-                  className={inputClass}
-                  value={fCuil}
-                  onChange={(e) => setFCuil(e.target.value)}
-                />
-              </Field>
-              <Field label="Licencia (categoría)">
-                <input
-                  className={inputClass}
-                  value={fLicencia}
-                  onChange={(e) => setFLicencia(e.target.value)}
-                />
-              </Field>
-              <Field label="Vencimiento licencia">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={fLicenciaVenc}
-                  onChange={(e) => setFLicenciaVenc(e.target.value)}
                 />
               </Field>
               <Field label="Teléfono">
@@ -1757,6 +1736,21 @@ export function M5FichaPage() {
                   className={inputClass}
                   value={fEmailChofer}
                   onChange={(e) => setFEmailChofer(e.target.value)}
+                />
+              </Field>
+              <Field label="CUIL">
+                <input
+                  className={inputClass}
+                  value={fCuil}
+                  onChange={(e) => setFCuil(e.target.value)}
+                />
+              </Field>
+              <Field label="Vencimiento licencia">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={fLicenciaVenc}
+                  onChange={(e) => setFLicenciaVenc(e.target.value)}
                 />
               </Field>
               <Field label="Perfil flota">
@@ -1797,6 +1791,23 @@ export function M5FichaPage() {
                   <option value="INACTIVO">Inactivo</option>
                 </select>
               </Field>
+              <Field label="Empresa">
+                <select
+                  className={inputClass}
+                  value={fChoferEmpresaId}
+                  onChange={(e) => setFChoferEmpresaId(e.target.value)}
+                  required
+                >
+                  <option value="">Elegí empresa…</option>
+                  {empresas
+                    .filter((e) => e.activo !== false)
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.nombre} · {e.cuit || "sin CUIT"}
+                      </option>
+                    ))}
+                </select>
+              </Field>
             </>
           )}
 
@@ -1819,18 +1830,6 @@ export function M5FichaPage() {
                   onChange={(e) => setFPasswordEmpresa(e.target.value)}
                 />
               </Field>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={fPermiteMultiCamioneta}
-                  onChange={(e) => setFPermiteMultiCamioneta(e.target.checked)}
-                />
-                Permitir que un chofer maneje varias unidades de esta empresa
-              </label>
-              <p className="text-[11px] text-[var(--vl-text-muted)]">
-                Si está activo, el mismo chofer puede quedar asignado a más de
-                una patente a la vez (solo dentro de esta empresa).
-              </p>
             </>
           )}
 
@@ -2285,7 +2284,7 @@ export function M5FichaPage() {
                   className={inputClass}
                   value={fDni}
                   onChange={(e) => setFDni(e.target.value)}
-                  required={fRol !== "EMPRESA"}
+                  required
                 />
               </Field>
               <Field label="Empresa">
@@ -2293,9 +2292,8 @@ export function M5FichaPage() {
                   className={inputClass}
                   value={fChoferEmpresaId}
                   onChange={(e) => setFChoferEmpresaId(e.target.value)}
-                  required
                 >
-                  <option value="">Elegí empresa…</option>
+                  <option value="">Opcional (solo si aplica)</option>
                   {empresas
                     .filter((e) => e.activo !== false)
                     .map((e) => (
@@ -2350,7 +2348,7 @@ export function M5FichaPage() {
                   value={fRol}
                   onChange={(e) => setFRol(e.target.value as Role)}
                 >
-                  {ALL_ROLES.filter((r) => r !== "CLIENTE").map(
+                  {(["ADMINISTRADOR", "OPERACIONES", "SUGERENCIAS"] as Role[]).map(
                     (r) => (
                       <option key={r} value={r}>
                         {ROLE_LABELS[r]}
@@ -2382,9 +2380,13 @@ export function M5FichaPage() {
 function Actions({
   onEdit,
   onDelete,
+  deleteLabel = "Eliminar",
+  deleteDisabled = false,
 }: {
   onEdit: () => void;
   onDelete: () => void;
+  deleteLabel?: string;
+  deleteDisabled?: boolean;
 }) {
   return (
     <div className="flex justify-end gap-2 text-xs">
@@ -2398,9 +2400,10 @@ function Actions({
       <button
         type="button"
         onClick={onDelete}
-        className="text-red-500 hover:text-red-700"
+        disabled={deleteDisabled}
+        className="text-red-500 hover:text-red-700 disabled:opacity-40"
       >
-        Eliminar
+        {deleteLabel}
       </button>
     </div>
   );

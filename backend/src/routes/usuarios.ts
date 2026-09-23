@@ -169,12 +169,16 @@ router.post("/", ...write, async (req, res) => {
       res.status(400).json({ error: "DNI obligatorio" });
       return;
     }
-    if (!empresaId) {
+    if (!empresaId && (rolRaw === "EMPRESA" || rolRaw === "CHOFER")) {
       res.status(400).json({ error: "Todo usuario se asigna a una empresa en el alta" });
       return;
     }
     let choferId: string | null = null;
     if (rolRaw === "CHOFER") {
+      if (!empresaId) {
+        res.status(400).json({ error: "Empresa obligatoria para chofer" });
+        return;
+      }
       const chofer = await prisma.chofer.findFirst({
         where: { dni, empresaId },
       });

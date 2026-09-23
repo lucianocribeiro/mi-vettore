@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { apiFetch, ApiError } from "../../lib/api";
 import {
@@ -66,6 +66,7 @@ export function TalleresProveedoresPanel({
   const [whatsapp, setWhatsapp] = useState(false);
   const [alias, setAlias] = useState("");
   const [selTipos, setSelTipos] = useState<TipoTaller[]>([]);
+  const [filtroTipo, setFiltroTipo] = useState<"" | TipoTaller>("");
   const [contactoTaller, setContactoTaller] = useState<TallerProveedor | null>(null);
   const [pagoModal, setPagoModal] = useState<{
     tallerId: string;
@@ -199,6 +200,13 @@ export function TalleresProveedoresPanel({
   const input =
     "mt-1 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm";
 
+  const itemsFiltrados = useMemo(() => {
+    if (!filtroTipo) return items;
+    return items.filter((t) =>
+      (t.tipos ?? []).some((x) => x.tipo === filtroTipo)
+    );
+  }, [items, filtroTipo]);
+
   return (
     <div>
       {!vista && (
@@ -241,6 +249,33 @@ export function TalleresProveedoresPanel({
               Nuevo taller
             </button>
           )}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <label className="text-xs text-[var(--vl-text-muted)]">
+              Tipo de taller
+              <select
+                className={`${input} mt-1 min-w-[12rem]`}
+                value={filtroTipo}
+                onChange={(e) =>
+                  setFiltroTipo((e.target.value || "") as "" | TipoTaller)
+                }
+              >
+                <option value="">Todos</option>
+                {(tipos.length
+                  ? tipos
+                  : (Object.keys(TIPO_TALLER_LABEL) as TipoTaller[])
+                ).map((tipo) => (
+                  <option key={tipo} value={tipo}>
+                    {TIPO_TALLER_LABEL[tipo] ?? tipo}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {filtroTipo && (
+              <p className="self-end pb-2 text-[11px] text-[var(--vl-text-muted)]">
+                Mostrando {itemsFiltrados.length} de {items.length}
+              </p>
+            )}
+          </div>
           <div className="overflow-x-auto rounded-xl border border-[var(--vl-card-border)]">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-[var(--vl-page)] text-xs text-[var(--vl-text-muted)]">
@@ -253,7 +288,7 @@ export function TalleresProveedoresPanel({
                 </tr>
               </thead>
               <tbody>
-                {items.map((t) => (
+                {itemsFiltrados.map((t) => (
                   <tr
                     key={t.id}
                     className="cursor-pointer border-t border-[var(--vl-card-border)] hover:bg-slate-50 dark:hover:bg-slate-800/50"
