@@ -980,8 +980,16 @@ router.get("/historial/reparaciones", authenticate, async (req: AuthedRequest, r
       nivel1: String(req.query?.nivel1 ?? ""),
       nivel2: String(req.query?.nivel2 ?? ""),
       nivel3: String(req.query?.nivel3 ?? ""),
+      taller: String(req.query?.taller ?? ""),
+      desde: String(req.query?.desde ?? ""),
+      hasta: String(req.query?.hasta ?? ""),
     });
-    res.json({ items: data.items, resumen: data.resumen });
+    res.json({
+      items: data.items,
+      resumen: data.resumen,
+      resumenTaller: data.resumenTaller,
+      opciones: data.opciones,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al cargar historial por reparación" });
@@ -1002,6 +1010,9 @@ router.get(
         nivel1: String(req.query?.nivel1 ?? ""),
         nivel2: String(req.query?.nivel2 ?? ""),
         nivel3: String(req.query?.nivel3 ?? ""),
+        taller: String(req.query?.taller ?? ""),
+        desde: String(req.query?.desde ?? ""),
+        hasta: String(req.query?.hasta ?? ""),
       });
 
       const workbook = new ExcelJS.Workbook();
