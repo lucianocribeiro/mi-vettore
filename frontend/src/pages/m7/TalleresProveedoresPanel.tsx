@@ -105,6 +105,7 @@ export function TalleresProveedoresPanel({
   const [pagoModal, setPagoModal] = useState<{
     tallerId: string;
     movIds: string[];
+    totalAdeudado: number;
   } | null>(null);
   const [pagoFecha, setPagoFecha] = useState(() =>
     new Date().toISOString().slice(0, 10)
@@ -189,7 +190,7 @@ export function TalleresProveedoresPanel({
     }
   }
 
-  function resetPagoForm(adeudado?: number) {
+  function resetPagoForm() {
     setPagoFecha(new Date().toISOString().slice(0, 10));
     setPagoMetodo("TRANSFERENCIA");
     setPagoMontoTransf("");
@@ -197,27 +198,18 @@ export function TalleresProveedoresPanel({
     setPagoMontoCheque("");
     setPagoDetCheque("");
     setPagoObs("");
-    setPagoMontoAPagar(
-      adeudado != null && Number.isFinite(adeudado) ? String(adeudado) : ""
-    );
+    setPagoMontoAPagar("");
     setPagoError(null);
   }
 
   function openPago(tallerId: string, movIds: string[]) {
     if (!movIds.length) return;
-    setPagoModal({ tallerId, movIds });
-    let adeudado: number | undefined;
-    if (movIds.length === 1) {
-      const taller = saldos.find((s) => s.id === tallerId);
-      const mov = taller?.movimientos.find((m) => m.id === movIds[0]);
-      adeudado = mov?.montoFacturado;
-    } else {
-      const taller = saldos.find((s) => s.id === tallerId);
-      adeudado = (taller?.movimientos ?? [])
-        .filter((m) => movIds.includes(m.id))
-        .reduce((a, m) => a + m.montoFacturado, 0);
-    }
-    resetPagoForm(adeudado);
+    const taller = saldos.find((s) => s.id === tallerId);
+    const totalAdeudado = (taller?.movimientos ?? [])
+      .filter((m) => movIds.includes(m.id))
+      .reduce((a, m) => a + m.montoFacturado, 0);
+    setPagoModal({ tallerId, movIds, totalAdeudado });
+    resetPagoForm();
   }
 
   function toggleMov(tallerId: string, movId: string) {
@@ -265,15 +257,18 @@ export function TalleresProveedoresPanel({
       setPagoError("El método es obligatorio");
       return;
     }
-    if (pagoModal.movIds.length === 1 && pagoMontoAPagar !== "") {
+    if (pagoMontoAPagar !== "") {
       const n = Number(pagoMontoAPagar);
       if (!Number.isFinite(n) || n <= 0) {
         setPagoError("Indicá un monto a pagar válido");
         return;
       }
-    }
-    if (pagoModal.movIds.length > 1 && pagoMontoAPagar) {
-      // Lote: no soporta parcial por ítem; el monto a pagar debe cubrir el total o dejarse vacío.
+      if (n > pagoModal.totalAdeudado + 0.009) {
+        setPagoError(
+          `El monto no puede superar lo adeudado (${pagoModal.totalAdeudado})`
+        );
+        return;
+      }
     }
     setPagoSaving(true);
     setPagoError(null);
@@ -286,12 +281,11 @@ export function TalleresProveedoresPanel({
           token
         );
       } else {
-        const { montoPagado: _mp, ...loteBody } = body;
         await apiFetch(
           `/api/talleres-proveedores/${pagoModal.tallerId}/movimientos/pagar-lote`,
           {
             method: "POST",
-            body: JSON.stringify({ ...loteBody, movimientoIds: pagoModal.movIds }),
+            body: JSON.stringify({ ...body, movimientoIds: pagoModal.movIds }),
           },
           token
         );
@@ -774,26 +768,27 @@ export function TalleresProveedoresPanel({
             <h3 className="mb-1 font-bold text-[var(--vl-heading)]">Registrar pago</h3>
             <p className="mb-3 text-xs text-[var(--vl-text-muted)]">
               {pagoModal.movIds.length === 1
-                ? "1 ítem — podés pagar parcial y el saldo queda pendiente"
-                : `${pagoModal.movIds.length} ítems seleccionados (pago total de cada uno)`}
+                ? `1 ítem · adeudado $${pagoModal.totalAdeudado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
+                : `${pagoModal.movIds.length} ítems · adeudado $${pagoModal.totalAdeudado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`}
+              {" — "}
+              si pagás menos, el saldo queda pendiente (no se marca todo como pagado).
             </p>
-            {pagoModal.movIds.length === 1 && (
-              <label className="mb-2 block text-xs">
-                Monto a pagar
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  className={input}
-                  value={pagoMontoAPagar}
-                  onChange={(e) => setPagoMontoAPagar(e.target.value)}
-                  placeholder="Adeudado completo o parcial"
-                />
-                <span className="mt-0.5 block text-[10px] text-[var(--vl-text-muted)]">
-                  Si es menor al adeudado, se genera un saldo pendiente automático.
-                </span>
-              </label>
-            )}
+            <label className="mb-2 block text-xs">
+              Monto a pagar
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                max={pagoModal.totalAdeudado}
+                className={input}
+                value={pagoMontoAPagar}
+                onChange={(e) => setPagoMontoAPagar(e.target.value)}
+                placeholder={`Vacío = todo ($${pagoModal.totalAdeudado.toLocaleString("es-AR", { minimumFractionDigits: 2 })})`}
+              />
+              <span className="mt-0.5 block text-[10px] text-[var(--vl-text-muted)]">
+                Con varios ítems el monto se reparte en proporción. También podés indicar solo el monto de transferencia/cheque: si es menor, queda saldo pendiente.
+              </span>
+            </label>
             <label className="block text-xs">
               Fecha
               <input

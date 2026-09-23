@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { MetodoPagoTaller, TipoTaller } from "@prisma/client";
+import { MetodoPagoTaller, TipoTaller, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
@@ -106,6 +106,103 @@ function parsePagoBody(body: unknown): {
       detalleCheque,
     },
     montoPagado,
+  };
+}
+
+type PagoData = {
+  fechaPago: Date;
+  metodoPago: MetodoPagoTaller;
+  observacionPago: string | null;
+  montoTransferencia: number | null;
+  detalleTransferencia: string | null;
+  montoCheque: number | null;
+  detalleCheque: string | null;
+};
+
+type MovPendiente = {
+  id: string;
+  tallerProveedorId: string;
+  otId: string | null;
+  montoFacturado: number;
+  fechaFactura: Date;
+};
+
+/** Marca un movimiento como pagado; si el monto es menor, deja el resto PENDIENTE. */
+async function aplicarPagoMovimiento(
+  tx: Prisma.TransactionClient,
+  mov: MovPendiente,
+  montoPagado: number,
+  pagoData: PagoData
+) {
+  const adeudado = mov.montoFacturado;
+  const pagadoMonto = Math.round(montoPagado * 100) / 100;
+  const esParcial = pagadoMonto < adeudado - 0.009;
+  if (esParcial) {
+    const resto = Math.round((adeudado - pagadoMonto) * 100) / 100;
+    const pagado = await tx.tallerMovimiento.update({
+      where: { id: mov.id },
+      data: {
+        estado: "PAGADO",
+        montoFacturado: pagadoMonto,
+        ...pagoData,
+      },
+    });
+    await tx.tallerMovimiento.create({
+      data: {
+        tallerProveedorId: mov.tallerProveedorId,
+        otId: mov.otId,
+        montoFacturado: resto,
+        fechaFactura: mov.fechaFactura,
+        estado: "PENDIENTE",
+      },
+    });
+    return { pagado, resto };
+  }
+  const pagado = await tx.tallerMovimiento.update({
+    where: { id: mov.id },
+    data: {
+      estado: "PAGADO",
+      ...pagoData,
+    },
+  });
+  return { pagado, resto: 0 };
+}
+
+/** Reparte un monto de pago entre ítems (proporcional al adeudado). */
+function repartirMonto(
+  montos: number[],
+  totalPagar: number
+): number[] {
+  const total = montos.reduce((a, n) => a + n, 0);
+  if (total <= 0) return montos.map(() => 0);
+  const out: number[] = [];
+  let restante = Math.round(totalPagar * 100) / 100;
+  for (let i = 0; i < montos.length; i++) {
+    if (i === montos.length - 1) {
+      out.push(Math.min(restante, montos[i]));
+      break;
+    }
+    const share = Math.round((montos[i] * totalPagar) / total * 100) / 100;
+    const capped = Math.min(share, montos[i], restante);
+    out.push(capped);
+    restante = Math.round((restante - capped) * 100) / 100;
+  }
+  return out;
+}
+
+function escalarPagoData(pagoData: PagoData, share: number, totalPago: number): PagoData {
+  if (totalPago <= 0 || share >= totalPago - 0.009) return pagoData;
+  const ratio = share / totalPago;
+  return {
+    ...pagoData,
+    montoTransferencia:
+      pagoData.montoTransferencia != null
+        ? Math.round(pagoData.montoTransferencia * ratio * 100) / 100
+        : null,
+    montoCheque:
+      pagoData.montoCheque != null
+        ? Math.round(pagoData.montoCheque * ratio * 100) / 100
+        : null,
   };
 }
 
@@ -243,41 +340,14 @@ router.post(
         return;
       }
 
-      const esParcial = montoPagado < adeudado - 0.009;
-      if (esParcial) {
-        const resto = Math.round((adeudado - montoPagado) * 100) / 100;
-        const result = await prisma.$transaction(async (tx) => {
-          const pagado = await tx.tallerMovimiento.update({
-            where: { id: mov.id },
-            data: {
-              estado: "PAGADO",
-              montoFacturado: Math.round(montoPagado * 100) / 100,
-              ...parsed.data,
-            },
-          });
-          await tx.tallerMovimiento.create({
-            data: {
-              tallerProveedorId: mov.tallerProveedorId,
-              otId: mov.otId,
-              montoFacturado: resto,
-              fechaFactura: mov.fechaFactura,
-              estado: "PENDIENTE",
-            },
-          });
-          return pagado;
-        });
-        res.json({ ...result, parcial: true, saldoPendiente: resto });
+      const { pagado, resto } = await prisma.$transaction((tx) =>
+        aplicarPagoMovimiento(tx, mov, montoPagado, parsed.data)
+      );
+      if (resto > 0) {
+        res.json({ ...pagado, parcial: true, saldoPendiente: resto });
         return;
       }
-
-      const updated = await prisma.tallerMovimiento.update({
-        where: { id: mov.id },
-        data: {
-          estado: "PAGADO",
-          ...parsed.data,
-        },
-      });
-      res.json(updated);
+      res.json(pagado);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al marcar pago" });
@@ -285,7 +355,7 @@ router.post(
   }
 );
 
-/** Paga varios ítems pendientes del mismo proveedor con la misma forma de pago. */
+/** Paga varios ítems pendientes del mismo proveedor. Si el monto es menor al total, reparte proporcional y deja saldos PENDIENTE. */
 router.post(
   "/:id/movimientos/pagar-lote",
   authenticate,
@@ -307,18 +377,69 @@ router.post(
         res.status(400).json({ error: parsed.error });
         return;
       }
-      const result = await prisma.tallerMovimiento.updateMany({
+
+      const items = await prisma.tallerMovimiento.findMany({
         where: {
           id: { in: ids },
           tallerProveedorId: req.params.id,
           estado: "PENDIENTE",
         },
-        data: {
-          estado: "PAGADO",
-          ...parsed.data,
-        },
+        orderBy: { createdAt: "asc" },
       });
-      res.json({ actualizados: result.count });
+      if (!items.length) {
+        res.status(400).json({ error: "No hay ítems pendientes en la selección" });
+        return;
+      }
+      if (items.length !== ids.length) {
+        res.status(400).json({
+          error: "Algunos ítems ya no están pendientes o no pertenecen al proveedor",
+        });
+        return;
+      }
+
+      const totalAdeudado = items.reduce((a, m) => a + m.montoFacturado, 0);
+      const montoPagado = parsed.montoPagado ?? totalAdeudado;
+      if (montoPagado <= 0) {
+        res.status(400).json({ error: "Monto a pagar inválido" });
+        return;
+      }
+      if (montoPagado > totalAdeudado + 0.009) {
+        res.status(400).json({
+          error: `El monto no puede superar lo adeudado (${totalAdeudado})`,
+        });
+        return;
+      }
+
+      const shares = repartirMonto(
+        items.map((m) => m.montoFacturado),
+        montoPagado
+      );
+      const esParcial = montoPagado < totalAdeudado - 0.009;
+
+      const result = await prisma.$transaction(async (tx) => {
+        const pagados = [];
+        let saldoPendiente = 0;
+        for (let i = 0; i < items.length; i++) {
+          const share = shares[i];
+          if (share <= 0.009) continue;
+          const pagoItem = escalarPagoData(parsed.data, share, montoPagado);
+          const { pagado, resto } = await aplicarPagoMovimiento(
+            tx,
+            items[i],
+            share,
+            pagoItem
+          );
+          pagados.push(pagado);
+          saldoPendiente += resto;
+        }
+        return {
+          actualizados: pagados.length,
+          parcial: esParcial,
+          saldoPendiente: Math.round(saldoPendiente * 100) / 100,
+          montoAplicado: montoPagado,
+        };
+      });
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al pagar el lote" });
