@@ -16,12 +16,19 @@ import {
   X,
 } from "./icons";
 
+type NavChild = {
+  to: string;
+  label: string;
+  roles?: Role[];
+};
+
 type NavItem = {
   to: string;
   label: string;
   sub: string;
   icon: typeof FileText;
   roles?: Role[];
+  children?: NavChild[];
 };
 
 const NAV: NavItem[] = [
@@ -89,6 +96,14 @@ const NAV: NavItem[] = [
       "OPERACIONES",
       "EMPRESA",
     ],
+    children: [
+      { to: "/m5", label: "Flota" },
+      {
+        to: "/m5/usuarios",
+        label: "Usuarios especiales",
+        roles: ["ADMINISTRADOR", "OPERACIONES"],
+      },
+    ],
   },
   {
     to: "/m3",
@@ -119,6 +134,11 @@ type Props = {
   onClose: () => void;
 };
 
+function childVisible(child: NavChild, rol?: Role | null) {
+  if (!child.roles) return true;
+  return !!rol && child.roles.includes(rol);
+}
+
 export function Sidebar({ open, onClose }: Props) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -136,6 +156,9 @@ export function Sidebar({ open, onClose }: Props) {
     }
     return true;
   });
+
+  const fichaOpen =
+    location.pathname === "/m5" || location.pathname.startsWith("/m5/");
 
   useEffect(() => {
     if (location.pathname === "/documentacion") {
@@ -216,6 +239,70 @@ export function Sidebar({ open, onClose }: Props) {
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
         {items.map((n) => {
           const Icon = n.icon;
+          const children = (n.children ?? []).filter((c) =>
+            childVisible(c, rol)
+          );
+          const hasSubmenu = children.length > 1;
+          const groupActive =
+            n.to === "/m5" ? fichaOpen : location.pathname === n.to;
+
+          if (hasSubmenu) {
+            return (
+              <div key={n.to} className="space-y-0.5">
+                <NavLink
+                  to={n.to}
+                  end={n.to === "/m5"}
+                  onClick={onClose}
+                  className={() =>
+                    [
+                      "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-sm transition",
+                      groupActive
+                        ? "bg-[var(--vl-nav-active)] text-white"
+                        : "text-[var(--vl-nav)] hover:bg-[var(--vl-sidebar-search)] hover:text-[#c8ddf0]",
+                    ].join(" ")
+                  }
+                >
+                  <Icon
+                    size={16}
+                    className={
+                      groupActive ? "text-white" : "text-[var(--vl-nav-muted)]"
+                    }
+                  />
+                  <span className="min-w-0 flex-1 truncate">{n.label}</span>
+                  <span
+                    className={`shrink-0 text-[10px] font-semibold ${
+                      groupActive ? "text-[#6b9ed4]" : "text-[#3d5a78]"
+                    }`}
+                  >
+                    {n.sub}
+                  </span>
+                </NavLink>
+                {fichaOpen && (
+                  <div className="ml-3 space-y-0.5 border-l border-[var(--vl-sidebar-border)] pl-2">
+                    {children.map((c) => (
+                      <NavLink
+                        key={c.to}
+                        to={c.to}
+                        end={c.to === "/m5"}
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          [
+                            "flex min-h-9 w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition",
+                            isActive
+                              ? "bg-[var(--vl-sidebar-search)] font-semibold text-white"
+                              : "text-[var(--vl-nav-muted)] hover:bg-[var(--vl-sidebar-search)] hover:text-[#c8ddf0]",
+                          ].join(" ")
+                        }
+                      >
+                        {c.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           return (
             <NavLink
               key={n.to}

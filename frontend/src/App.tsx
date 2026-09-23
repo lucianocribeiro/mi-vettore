@@ -87,6 +87,14 @@ export default function App() {
               }
             />
             <Route
+              path="/m5/usuarios"
+              element={
+                <SugerenciasOnlyGate>
+                  <M5FichaPage />
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
               path="/m6"
               element={
                 <SugerenciasOnlyGate>

@@ -223,6 +223,31 @@ model EquipoFrioTipo {
   @@index([tipoServicioId])
 }
 
+/// Catálogo ABM de marcas de unidad (camioneta) y sus modelos.
+model MarcaCamioneta {
+  id        String           @id @default(cuid())
+  nombre    String           @unique
+  activo    Boolean          @default(true)
+  orden     Int              @default(0)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  modelos   ModeloCamioneta[]
+}
+
+model ModeloCamioneta {
+  id        String         @id @default(cuid())
+  marcaId   String
+  nombre    String
+  activo    Boolean        @default(true)
+  orden     Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  marca     MarcaCamioneta @relation(fields: [marcaId], references: [id], onDelete: Cascade)
+
+  @@unique([marcaId, nombre])
+  @@index([marcaId])
+}
+
 model Camioneta {
   id                     String           @id @default(cuid())
   patente                String           @unique

@@ -19,6 +19,7 @@ const { comunicacionesRouter } = require("./routes/comunicaciones.js");
 const { avisosRouter } = require("./routes/avisos.js");
 const { tiposServicioRouter } = require("./routes/tipos-servicio.js");
 const { equiposFrioRouter } = require("./routes/equipos-frio.js");
+const { marcasCamionetaRouter } = require("./routes/marcas-camioneta.js");
 const { sugerenciasRouter } = require("./routes/sugerencias.js");
 const { alertasRouter } = require("./routes/alertas.js");
 const { talleresProveedoresRouter } = require("./routes/talleres-proveedores.js");
@@ -79,6 +80,7 @@ app.use("/api/comunicaciones", comunicacionesRouter);
 app.use("/api/avisos", avisosRouter);
 app.use("/api/tipos-servicio", tiposServicioRouter);
 app.use("/api/equipos-frio", equiposFrioRouter);
+app.use("/api/marcas-camioneta", marcasCamionetaRouter);
 app.use("/api/sugerencias", sugerenciasRouter);
 app.use("/api/alertas", alertasRouter);
 

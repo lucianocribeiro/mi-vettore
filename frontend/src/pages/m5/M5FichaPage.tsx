@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
   Badge,
@@ -16,8 +17,6 @@ import { Download, Plus } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
 import {
   EQUIPO_FRIO_MARCAS,
-  MARCAS_CAMIONETA,
-  MARCA_MODELO_CAMIONETA,
   ROLE_LABELS,
   TIPO_TALLER_LABEL,
   canWriteMaster,
@@ -28,7 +27,6 @@ import {
   type Camioneta,
   type Chofer,
   type Empresa,
-  type MarcaCamioneta,
   type Role,
   type TallerProveedor,
   type TipoServicio,
@@ -38,6 +36,10 @@ import {
 import { FichaDrawer } from "./FichaDrawer";
 import { Field, FormModal, inputClass } from "./FormModal";
 import { EquiposFrioAbmPanel } from "./EquiposFrioAbmPanel";
+import {
+  MarcasModelosAbmPanel,
+  type MarcaCamionetaAbm,
+} from "./MarcasModelosAbmPanel";
 
 type Tab =
   | "camioneta"
@@ -45,6 +47,7 @@ type Tab =
   | "empresas"
   | "usuarios"
   | "tiposServicio"
+  | "marcasModelos"
   | "equiposFrio"
   | "talleres"
   | "asignacion";
@@ -68,6 +71,7 @@ const CREATE_KIND_BY_TAB: Record<Tab, CreateKind | null> = {
   empresas: "empresa",
   usuarios: "usuario",
   tiposServicio: "tipoServicio",
+  marcasModelos: null,
   equiposFrio: null,
   talleres: "taller",
   asignacion: null,
@@ -79,6 +83,7 @@ const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
   empresas: "empresa",
   usuarios: "usuario especial",
   tiposServicio: "tipo de servicio",
+  marcasModelos: "",
   equiposFrio: "equipo de frío",
   talleres: "taller",
   asignacion: "",
@@ -99,10 +104,12 @@ function whatsappDigits(raw: string | null | undefined): string | null {
 
 export function M5FichaPage() {
   const { token, user } = useAuth();
+  const location = useLocation();
+  const vistaUsuarios = location.pathname.startsWith("/m5/usuarios");
   const canEdit = canWriteMaster(user?.rol);
   const canAssign = canEdit || user?.rol === "EMPRESA";
 
-  const [tab, setTab] = useState<Tab>("empresas");
+  const [tab, setTab] = useState<Tab>(vistaUsuarios ? "usuarios" : "empresas");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,6 +118,9 @@ export function M5FichaPage() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [usuarios, setUsuarios] = useState<User[]>([]);
   const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([]);
+  const [marcasCamioneta, setMarcasCamioneta] = useState<MarcaCamionetaAbm[]>(
+    []
+  );
   const [talleres, setTalleres] = useState<TallerProveedor[]>([]);
   const [tiposTallerMeta, setTiposTallerMeta] = useState<TipoTaller[]>([]);
 
@@ -202,9 +212,25 @@ export function M5FichaPage() {
   const [userAdvOpen, setUserAdvOpen] = useState(false);
 
   const modelosParaMarca = useMemo(() => {
-    if (!fMarca || !(fMarca in MARCA_MODELO_CAMIONETA)) return [] as string[];
-    return [...MARCA_MODELO_CAMIONETA[fMarca as MarcaCamioneta]];
-  }, [fMarca]);
+    if (!fMarca) return [] as string[];
+    const marca = marcasCamioneta.find((m) => m.nombre === fMarca);
+    if (!marca) return fModelo ? [fModelo] : [];
+    const list = marca.modelos
+      .filter((m) => m.activo || m.nombre === fModelo)
+      .map((m) => m.nombre);
+    if (fModelo && !list.includes(fModelo)) return [...list, fModelo];
+    return list;
+  }, [fMarca, fModelo, marcasCamioneta]);
+
+  const marcasActivas = useMemo(() => {
+    const list = marcasCamioneta.filter(
+      (m) => m.activo || m.nombre === fMarca
+    );
+    if (fMarca && !list.some((m) => m.nombre === fMarca)) {
+      return [...list, { id: `legacy-${fMarca}`, nombre: fMarca, activo: false, orden: 999, modelos: [] }];
+    }
+    return list;
+  }, [marcasCamioneta, fMarca]);
 
   const tiposFrioPermitidos = useMemo(
     () => tiposFrioParaEquipo(fEquipoFrio),
@@ -238,7 +264,7 @@ export function M5FichaPage() {
     setLoading(true);
     setError(null);
     try {
-      const [cami, chof, emp, usu, tServ, tall, tallMeta] =
+      const [cami, chof, emp, usu, tServ, marcas, tall, tallMeta] =
         await Promise.all([
           apiFetch<Camioneta[]>(
             canEdit ? "/api/camionetas?incluirInactivas=1" : "/api/camionetas",
@@ -253,6 +279,9 @@ export function M5FichaPage() {
           apiFetch<Empresa[]>("/api/empresas", {}, token),
           apiFetch<User[]>("/api/usuarios", {}, token),
           apiFetch<TipoServicio[]>("/api/tipos-servicio", {}, token),
+          apiFetch<MarcaCamionetaAbm[]>("/api/marcas-camioneta", {}, token).catch(
+            () => [] as MarcaCamionetaAbm[]
+          ),
           apiFetch<TallerProveedor[]>("/api/talleres-proveedores", {}, token),
           apiFetch<{ tipos: TipoTaller[] }>(
             "/api/talleres-proveedores/meta",
@@ -265,6 +294,7 @@ export function M5FichaPage() {
       setEmpresas(Array.isArray(emp) ? emp : []);
       setUsuarios(Array.isArray(usu) ? usu : []);
       setTiposServicio(Array.isArray(tServ) ? tServ : []);
+      setMarcasCamioneta(Array.isArray(marcas) ? marcas : []);
       setTalleres(Array.isArray(tall) ? tall : []);
       setTiposTallerMeta(
         tallMeta.tipos?.length
@@ -281,6 +311,11 @@ export function M5FichaPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (vistaUsuarios) setTab("usuarios");
+    else if (tab === "usuarios") setTab("empresas");
+  }, [vistaUsuarios]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function openCreate(kind: NonNullable<typeof form>["kind"]) {
     setFormError(null);
@@ -789,6 +824,7 @@ export function M5FichaPage() {
           url: "/api/tipos-servicio/export",
           file: "tipos_servicio.xlsx",
         },
+        marcasModelos: null,
         equiposFrio: null,
         talleres: {
           url: "/api/talleres-proveedores",
@@ -815,8 +851,8 @@ export function M5FichaPage() {
     { id: "camioneta", label: "Unidades" },
     { id: "chofer", label: "Choferes" },
     { id: "asignacion", label: "Asignación flota" },
-    { id: "usuarios", label: "Usuarios especiales" },
     { id: "tiposServicio", label: "Tipos de servicio" },
+    { id: "marcasModelos", label: "Marcas y modelos" },
     { id: "equiposFrio", label: "Equipo de frío" },
   ];
 
@@ -965,6 +1001,10 @@ export function M5FichaPage() {
     });
   }, [usuarios, userQuery, userEmpresaId, userRol]);
 
+  if (vistaUsuarios && !isInternalOps(user?.rol)) {
+    return <Navigate to="/m5" replace />;
+  }
+
   return (
     <div>
       <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
@@ -974,12 +1014,15 @@ export function M5FichaPage() {
               M5 · MVP
             </span>
             <h1 className="text-lg font-bold text-[var(--vl-heading)] sm:text-xl">
-              Ficha integral: camioneta / chofer / empresa
+              {vistaUsuarios
+                ? "Usuarios especiales"
+                : "Ficha integral: camioneta / chofer / empresa"}
             </h1>
           </div>
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            Registro maestro y ABM: reasignar patentes desde acá, con historial
-            conservado.
+            {vistaUsuarios
+              ? "Personal interno de Vettore (administrador, operaciones, sugerencias)."
+              : "Registro maestro y ABM: reasignar patentes desde acá, con historial conservado."}
           </p>
         </div>
         {isInternalOps(user?.rol) && (
@@ -995,6 +1038,7 @@ export function M5FichaPage() {
         )}
       </div>
 
+      {!vistaUsuarios && (
       <div className="mb-4 flex flex-wrap gap-2 pb-1">
         {tabs.map((t) => (
           <button
@@ -1011,6 +1055,7 @@ export function M5FichaPage() {
           </button>
         ))}
       </div>
+      )}
 
       {(canEdit || tab === "camioneta") && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -1435,11 +1480,10 @@ export function M5FichaPage() {
 
       {!loading && !error && tab === "empresas" && (
         <EntityTable
-          headers={["Nombre", "CUIT", "Estado", "Choferes", "Patentes", ""]}
+          headers={["Nombre", "CUIT", "Estado", "Choferes", ""]}
           rows={empresas.map((e) => {
             const wa = whatsappDigits(e.contacto);
             const choferesEmp = e.choferes ?? [];
-            const unidadesEmp = e.unidades ?? [];
             const activa = e.activo !== false;
             return [
               e.nombre,
@@ -1450,9 +1494,6 @@ export function M5FichaPage() {
                     .map((c) => `${c.apellido ? `${c.apellido}, ` : ""}${c.nombre} (${c.dni})`)
                     .join(" · ")
                 : "Sin choferes",
-              unidadesEmp.length
-                ? unidadesEmp.map((u) => u.patente).join(" · ")
-                : "Sin unidades",
               <div key={e.id} className="flex flex-wrap items-center justify-end gap-2 text-xs">
                 {wa && (
                   <a
@@ -1617,6 +1658,10 @@ export function M5FichaPage() {
       )}
 
       {!loading && !error && tab === "equiposFrio" && <EquiposFrioAbmPanel />}
+
+      {!loading && !error && tab === "marcasModelos" && (
+        <MarcasModelosAbmPanel />
+      )}
 
       {!loading && !error && tab === "talleres" && (
         <EntityTable
@@ -1853,9 +1898,9 @@ export function M5FichaPage() {
                   }}
                 >
                   <option value="">—</option>
-                  {MARCAS_CAMIONETA.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
+                  {marcasActivas.map((m) => (
+                    <option key={m.id} value={m.nombre}>
+                      {m.nombre}
                     </option>
                   ))}
                 </select>
