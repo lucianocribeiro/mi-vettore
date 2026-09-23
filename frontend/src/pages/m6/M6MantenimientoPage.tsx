@@ -196,10 +196,15 @@ export function M6MantenimientoPage() {
     void load();
   }, [load]);
 
-  const filtradas = useMemo(
-    () => filterCamionetas(camionetas, unitFilters),
-    [camionetas, unitFilters]
-  );
+  const filtradas = useMemo(() => {
+    const list = filterCamionetas(camionetas, unitFilters);
+    return [...list].sort((a, b) => {
+      const ta = a.kmActualizadoAt ? new Date(a.kmActualizadoAt).getTime() : 0;
+      const tb = b.kmActualizadoAt ? new Date(b.kmActualizadoAt).getTime() : 0;
+      if (tb !== ta) return tb - ta; // más reciente primero; sin fecha al final
+      return a.patente.localeCompare(b.patente, "es");
+    });
+  }, [camionetas, unitFilters]);
 
   useEffect(() => {
     if (!selectedId) return;
