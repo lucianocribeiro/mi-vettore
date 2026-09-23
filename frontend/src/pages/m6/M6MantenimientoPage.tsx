@@ -461,7 +461,24 @@ export function M6MantenimientoPage() {
                           : "hover:shadow-md"
                       }`}
                     >
-                      <div className="text-sm font-medium text-[var(--vl-heading)]">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-lg font-bold leading-tight text-[var(--vl-heading)]">
+                            {c.patente}
+                          </div>
+                          <div className="mt-0.5 text-xs font-medium text-[var(--vl-text)]">
+                            {unidadTitulo(c)}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                            {unidadPropietario(c)}
+                          </div>
+                        </div>
+                        <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
+                          {c.estado.replace(/_/g, " ").toLowerCase()}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-3 text-sm font-medium text-[var(--vl-heading)]">
                         {c.km.toLocaleString("es-AR")} km
                         {c.kmActualizadoAt ? (
                           <span className="ml-1 text-[11px] font-normal text-[var(--vl-text-muted)]">
@@ -485,7 +502,7 @@ export function M6MantenimientoPage() {
                           );
                         })}
                       </div>
-                      <div className="mt-2 text-[11px] leading-snug text-[var(--vl-text-muted)]">
+                      <div className="mt-auto pt-2 text-[11px] leading-snug text-[var(--vl-text-muted)]">
                         {[
                           a?.chofer?.nombre
                             ? `Chofer: ${a.chofer.nombre}`
@@ -496,23 +513,6 @@ export function M6MantenimientoPage() {
                         ]
                           .filter(Boolean)
                           .join(" · ") || "Sin asignación"}
-                      </div>
-
-                      <div className="mt-auto flex items-start justify-between gap-2 border-t border-[var(--vl-card-border)] pt-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-lg font-bold text-[var(--vl-heading)]">
-                            {c.patente}
-                          </div>
-                          <div className="mt-0.5 text-xs font-medium text-[var(--vl-text)]">
-                            {unidadTitulo(c)}
-                          </div>
-                          <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                            {unidadPropietario(c)}
-                          </div>
-                        </div>
-                        <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
-                          {c.estado.replace(/_/g, " ").toLowerCase()}
-                        </Badge>
                       </div>
                     </button>
                 );
