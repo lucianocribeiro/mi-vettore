@@ -233,6 +233,34 @@ router.delete("/:id", ...write, async (req, res) => {
   }
 });
 
+/** Reactiva la empresa y revierte el cascade de inactivación (usuarios EMPRESA, choferes, unidades). */
+router.post("/:id/reactivar", ...write, async (req, res) => {
+  try {
+    const item = await prisma.$transaction(async (tx) => {
+      const empresa = await tx.empresaTransporte.update({
+        where: { id: req.params.id },
+        data: { activo: true },
+      });
+      await tx.usuario.updateMany({
+        where: { empresaId: empresa.id, rol: Role.EMPRESA },
+        data: { estado: "ACTIVO" },
+      });
+      await tx.chofer.updateMany({
+        where: { empresaId: empresa.id },
+        data: { estado: "ACTIVO" },
+      });
+      await tx.camioneta.updateMany({
+        where: { empresaId: empresa.id, estado: "INACTIVA" },
+        data: { estado: "OPERATIVA", estadoDesde: null, estadoHasta: null },
+      });
+      return empresa;
+    });
+    res.json(item);
+  } catch {
+    res.status(404).json({ error: "Empresa no encontrada" });
+  }
+});
+
 router.post("/:id/password", ...write, async (req, res) => {
   try {
     const empresa = await prisma.empresaTransporte.findUnique({ where: { id: req.params.id } });

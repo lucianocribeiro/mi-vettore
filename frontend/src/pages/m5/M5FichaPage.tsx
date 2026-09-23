@@ -742,6 +742,30 @@ export function M5FichaPage() {
     }
   }
 
+  async function reactivarEmpresa(id: string) {
+    if (!token || !canEdit) return;
+    if (
+      !confirm(
+        "¿Activar esta empresa? Se reactivan también sus choferes, unidades y usuarios de empresa."
+      )
+    ) {
+      return;
+    }
+    try {
+      const updated = await apiFetch<Empresa>(
+        `/api/empresas/${id}/reactivar`,
+        { method: "POST" },
+        token
+      );
+      setEmpresas((p) =>
+        p.map((x) => (x.id === id ? { ...x, ...updated, activo: true } : x))
+      );
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo activar");
+    }
+  }
+
   /** Baja lógica: chofer → INACTIVO (DELETE /choferes/:id), camioneta → FUERA_SERVICIO (POST /baja). */
   async function reactivarUnidad(id: string) {
     if (!token || !canEdit) return;
@@ -1525,12 +1549,30 @@ export function M5FichaPage() {
                   </a>
                 )}
                 {canEdit ? (
-                  <Actions
-                    onEdit={() => openEditEmpresa(e)}
-                    onDelete={() => void deleteEntity("empresa", e.id)}
-                    deleteLabel={activa ? "Inactivar" : undefined}
-                    deleteDisabled={!activa}
-                  />
+                  activa ? (
+                    <Actions
+                      onEdit={() => openEditEmpresa(e)}
+                      onDelete={() => void deleteEntity("empresa", e.id)}
+                      deleteLabel="Inactivar"
+                    />
+                  ) : (
+                    <div className="flex justify-end gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => openEditEmpresa(e)}
+                        className="text-slate-500 hover:text-slate-800"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void reactivarEmpresa(e.id)}
+                        className="text-emerald-700 hover:text-emerald-900"
+                      >
+                        Activar
+                      </button>
+                    </div>
+                  )
                 ) : null}
               </div>,
             ];
