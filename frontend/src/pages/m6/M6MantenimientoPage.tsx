@@ -10,7 +10,9 @@ import {
 import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import {
   alertLevelUnidad,
+  levelForItem,
   reglasLabels,
+  type MantItemKey,
   type SemaforoLevel,
 } from "../../lib/mantenimiento-semaforo";
 import {
@@ -24,16 +26,44 @@ import {
 } from "../../types";
 import { Download, X } from "../../components/icons";
 
-function alertLevelFor(c: Camioneta): SemaforoLevel {
-  return alertLevelUnidad({
+function mantDataFrom(c: Camioneta) {
+  return {
     km: c.km,
     fechaUltimoAceite: c.fechaUltimoAceite,
     fechaCambioCorrea: c.fechaCambioCorrea,
     fechaCambioNeumaticos: c.fechaCambioNeumaticos,
     fechaCambioBateria: c.fechaCambioBateria,
+    kmUltimoAceite: c.kmUltimoAceite,
+    kmCambioCorrea: c.kmCambioCorrea,
+    kmCambioNeumaticos: c.kmCambioNeumaticos,
+    kmCambioBateria: c.kmCambioBateria,
     estado: c.estado,
-  });
+  };
 }
+
+function alertLevelFor(c: Camioneta): SemaforoLevel {
+  return alertLevelUnidad(mantDataFrom(c));
+}
+
+const ITEM_DATE: Record<MantItemKey, (c: Camioneta) => string | null | undefined> = {
+  aceite: (c) => c.fechaUltimoAceite,
+  correa: (c) => c.fechaCambioCorrea,
+  neumaticos: (c) => c.fechaCambioNeumaticos,
+  bateria: (c) => c.fechaCambioBateria,
+};
+
+const ITEM_LABEL: Record<MantItemKey, string> = {
+  aceite: "Aceite",
+  correa: "Distribución",
+  neumaticos: "Neumáticos",
+  bateria: "Batería",
+};
+
+const ITEM_LINE: Record<SemaforoLevel, string> = {
+  ok: "text-[var(--vl-text-muted)]",
+  warn: "font-medium text-amber-700 dark:text-amber-400",
+  danger: "font-semibold text-red-600 dark:text-red-400",
+};
 
 const CARD_RING: Record<SemaforoLevel, string> = {
   ok: "border-[var(--vl-card-border)]",
@@ -291,8 +321,15 @@ export function M6MantenimientoPage() {
           {reglasLabels().map((r) => (
             <li key={r.key}>
               {r.label}: {r.regla}
+              {r.key === "aceite" || r.key === "correa"
+                ? " · alerta en tarjeta"
+                : " · sin alerta"}
             </li>
           ))}
+          <li className="pt-0.5">
+            Las fechas se completan al cerrar OT (concepto del diagnóstico) o
+            carga/import de mantenimiento.
+          </li>
         </ul>
         </div>
         {isInternalOps(user?.rol) && (
@@ -405,11 +442,12 @@ export function M6MantenimientoPage() {
               No hay unidades con esos filtros.
             </p>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {filtradas.map((c) => {
                 const a = currentAsignacion(c);
                 const level = alertLevelFor(c);
                 const active = c.id === selectedId;
+                const data = mantDataFrom(c);
                 return (
                     <button
                       key={c.id}
@@ -417,7 +455,7 @@ export function M6MantenimientoPage() {
                       onClick={() =>
                         setSelectedId((prev) => (prev === c.id ? null : c.id))
                       }
-                      className={`rounded-2xl border-2 p-4 text-left transition ${CARD_RING[level]} ${CARD_TINT[level]} ${
+                      className={`flex h-full min-h-[220px] flex-col rounded-2xl border-2 p-4 text-left transition ${CARD_RING[level]} ${CARD_TINT[level]} ${
                         active
                           ? "ring-2 ring-slate-900 ring-offset-2 dark:ring-slate-100 dark:ring-offset-[var(--vl-main)]"
                           : "hover:shadow-md"
@@ -431,21 +469,21 @@ export function M6MantenimientoPage() {
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-1 space-y-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                        <div>
-                          Aceite: {formatDate(c.fechaUltimoAceite) || "sin dato"}
-                        </div>
-                        <div>
-                          Distribución:{" "}
-                          {formatDate(c.fechaCambioCorrea) || "sin dato"}
-                        </div>
-                        <div>
-                          Neumáticos:{" "}
-                          {formatDate(c.fechaCambioNeumaticos) || "sin dato"}
-                        </div>
-                        <div>
-                          Batería: {formatDate(c.fechaCambioBateria) || "sin dato"}
-                        </div>
+                      <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px]">
+                        {(
+                          ["aceite", "correa", "neumaticos", "bateria"] as MantItemKey[]
+                        ).map((key) => {
+                          const itemLevel = levelForItem(key, data);
+                          const fecha = formatDate(ITEM_DATE[key](c));
+                          return (
+                            <div key={key} className="contents">
+                              <span className="text-[var(--vl-text-muted)]">
+                                {ITEM_LABEL[key]}:
+                              </span>
+                              <span className={ITEM_LINE[itemLevel]}>{fecha}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                       <div className="mt-2 text-[11px] leading-snug text-[var(--vl-text-muted)]">
                         {[
@@ -460,7 +498,7 @@ export function M6MantenimientoPage() {
                           .join(" · ") || "Sin asignación"}
                       </div>
 
-                      <div className="mt-3 flex items-start justify-between gap-2 border-t border-[var(--vl-card-border)] pt-3">
+                      <div className="mt-auto flex items-start justify-between gap-2 border-t border-[var(--vl-card-border)] pt-3">
                         <div className="min-w-0">
                           <div className="truncate text-lg font-bold text-[var(--vl-heading)]">
                             {c.patente}

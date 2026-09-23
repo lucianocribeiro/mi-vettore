@@ -43,6 +43,39 @@ const includeAsignaciones = {
   },
 };
 
+const MANT_TIPOS = ["ACEITE", "CORREA", "NEUMATICOS", "BATERIA"] as const;
+
+/** Enriquece unidades con km del último registro de mantenimiento (OT / import / carga). */
+async function withMantKm<T extends { id: string }>(items: T[]) {
+  if (!items.length) return items.map((i) => ({ ...i }));
+  const ids = items.map((i) => i.id);
+  const regs = await prisma.registroMantenimiento.findMany({
+    where: {
+      camionetaId: { in: ids },
+      tipo: { in: [...MANT_TIPOS] },
+    },
+    orderBy: { fecha: "desc" },
+    select: { camionetaId: true, tipo: true, km: true },
+  });
+  const byUnit = new Map<string, Record<string, number | null>>();
+  for (const r of regs) {
+    const cur = byUnit.get(r.camionetaId) ?? {};
+    if (cur[r.tipo] !== undefined) continue;
+    cur[r.tipo] = r.km;
+    byUnit.set(r.camionetaId, cur);
+  }
+  return items.map((item) => {
+    const m = byUnit.get(item.id) ?? {};
+    return {
+      ...item,
+      kmUltimoAceite: m.ACEITE ?? null,
+      kmCambioCorrea: m.CORREA ?? null,
+      kmCambioNeumaticos: m.NEUMATICOS ?? null,
+      kmCambioBateria: m.BATERIA ?? null,
+    };
+  });
+}
+
 function parseDate(value: unknown): Date | null {
   return parseDateOnly(value);
 }
@@ -72,7 +105,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       if (!incluirBajas) {
         items = items.filter((c) => c.estado !== "FUERA_SERVICIO" && c.estado !== "INACTIVA");
       }
-      res.json(items);
+      res.json(await withMantKm(items));
       return;
     }
     if (me?.rol === "EMPRESA") {
@@ -84,7 +117,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
         orderBy: { patente: "asc" },
         include: includeAsignaciones,
       });
-      res.json(items);
+      res.json(await withMantKm(items));
       return;
     }
 
@@ -94,7 +127,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       orderBy: { patente: "asc" },
       include: includeAsignaciones,
     });
-    res.json(items);
+    res.json(await withMantKm(items));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al listar camionetas" });
@@ -1152,24 +1185,75 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
       res.status(400).json({
         error:
           rol === "CHOFER"
-            ? "IndicÃ¡ el kilometraje actual"
-            : "IndicÃ¡ km y/o fechas de mantenimiento (aceite, correa, neumÃ¡ticos, baterÃ­a)",
+            ? "Indicá el kilometraje actual"
+            : "Indicá km y/o fechas de mantenimiento (aceite, correa, neumáticos, batería)",
       });
       return;
     }
 
-    const item = await prisma.camioneta.update({
-      where: { id: camionetaId },
-      data,
-      include: includeAsignaciones,
+    const kmFinal =
+      typeof data.km === "number" ? (data.km as number) : existing.km;
+
+    const item = await prisma.$transaction(async (tx) => {
+      const updated = await tx.camioneta.update({
+        where: { id: camionetaId },
+        data,
+        include: includeAsignaciones,
+      });
+
+      if (rol !== "CHOFER") {
+        const datePairs: { tipo: string; fecha: Date | null; prev: Date | null }[] = [
+          {
+            tipo: "ACEITE",
+            fecha: (data.fechaUltimoAceite as Date | null | undefined) ?? null,
+            prev: existing.fechaUltimoAceite,
+          },
+          {
+            tipo: "CORREA",
+            fecha: (data.fechaCambioCorrea as Date | null | undefined) ?? null,
+            prev: existing.fechaCambioCorrea,
+          },
+          {
+            tipo: "NEUMATICOS",
+            fecha: (data.fechaCambioNeumaticos as Date | null | undefined) ?? null,
+            prev: existing.fechaCambioNeumaticos,
+          },
+          {
+            tipo: "BATERIA",
+            fecha: (data.fechaCambioBateria as Date | null | undefined) ?? null,
+            prev: existing.fechaCambioBateria,
+          },
+        ];
+        for (const p of datePairs) {
+          if (!p.fecha) continue;
+          const same =
+            p.prev &&
+            p.prev.toISOString().slice(0, 10) === p.fecha.toISOString().slice(0, 10);
+          if (same) continue;
+          await tx.registroMantenimiento.create({
+            data: {
+              camionetaId,
+              fecha: p.fecha,
+              km: kmFinal,
+              tipo: p.tipo,
+              detalle: "Carga manual M6",
+              fuente: "M6_MANUAL",
+            },
+          });
+        }
+      }
+
+      return updated;
     });
+
+    const [enriched] = await withMantKm([item]);
     res.json({
-      ...item,
+      ...enriched,
       ...(kmAnomalia
         ? {
             alertaKmAnomalia: true,
             mensaje:
-              "El salto de kilometraje es inusualmente alto; se registrÃ³ una alerta.",
+              "El salto de kilometraje es inusualmente alto; se registró una alerta.",
           }
         : {}),
     });

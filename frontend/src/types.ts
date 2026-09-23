@@ -345,6 +345,11 @@ export type Camioneta = {
   fechaCambioCorrea: string | null;
   fechaCambioNeumaticos: string | null;
   fechaCambioBateria: string | null;
+  /** Km al último cambio (desde RegistroMantenimiento / OT). */
+  kmUltimoAceite?: number | null;
+  kmCambioCorrea?: number | null;
+  kmCambioNeumaticos?: number | null;
+  kmCambioBateria?: number | null;
   seguroCompania: string | null;
   seguroVencimiento: string | null;
   vtbVencimiento: string | null;
