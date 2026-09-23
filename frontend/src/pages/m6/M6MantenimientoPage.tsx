@@ -9,6 +9,11 @@ import {
 } from "../../components/FlotaUnitFilterBar";
 import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import {
+  alertLevelUnidad,
+  reglasLabels,
+  type SemaforoLevel,
+} from "../../lib/mantenimiento-semaforo";
+import {
   currentAsignacion,
   formatDate,
   isInternalOps,
@@ -19,41 +24,24 @@ import {
 } from "../../types";
 import { Download, X } from "../../components/icons";
 
-function daysUntil(iso: string | null | undefined): number | null {
-  if (!iso) return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso));
-  const d = m
-    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-    : new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  d.setHours(0, 0, 0, 0);
-  return Math.round((d.getTime() - today.getTime()) / 86_400_000);
+function alertLevelFor(c: Camioneta): SemaforoLevel {
+  return alertLevelUnidad({
+    km: c.km,
+    fechaUltimoAceite: c.fechaUltimoAceite,
+    fechaCambioCorrea: c.fechaCambioCorrea,
+    fechaCambioNeumaticos: c.fechaCambioNeumaticos,
+    fechaCambioBateria: c.fechaCambioBateria,
+    estado: c.estado,
+  });
 }
 
-type AlertLevel = "ok" | "warn" | "danger";
-
-function alertLevelFor(c: Camioneta): AlertLevel {
-  if (c.estado === "EN_TALLER" || c.estado === "FUERA_SERVICIO") return "danger";
-  let worst: AlertLevel = "ok";
-  for (const iso of [c.seguroVencimiento, c.vtbVencimiento]) {
-    const d = daysUntil(iso);
-    if (d === null) continue;
-    if (d < 0) return "danger";
-    if (d <= 30) worst = "warn";
-  }
-  if (!c.fechaUltimoAceite && worst === "ok") worst = "warn";
-  return worst;
-}
-
-const CARD_RING: Record<AlertLevel, string> = {
+const CARD_RING: Record<SemaforoLevel, string> = {
   ok: "border-[var(--vl-card-border)]",
   warn: "border-amber-400 dark:border-amber-500",
   danger: "border-red-500 dark:border-red-400",
 };
 
-const CARD_TINT: Record<AlertLevel, string> = {
+const CARD_TINT: Record<SemaforoLevel, string> = {
   ok: "bg-[var(--vl-card)]",
   warn: "bg-amber-50/80 dark:bg-amber-950/30",
   danger: "bg-red-50/80 dark:bg-red-950/30",
@@ -293,13 +281,19 @@ export function M6MantenimientoPage() {
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-amber-400" /> Por vencer
-            / sin aceite
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Vencido /
             taller
           </span>
         </div>
+        <ul className="mt-2 space-y-0.5 text-[10px] text-[var(--vl-text-muted)]">
+          {reglasLabels().map((r) => (
+            <li key={r.key}>
+              {r.label}: {r.regla}
+            </li>
+          ))}
+        </ul>
         </div>
         {isInternalOps(user?.rol) && (
           <div className="flex w-full flex-col gap-2 sm:max-w-md sm:items-end">
@@ -469,13 +463,13 @@ export function M6MantenimientoPage() {
                       <div className="mt-3 flex items-start justify-between gap-2 border-t border-[var(--vl-card-border)] pt-3">
                         <div className="min-w-0">
                           <div className="truncate text-lg font-bold text-[var(--vl-heading)]">
-                            {unidadTitulo(c)}
+                            {c.patente}
                           </div>
                           <div className="mt-0.5 text-xs font-medium text-[var(--vl-text)]">
-                            {unidadPropietario(c)}
+                            {unidadTitulo(c)}
                           </div>
                           <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                            Patente {c.patente}
+                            {unidadPropietario(c)}
                           </div>
                         </div>
                         <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
@@ -503,25 +497,20 @@ export function M6MantenimientoPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="truncate text-lg font-bold text-[var(--vl-heading)]">
-                    {unidadTitulo(selected)}
+                    {selected.patente}
                   </h2>
                   <Badge className={ESTADO_CAMIONETA_STYLE[selected.estado]}>
                     {selected.estado.replace(/_/g, " ").toLowerCase()}
                   </Badge>
                 </div>
                 <p className="mt-0.5 text-sm font-medium text-[var(--vl-text)]">
-                  {unidadPropietario(selected)}
+                  {unidadTitulo(selected)}
                 </p>
                 <p className="mt-0.5 text-xs text-[var(--vl-text-muted)]">
-                  Patente {selected.patente}
-                  {[selected.marca, selected.modelo, selected.equipoFrio]
-                    .filter(Boolean)
-                    .length
-                    ? ` · ${[selected.marca, selected.modelo, selected.equipoFrio].filter(Boolean).join(" · ")}`
-                    : ""}
+                  {unidadPropietario(selected)}
                 </p>
                 <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                  Precargado el último registro (km y fechas). Confirmá o corregí.
+                  Precargado desde ficha / OT. Confirmá o corregí.
                 </p>
               </div>
               <button

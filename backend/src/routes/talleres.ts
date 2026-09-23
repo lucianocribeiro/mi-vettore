@@ -26,6 +26,7 @@ import {
   diagnosticoPathFromId,
 } from "../lib/diagnostico-path.js";
 import { queryHistorialReparaciones } from "../lib/historial-reparaciones.js";
+import { syncMantenimientoDesdeOt } from "../lib/sync-mantenimiento-ot.js";
 import {
   canAdvanceFromStep,
   canCerrarOt,
@@ -2102,6 +2103,17 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
           },
         });
       }
+
+      await syncMantenimientoDesdeOt(tx, {
+        camionetaId: ot.solicitud.camionetaId,
+        otId: ot.id,
+        numeroOT: ot.numeroOT,
+        tallerNombre:
+          ot.tallerAsignado ?? ot.tallerProveedor?.razonSocial ?? null,
+        kmActual: ot.solicitud.camioneta.km ?? null,
+        itemCategoriaIds: ot.items.map((i) => i.categoriaDiagnosticoId),
+        fecha: new Date(),
+      });
 
       return tx.ordenTrabajo.update({
         where: { id: ot.id },

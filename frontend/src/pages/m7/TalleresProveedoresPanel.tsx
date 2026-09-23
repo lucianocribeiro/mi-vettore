@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { apiFetch, ApiError } from "../../lib/api";
 import {
+  TIPO_TALLER_CHIP,
   TIPO_TALLER_LABEL,
   canWriteMaster,
   type TallerProveedor,
   type TipoTaller,
 } from "../../types";
+
+type MetodoPago = "TRANSFERENCIA" | "CHEQUE" | "EFECTIVO" | "MIXTO";
 
 type Saldo = {
   id: string;
@@ -40,6 +43,34 @@ function whatsappDigits(raw: string | null | undefined): string | null {
   return digits;
 }
 
+function TipoChip({
+  tipo,
+  selected,
+  onClick,
+}: {
+  tipo: TipoTaller;
+  selected?: boolean;
+  onClick?: () => void;
+}) {
+  const base = TIPO_TALLER_CHIP[tipo] ?? "border-[var(--vl-card-border)]";
+  const inactive = "border-[var(--vl-card-border)] bg-transparent text-[var(--vl-text-muted)] opacity-70";
+  const cls = onClick
+    ? selected
+      ? `${base} ring-1 ring-offset-1 ring-slate-400 dark:ring-offset-[var(--vl-card)]`
+      : inactive
+    : base;
+  const Tag = onClick ? "button" : "span";
+  return (
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}
+    >
+      {TIPO_TALLER_LABEL[tipo] ?? tipo}
+    </Tag>
+  );
+}
+
 export function TalleresProveedoresPanel({
   vista,
 }: {
@@ -67,17 +98,24 @@ export function TalleresProveedoresPanel({
   const [alias, setAlias] = useState("");
   const [selTipos, setSelTipos] = useState<TipoTaller[]>([]);
   const [filtroTipo, setFiltroTipo] = useState<"" | TipoTaller>("");
+  const [busqueda, setBusqueda] = useState("");
   const [contactoTaller, setContactoTaller] = useState<TallerProveedor | null>(null);
+  /** Selección multi por proveedor (solo PENDIENTE). */
+  const [selMovs, setSelMovs] = useState<Record<string, string[]>>({});
   const [pagoModal, setPagoModal] = useState<{
     tallerId: string;
-    movId: string;
+    movIds: string[];
   } | null>(null);
   const [pagoFecha, setPagoFecha] = useState(() =>
     new Date().toISOString().slice(0, 10)
   );
-  const [pagoMetodo, setPagoMetodo] = useState<
-    "TRANSFERENCIA" | "CHEQUE" | "EFECTIVO"
-  >("TRANSFERENCIA");
+  const [pagoMetodo, setPagoMetodo] = useState<MetodoPago>("TRANSFERENCIA");
+  const [pagoMontoTransf, setPagoMontoTransf] = useState("");
+  const [pagoDetTransf, setPagoDetTransf] = useState("");
+  const [pagoMontoCheque, setPagoMontoCheque] = useState("");
+  const [pagoDetCheque, setPagoDetCheque] = useState("");
+  const [pagoObs, setPagoObs] = useState("");
+  const [pagoMontoAPagar, setPagoMontoAPagar] = useState("");
   const [pagoSaving, setPagoSaving] = useState(false);
   const [pagoError, setPagoError] = useState<string | null>(null);
 
@@ -92,6 +130,7 @@ export function TalleresProveedoresPanel({
       setItems(list);
       setTipos(meta.tipos ?? (Object.keys(TIPO_TALLER_LABEL) as TipoTaller[]));
       setSaldos(cc);
+      setSelMovs({});
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error");
     }
@@ -150,11 +189,70 @@ export function TalleresProveedoresPanel({
     }
   }
 
-  function openPago(tallerId: string, movId: string) {
-    setPagoModal({ tallerId, movId });
+  function resetPagoForm(adeudado?: number) {
     setPagoFecha(new Date().toISOString().slice(0, 10));
     setPagoMetodo("TRANSFERENCIA");
+    setPagoMontoTransf("");
+    setPagoDetTransf("");
+    setPagoMontoCheque("");
+    setPagoDetCheque("");
+    setPagoObs("");
+    setPagoMontoAPagar(
+      adeudado != null && Number.isFinite(adeudado) ? String(adeudado) : ""
+    );
     setPagoError(null);
+  }
+
+  function openPago(tallerId: string, movIds: string[]) {
+    if (!movIds.length) return;
+    setPagoModal({ tallerId, movIds });
+    let adeudado: number | undefined;
+    if (movIds.length === 1) {
+      const taller = saldos.find((s) => s.id === tallerId);
+      const mov = taller?.movimientos.find((m) => m.id === movIds[0]);
+      adeudado = mov?.montoFacturado;
+    } else {
+      const taller = saldos.find((s) => s.id === tallerId);
+      adeudado = (taller?.movimientos ?? [])
+        .filter((m) => movIds.includes(m.id))
+        .reduce((a, m) => a + m.montoFacturado, 0);
+    }
+    resetPagoForm(adeudado);
+  }
+
+  function toggleMov(tallerId: string, movId: string) {
+    setSelMovs((prev) => {
+      const cur = prev[tallerId] ?? [];
+      const next = cur.includes(movId)
+        ? cur.filter((id) => id !== movId)
+        : [...cur, movId];
+      return { ...prev, [tallerId]: next };
+    });
+  }
+
+  function toggleAllPendientes(tallerId: string, ids: string[]) {
+    setSelMovs((prev) => {
+      const cur = prev[tallerId] ?? [];
+      const allOn = ids.length > 0 && ids.every((id) => cur.includes(id));
+      return { ...prev, [tallerId]: allOn ? [] : [...ids] };
+    });
+  }
+
+  function buildPagoBody() {
+    const body: Record<string, unknown> = {
+      fechaPago: pagoFecha,
+      metodoPago: pagoMetodo,
+    };
+    if (pagoObs.trim()) body.observacionPago = pagoObs.trim();
+    if (pagoMontoTransf !== "") body.montoTransferencia = Number(pagoMontoTransf);
+    if (pagoDetTransf.trim()) body.detalleTransferencia = pagoDetTransf.trim();
+    if (pagoMontoCheque !== "") body.montoCheque = Number(pagoMontoCheque);
+    if (pagoDetCheque.trim()) body.detalleCheque = pagoDetCheque.trim();
+    if (pagoMontoAPagar !== "") {
+      const n = Number(pagoMontoAPagar);
+      if (Number.isFinite(n) && n > 0) body.montoPagado = n;
+    }
+    return body;
   }
 
   async function confirmarPago() {
@@ -167,17 +265,37 @@ export function TalleresProveedoresPanel({
       setPagoError("El método es obligatorio");
       return;
     }
+    if (pagoModal.movIds.length === 1 && pagoMontoAPagar !== "") {
+      const n = Number(pagoMontoAPagar);
+      if (!Number.isFinite(n) || n <= 0) {
+        setPagoError("Indicá un monto a pagar válido");
+        return;
+      }
+    }
+    if (pagoModal.movIds.length > 1 && pagoMontoAPagar) {
+      // Lote: no soporta parcial por ítem; el monto a pagar debe cubrir el total o dejarse vacío.
+    }
     setPagoSaving(true);
     setPagoError(null);
     try {
-      await apiFetch(
-        `/api/talleres-proveedores/${pagoModal.tallerId}/movimientos/${pagoModal.movId}/pagar`,
-        {
-          method: "POST",
-          body: JSON.stringify({ fechaPago: pagoFecha, metodoPago: pagoMetodo }),
-        },
-        token
-      );
+      const body = buildPagoBody();
+      if (pagoModal.movIds.length === 1) {
+        await apiFetch(
+          `/api/talleres-proveedores/${pagoModal.tallerId}/movimientos/${pagoModal.movIds[0]}/pagar`,
+          { method: "POST", body: JSON.stringify(body) },
+          token
+        );
+      } else {
+        const { montoPagado: _mp, ...loteBody } = body;
+        await apiFetch(
+          `/api/talleres-proveedores/${pagoModal.tallerId}/movimientos/pagar-lote`,
+          {
+            method: "POST",
+            body: JSON.stringify({ ...loteBody, movimientoIds: pagoModal.movIds }),
+          },
+          token
+        );
+      }
       setPagoModal(null);
       await load();
     } catch (err) {
@@ -200,12 +318,35 @@ export function TalleresProveedoresPanel({
   const input =
     "mt-1 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm";
 
+  const tiposLista = tipos.length
+    ? tipos
+    : (Object.keys(TIPO_TALLER_LABEL) as TipoTaller[]);
+
   const itemsFiltrados = useMemo(() => {
-    if (!filtroTipo) return items;
-    return items.filter((t) =>
-      (t.tipos ?? []).some((x) => x.tipo === filtroTipo)
-    );
-  }, [items, filtroTipo]);
+    const q = busqueda.trim().toLowerCase();
+    return items.filter((t) => {
+      if (filtroTipo && !(t.tipos ?? []).some((x) => x.tipo === filtroTipo)) {
+        return false;
+      }
+      if (!q) return true;
+      const hay = [
+        t.cuit,
+        t.razonSocial,
+        t.aliasCbu ?? "",
+        t.mail ?? "",
+        t.celular ?? "",
+        ...(t.tipos ?? []).map((x) => TIPO_TALLER_LABEL[x.tipo] ?? x.tipo),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, filtroTipo, busqueda]);
+
+  const showPagoDetalle =
+    pagoMetodo === "TRANSFERENCIA" ||
+    pagoMetodo === "CHEQUE" ||
+    pagoMetodo === "MIXTO";
 
   return (
     <div>
@@ -249,7 +390,16 @@ export function TalleresProveedoresPanel({
               Nuevo taller
             </button>
           )}
-          <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="mb-3 flex flex-wrap items-end gap-3">
+            <label className="min-w-[12rem] flex-1 text-xs text-[var(--vl-text-muted)]">
+              Buscar
+              <input
+                className={input}
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="CUIT, razón social, alias…"
+              />
+            </label>
             <label className="text-xs text-[var(--vl-text-muted)]">
               Tipo de taller
               <select
@@ -260,18 +410,15 @@ export function TalleresProveedoresPanel({
                 }
               >
                 <option value="">Todos</option>
-                {(tipos.length
-                  ? tipos
-                  : (Object.keys(TIPO_TALLER_LABEL) as TipoTaller[])
-                ).map((tipo) => (
+                {tiposLista.map((tipo) => (
                   <option key={tipo} value={tipo}>
                     {TIPO_TALLER_LABEL[tipo] ?? tipo}
                   </option>
                 ))}
               </select>
             </label>
-            {filtroTipo && (
-              <p className="self-end pb-2 text-[11px] text-[var(--vl-text-muted)]">
+            {(filtroTipo || busqueda.trim()) && (
+              <p className="pb-2 text-[11px] text-[var(--vl-text-muted)]">
                 Mostrando {itemsFiltrados.length} de {items.length}
               </p>
             )}
@@ -296,8 +443,14 @@ export function TalleresProveedoresPanel({
                   >
                     <td className="px-3 py-2">{t.cuit}</td>
                     <td className="px-3 py-2">{t.razonSocial}</td>
-                    <td className="px-3 py-2 text-xs">
-                      {(t.tipos ?? []).map((x) => TIPO_TALLER_LABEL[x.tipo] ?? x.tipo).join(", ") || "—"}
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {(t.tipos ?? []).length
+                          ? (t.tipos ?? []).map((x) => (
+                              <TipoChip key={x.tipo} tipo={x.tipo} />
+                            ))
+                          : "—"}
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-xs">{t.aliasCbu ?? "—"}</td>
                     <td className="px-3 py-2 text-right">
@@ -366,12 +519,18 @@ export function TalleresProveedoresPanel({
           })()}
           <p className="text-[11px] text-[var(--vl-text-muted)]">
             {ccVista === "pendiente"
-              ? "Solo se listan deudas abiertas. Lo ya cobrado queda guardado en el historial."
+              ? "Marcá varios ítems del mismo proveedor y usá “Pagar seleccionados”, o pagá de a uno."
               : "Historial de pagos. Podés revertir un cobro si se cargó mal."}
           </p>
           {saldos
             .filter((s) => (ccVista === "pendiente" ? s.pendiente > 0 : s.pagado > 0))
-            .map((s) => (
+            .map((s) => {
+              const pendientes = s.movimientos.filter((m) => m.estado === "PENDIENTE");
+              const selected = selMovs[s.id] ?? [];
+              const selectedSum = pendientes
+                .filter((m) => selected.includes(m.id))
+                .reduce((a, m) => a + m.montoFacturado, 0);
+              return (
             <div key={s.id} className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -382,11 +541,23 @@ export function TalleresProveedoresPanel({
                     </div>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {ccVista === "pendiente" ? (
+                  <>
                   <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:text-amber-200">
                     Pendiente {money(s.pendiente)}
                   </span>
+                  {selected.length > 0 && (
+                    <button
+                      type="button"
+                      className="inline-flex min-h-9 items-center rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500"
+                      onClick={() => openPago(s.id, selected)}
+                    >
+                      Pagar seleccionados ({selected.length}
+                      {selectedSum ? ` · ${money(selectedSum)}` : ""})
+                    </button>
+                  )}
+                  </>
                   ) : (
                   <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:text-emerald-200">
                     Pagado {money(s.pagado)}
@@ -394,6 +565,24 @@ export function TalleresProveedoresPanel({
                   )}
                 </div>
               </div>
+              {ccVista === "pendiente" && pendientes.length > 1 && (
+                <label className="mt-2 inline-flex items-center gap-2 text-[11px] text-[var(--vl-text-muted)]">
+                  <input
+                    type="checkbox"
+                    checked={
+                      pendientes.length > 0 &&
+                      pendientes.every((m) => selected.includes(m.id))
+                    }
+                    onChange={() =>
+                      toggleAllPendientes(
+                        s.id,
+                        pendientes.map((m) => m.id)
+                      )
+                    }
+                  />
+                  Seleccionar todos
+                </label>
+              )}
               <ul className="mt-3 space-y-2">
                 {s.movimientos
                   .filter((m) =>
@@ -404,39 +593,50 @@ export function TalleresProveedoresPanel({
                     key={m.id}
                     className="flex flex-col gap-2 rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="min-w-0 text-sm">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-[var(--vl-heading)]">
-                          {money(m.montoFacturado)}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                            m.estado === "PENDIENTE"
-                              ? "bg-amber-500/15 text-amber-800 dark:text-amber-200"
-                              : "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
-                          }`}
-                        >
-                          {m.estado === "PENDIENTE" ? "Pendiente" : "Pagado"}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                        {[
-                          m.ot?.numeroOT,
-                          m.ot?.solicitud?.camioneta?.patente,
-                          m.fechaPago
-                            ? `pago ${new Date(m.fechaPago).toLocaleDateString("es-AR")}`
-                            : null,
-                          m.metodoPago ? m.metodoPago.toLowerCase() : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "Sin OT asociada"}
+                    <div className="flex min-w-0 items-start gap-2">
+                      {m.estado === "PENDIENTE" && (
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={selected.includes(m.id)}
+                          onChange={() => toggleMov(s.id, m.id)}
+                          aria-label="Seleccionar para pago"
+                        />
+                      )}
+                      <div className="min-w-0 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-[var(--vl-heading)]">
+                            {money(m.montoFacturado)}
+                          </span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                              m.estado === "PENDIENTE"
+                                ? "bg-amber-500/15 text-amber-800 dark:text-amber-200"
+                                : "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+                            }`}
+                          >
+                            {m.estado === "PENDIENTE" ? "Pendiente" : "Pagado"}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                          {[
+                            m.ot?.numeroOT,
+                            m.ot?.solicitud?.camioneta?.patente,
+                            m.fechaPago
+                              ? `pago ${new Date(m.fechaPago).toLocaleDateString("es-AR")}`
+                              : null,
+                            m.metodoPago ? m.metodoPago.toLowerCase() : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "Sin OT asociada"}
+                        </div>
                       </div>
                     </div>
                     {m.estado === "PENDIENTE" ? (
                       <button
                         type="button"
                         className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500"
-                        onClick={() => openPago(s.id, m.id)}
+                        onClick={() => openPago(s.id, [m.id])}
                       >
                         Marcar pagado
                       </button>
@@ -453,7 +653,8 @@ export function TalleresProveedoresPanel({
                 ))}
               </ul>
             </div>
-          ))}
+              );
+            })}
           {saldos.filter((s) =>
             ccVista === "pendiente" ? s.pendiente > 0 : s.pagado > 0
           ).length === 0 && (
@@ -486,18 +687,21 @@ export function TalleresProveedoresPanel({
               WhatsApp
             </label>
             <label className="mt-2 block text-xs">Alias / CBU<input className={input} value={alias} onChange={(e) => setAlias(e.target.value)} /></label>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {tipos.map((tipo) => {
+            <p className="mt-3 text-xs font-medium text-[var(--vl-text-muted)]">Tipos de taller</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {tiposLista.map((tipo) => {
                 const on = selTipos.includes(tipo);
                 return (
-                  <button
+                  <TipoChip
                     key={tipo}
-                    type="button"
-                    onClick={() => setSelTipos((p) => (on ? p.filter((x) => x !== tipo) : [...p, tipo]))}
-                    className={`rounded-full border px-2 py-0.5 text-[11px] ${on ? "border-slate-900 bg-slate-900 text-white" : "border-[var(--vl-card-border)]"}`}
-                  >
-                    {TIPO_TALLER_LABEL[tipo] ?? tipo}
-                  </button>
+                    tipo={tipo}
+                    selected={on}
+                    onClick={() =>
+                      setSelTipos((p) =>
+                        on ? p.filter((x) => x !== tipo) : [...p, tipo]
+                      )
+                    }
+                  />
                 );
               })}
             </div>
@@ -564,10 +768,32 @@ export function TalleresProveedoresPanel({
           onClick={() => !pagoSaving && setPagoModal(null)}
         >
           <div
-            className="w-full max-w-sm rounded-t-2xl bg-[var(--vl-card)] p-4 sm:rounded-xl"
+            className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-[var(--vl-card)] p-4 sm:rounded-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-3 font-bold text-[var(--vl-heading)]">Registrar pago</h3>
+            <h3 className="mb-1 font-bold text-[var(--vl-heading)]">Registrar pago</h3>
+            <p className="mb-3 text-xs text-[var(--vl-text-muted)]">
+              {pagoModal.movIds.length === 1
+                ? "1 ítem — podés pagar parcial y el saldo queda pendiente"
+                : `${pagoModal.movIds.length} ítems seleccionados (pago total de cada uno)`}
+            </p>
+            {pagoModal.movIds.length === 1 && (
+              <label className="mb-2 block text-xs">
+                Monto a pagar
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  className={input}
+                  value={pagoMontoAPagar}
+                  onChange={(e) => setPagoMontoAPagar(e.target.value)}
+                  placeholder="Adeudado completo o parcial"
+                />
+                <span className="mt-0.5 block text-[10px] text-[var(--vl-text-muted)]">
+                  Si es menor al adeudado, se genera un saldo pendiente automático.
+                </span>
+              </label>
+            )}
             <label className="block text-xs">
               Fecha
               <input
@@ -583,16 +809,74 @@ export function TalleresProveedoresPanel({
               <select
                 className={input}
                 value={pagoMetodo}
-                onChange={(e) =>
-                  setPagoMetodo(
-                    e.target.value as "TRANSFERENCIA" | "CHEQUE" | "EFECTIVO"
-                  )
-                }
+                onChange={(e) => setPagoMetodo(e.target.value as MetodoPago)}
               >
                 <option value="TRANSFERENCIA">Transferencia</option>
                 <option value="CHEQUE">Cheque</option>
                 <option value="EFECTIVO">Efectivo</option>
+                <option value="MIXTO">Mixto (transf. + cheque)</option>
               </select>
+            </label>
+            {showPagoDetalle && (
+              <div className="mt-2 space-y-2">
+                {(pagoMetodo === "TRANSFERENCIA" || pagoMetodo === "MIXTO") && (
+                  <>
+                    <label className="block text-xs">
+                      Monto transferencia (opcional)
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className={input}
+                        value={pagoMontoTransf}
+                        onChange={(e) => setPagoMontoTransf(e.target.value)}
+                      />
+                    </label>
+                    <label className="block text-xs">
+                      Detalle transferencia (opcional)
+                      <input
+                        className={input}
+                        value={pagoDetTransf}
+                        onChange={(e) => setPagoDetTransf(e.target.value)}
+                        placeholder="Nº operación, banco…"
+                      />
+                    </label>
+                  </>
+                )}
+                {(pagoMetodo === "CHEQUE" || pagoMetodo === "MIXTO") && (
+                  <>
+                    <label className="block text-xs">
+                      Monto cheque (opcional)
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className={input}
+                        value={pagoMontoCheque}
+                        onChange={(e) => setPagoMontoCheque(e.target.value)}
+                      />
+                    </label>
+                    <label className="block text-xs">
+                      Detalle cheque (opcional)
+                      <input
+                        className={input}
+                        value={pagoDetCheque}
+                        onChange={(e) => setPagoDetCheque(e.target.value)}
+                        placeholder="Nº cheque, banco…"
+                      />
+                    </label>
+                  </>
+                )}
+              </div>
+            )}
+            <label className="mt-2 block text-xs">
+              Observación (opcional)
+              <textarea
+                className={input}
+                rows={2}
+                value={pagoObs}
+                onChange={(e) => setPagoObs(e.target.value)}
+              />
             </label>
             {pagoError && (
               <p className="mt-2 text-sm text-red-600">{pagoError}</p>

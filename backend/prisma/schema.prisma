@@ -585,6 +585,7 @@ enum MetodoPagoTaller {
   TRANSFERENCIA
   CHEQUE
   EFECTIVO
+  MIXTO
 }
 
 /// Ítems de presupuesto/factura de una OT (varios proveedores en la misma orden).
@@ -648,6 +649,12 @@ model TallerMovimiento {
   fechaFactura    DateTime               @default(now())
   fechaPago       DateTime?
   metodoPago      MetodoPagoTaller?
+  /// Detalle opcional del pago (referencia, banco, nro cheque, etc.).
+  observacionPago String?
+  montoTransferencia Float?
+  detalleTransferencia String?
+  montoCheque     Float?
+  detalleCheque   String?
   estado          EstadoTallerMovimiento @default(PENDIENTE)
   createdAt       DateTime               @default(now())
 

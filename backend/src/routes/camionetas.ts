@@ -36,7 +36,6 @@ const includeAsignaciones = {
   asignaciones: {
     where: { periodoHasta: null },
     orderBy: { periodoDesde: "desc" as const },
-    take: 3,
     include: {
       chofer: { select: { id: true, nombre: true, apellido: true, dni: true, estado: true } },
       empresa: { select: { id: true, nombre: true, cuit: true } },
@@ -1227,9 +1226,13 @@ router.post("/:id/asignacion", authenticate, async (req: AuthedRequest, res) => 
       }
       actorEmpresaId = cam.empresaId;
     }
+    const choferIds = Array.isArray(req.body?.choferIds)
+      ? req.body.choferIds.map(String)
+      : undefined;
     const result = await reasignarChoferUnidad({
       camionetaId: req.params.id,
-      choferId: String(req.body?.choferId ?? ""),
+      choferId: req.body?.choferId ? String(req.body.choferId) : undefined,
+      choferIds,
       actorEmpresaId,
     });
     res.json(result);

@@ -6,7 +6,9 @@ type Tx = Prisma.TransactionClient;
 export async function reasignarChoferUnidad(
   input: {
     camionetaId: string;
-    choferId: string;
+    /** Un chofer (compat) o varios a la vez. */
+    choferId?: string;
+    choferIds?: string[];
     actorEmpresaId?: string | null;
   },
   tx: Tx = prisma
@@ -35,46 +37,94 @@ export async function reasignarChoferUnidad(
     });
   }
 
-  const chofer = await tx.chofer.findUnique({ where: { id: input.choferId } });
-  if (!chofer || chofer.empresaId !== camioneta.empresaId) {
+  const requested = [
+    ...new Set(
+      (input.choferIds?.length
+        ? input.choferIds
+        : input.choferId
+          ? [input.choferId]
+          : []
+      )
+        .map((id) => String(id).trim())
+        .filter(Boolean)
+    ),
+  ];
+  if (requested.length === 0) {
+    throw Object.assign(new Error("Indicá al menos un chofer"), { status: 400 });
+  }
+
+  const choferes = await tx.chofer.findMany({
+    where: { id: { in: requested }, empresaId: camioneta.empresaId },
+  });
+  if (choferes.length !== requested.length) {
     throw Object.assign(
-      new Error("El chofer debe pertenecer a la misma empresa que la unidad"),
+      new Error("Todos los choferes deben pertenecer a la misma empresa que la unidad"),
       { status: 400 }
     );
   }
 
   const empresa = camioneta.empresa;
   const now = new Date();
-  await tx.asignacionFlota.updateMany({
+  const abiertas = await tx.asignacionFlota.findMany({
     where: { camionetaId: camioneta.id, periodoHasta: null },
-    data: { periodoHasta: now },
   });
-  if (empresa && !empresa.permiteMultiCamioneta) {
+  const actuales = new Set(abiertas.map((a) => a.choferId));
+  const deseados = new Set(requested);
+
+  // Cerrar asignaciones que ya no aplican
+  const aCerrar = abiertas.filter((a) => !deseados.has(a.choferId));
+  if (aCerrar.length) {
     await tx.asignacionFlota.updateMany({
-      where: {
-        choferId: chofer.id,
-        empresaId: camioneta.empresaId,
-        periodoHasta: null,
-        camionetaId: { not: camioneta.id },
-      },
+      where: { id: { in: aCerrar.map((a) => a.id) } },
       data: { periodoHasta: now },
     });
   }
-  await tx.asignacionFlota.create({
-    data: {
-      camionetaId: camioneta.id,
-      choferId: chofer.id,
-      empresaId: camioneta.empresaId,
-      periodoDesde: now,
-    },
-  });
+
+  // Abrir nuevas
+  for (const choferId of requested) {
+    if (actuales.has(choferId)) continue;
+    // Si la empresa no permite multi-unidad por chofer, cerrar otras unidades de ese chofer
+    if (empresa && !empresa.permiteMultiCamioneta) {
+      await tx.asignacionFlota.updateMany({
+        where: {
+          choferId,
+          empresaId: camioneta.empresaId,
+          periodoHasta: null,
+          camionetaId: { not: camioneta.id },
+        },
+        data: { periodoHasta: now },
+      });
+    }
+    await tx.asignacionFlota.create({
+      data: {
+        camionetaId: camioneta.id,
+        choferId,
+        empresaId: camioneta.empresaId,
+        periodoDesde: now,
+      },
+    });
+  }
+
   return tx.camioneta.findUnique({
     where: { id: camioneta.id },
     include: {
       empresa: true,
+      tipoServicio: true,
       asignaciones: {
         where: { periodoHasta: null },
-        include: { chofer: true, empresa: true },
+        orderBy: { periodoDesde: "desc" },
+        include: {
+          chofer: {
+            select: {
+              id: true,
+              nombre: true,
+              apellido: true,
+              dni: true,
+              estado: true,
+            },
+          },
+          empresa: { select: { id: true, nombre: true, cuit: true } },
+        },
       },
     },
   });

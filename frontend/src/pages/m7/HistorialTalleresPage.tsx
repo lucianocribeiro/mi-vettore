@@ -45,21 +45,53 @@ export function HistorialTalleresPage() {
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [importModo, setImportModo] = useState<"nuevos" | "actualizar">("nuevos");
+  const [vista, setVista] = useState<"unidad" | "conceptos">("unidad");
+  const [conceptos, setConceptos] = useState<
+    {
+      id: string;
+      numeroOT: string;
+      patente: string;
+      reparacion: string | null;
+      reparacionNivel1: string | null;
+      reparacionNivel2: string | null;
+      reparacionNivel3: string | null;
+      importe: number;
+      taller: string;
+      fecha: string;
+    }[]
+  >([]);
+  const [resumenConceptos, setResumenConceptos] = useState<
+    { nombre: string; count: number; total: number }[]
+  >([]);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const qs = patente.trim()
-        ? `?patente=${encodeURIComponent(patente.trim())}`
-        : "";
-      const data = await apiFetch<{ items: HistorialRow[] }>(
-        `/api/talleres/historial${qs}`,
-        {},
-        token
-      );
-      setItems(data.items);
+      if (vista === "conceptos") {
+        const q = patente.trim()
+          ? `?q=${encodeURIComponent(patente.trim())}`
+          : "";
+        const data = await apiFetch<{
+          items: typeof conceptos;
+          resumen: typeof resumenConceptos;
+        }>(`/api/talleres/historial/reparaciones${q}`, {}, token);
+        setConceptos(Array.isArray(data.items) ? data.items : []);
+        setResumenConceptos(Array.isArray(data.resumen) ? data.resumen : []);
+        setItems([]);
+      } else {
+        const qs = patente.trim()
+          ? `?patente=${encodeURIComponent(patente.trim())}`
+          : "";
+        const data = await apiFetch<{ items: HistorialRow[] }>(
+          `/api/talleres/historial${qs}`,
+          {},
+          token
+        );
+        setItems(data.items);
+        setConceptos([]);
+      }
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Error al cargar historial"
@@ -67,7 +99,7 @@ export function HistorialTalleresPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, patente]);
+  }, [token, patente, vista]);
 
   useEffect(() => {
     void load();
@@ -77,14 +109,25 @@ export function HistorialTalleresPage() {
     if (!token) return;
     setExportando(true);
     try {
-      const qs = patente.trim()
-        ? `?q=${encodeURIComponent(patente.trim())}`
-        : "";
-      await apiDownload(
-        `/api/talleres/historial/export${qs}`,
-        token,
-        "historial_talleres.xlsx"
-      );
+      if (vista === "conceptos") {
+        const q = patente.trim()
+          ? `?q=${encodeURIComponent(patente.trim())}`
+          : "";
+        await apiDownload(
+          `/api/talleres/historial/reparaciones/export${q}`,
+          token,
+          "historial_reparaciones.xlsx"
+        );
+      } else {
+        const qs = patente.trim()
+          ? `?patente=${encodeURIComponent(patente.trim())}`
+          : "";
+        await apiDownload(
+          `/api/talleres/historial/export${qs}`,
+          token,
+          "historial_talleres.xlsx"
+        );
+      }
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo exportar");
     } finally {
@@ -149,7 +192,9 @@ export function HistorialTalleresPage() {
             </h1>
           </div>
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            Buscá por unidad (patente): qué taller, qué se usó y cuánto se facturó.
+            {vista === "conceptos"
+              ? "Árbol de conceptos / totizaciones por nivel de diagnóstico."
+              : "Buscá por unidad (patente): qué taller, qué se usó y cuánto se facturó."}
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:max-w-md">
@@ -213,16 +258,109 @@ export function HistorialTalleresPage() {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setVista("unidad")}
+          className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+            vista === "unidad"
+              ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+              : "border border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+          }`}
+        >
+          Por unidad
+        </button>
+        <button
+          type="button"
+          onClick={() => setVista("conceptos")}
+          className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+            vista === "conceptos"
+              ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+              : "border border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+          }`}
+        >
+          Por concepto (arbolito)
+        </button>
+      </div>
+
       {loading && <p className="text-sm text-[var(--vl-text-muted)]">Cargando…</p>}
       {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
 
-      {!loading && !error && items.length === 0 && (
+      {!loading && !error && vista === "conceptos" && (
+        <div className="space-y-4">
+          {resumenConceptos.length > 0 && (
+            <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
+              <h2 className="text-sm font-bold text-[var(--vl-heading)]">
+                Totales por rama (nivel 1)
+              </h2>
+              <ul className="mt-2 space-y-1 text-sm">
+                {resumenConceptos.map((r) => (
+                  <li
+                    key={r.nombre}
+                    className="flex justify-between gap-3 text-[var(--vl-text)]"
+                  >
+                    <span>{r.nombre}</span>
+                    <span className="text-[var(--vl-text-muted)]">
+                      {r.count} · {money(r.total)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {conceptos.length === 0 ? (
+            <p className="text-sm text-[var(--vl-text-muted)]">
+              Sin conceptos con árbol de diagnóstico.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(
+                conceptos.reduce<Record<string, typeof conceptos>>((acc, row) => {
+                  const k =
+                    [row.reparacionNivel1, row.reparacionNivel2, row.reparacionNivel3]
+                      .filter(Boolean)
+                      .join(" › ") || row.reparacion || "Sin concepto";
+                  (acc[k] ??= []).push(row);
+                  return acc;
+                }, {})
+              ).map(([rama, rows]) => {
+                const total = rows.reduce((a, r) => a + (r.importe || 0), 0);
+                return (
+                  <details
+                    key={rama}
+                    className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3"
+                    open
+                  >
+                    <summary className="cursor-pointer text-sm font-semibold text-[var(--vl-heading)]">
+                      {rama}{" "}
+                      <span className="font-normal text-[var(--vl-text-muted)]">
+                        · {rows.length} · {money(total)}
+                      </span>
+                    </summary>
+                    <ul className="mt-2 space-y-1 text-xs text-[var(--vl-text-muted)]">
+                      {rows.map((r) => (
+                        <li key={r.id}>
+                          {r.patente} · {r.numeroOT} · {r.taller || "—"} ·{" "}
+                          {money(r.importe)}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!loading && !error && vista === "unidad" && items.length === 0 && (
         <p className="rounded-xl border border-[var(--vl-card-border)] p-4 text-sm text-[var(--vl-text-muted)]">
           No hay historial
           {patente.trim() ? ` para la unidad “${patente.trim()}”` : ""}.
         </p>
       )}
 
+      {!loading && !error && vista === "unidad" && (
       <div className="space-y-3">
         {items.map((row) => (
           <article
@@ -269,6 +407,7 @@ export function HistorialTalleresPage() {
           </article>
         ))}
       </div>
+      )}
     </div>
   );
 }

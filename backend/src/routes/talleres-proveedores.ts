@@ -20,6 +20,95 @@ function parseTipos(raw: unknown): TipoTaller[] | null {
   return [...new Set(out)];
 }
 
+function parsePagoBody(body: unknown): {
+  ok: true;
+  data: {
+    fechaPago: Date;
+    metodoPago: MetodoPagoTaller;
+    observacionPago: string | null;
+    montoTransferencia: number | null;
+    detalleTransferencia: string | null;
+    montoCheque: number | null;
+    detalleCheque: string | null;
+  };
+  /** Monto explícito a aplicar (pago parcial). Null = pagar todo / inferir. */
+  montoPagado: number | null;
+} | { ok: false; error: string } {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const fechaPagoRaw = b.fechaPago ? new Date(String(b.fechaPago)) : new Date();
+  if (Number.isNaN(fechaPagoRaw.getTime())) {
+    return { ok: false, error: "Fecha de pago inválida" };
+  }
+  const montoTransferencia =
+    b.montoTransferencia !== undefined &&
+    b.montoTransferencia !== "" &&
+    b.montoTransferencia !== null
+      ? Number(b.montoTransferencia)
+      : null;
+  const montoCheque =
+    b.montoCheque !== undefined && b.montoCheque !== "" && b.montoCheque !== null
+      ? Number(b.montoCheque)
+      : null;
+  if (
+    montoTransferencia != null &&
+    (!Number.isFinite(montoTransferencia) || montoTransferencia < 0)
+  ) {
+    return { ok: false, error: "Monto transferencia inválido" };
+  }
+  if (montoCheque != null && (!Number.isFinite(montoCheque) || montoCheque < 0)) {
+    return { ok: false, error: "Monto cheque inválido" };
+  }
+  const detalleTransferencia = b.detalleTransferencia
+    ? String(b.detalleTransferencia).trim() || null
+    : null;
+  const detalleCheque = b.detalleCheque
+    ? String(b.detalleCheque).trim() || null
+    : null;
+  const observacionPago = b.observacionPago
+    ? String(b.observacionPago).trim() || null
+    : null;
+
+  let metodoRaw = String(b.metodoPago ?? "").toUpperCase();
+  const usaTransf = (montoTransferencia ?? 0) > 0 || !!detalleTransferencia;
+  const usaCheque = (montoCheque ?? 0) > 0 || !!detalleCheque;
+  if (usaTransf && usaCheque) metodoRaw = "MIXTO";
+  else if (!metodoRaw && usaTransf) metodoRaw = "TRANSFERENCIA";
+  else if (!metodoRaw && usaCheque) metodoRaw = "CHEQUE";
+
+  if (!(metodoRaw in MetodoPagoTaller)) {
+    return {
+      ok: false,
+      error: "Indicá método de pago (transferencia, cheque, efectivo o mixto)",
+    };
+  }
+
+  let montoPagado: number | null = null;
+  if (b.montoPagado !== undefined && b.montoPagado !== "" && b.montoPagado !== null) {
+    const n = Number(b.montoPagado);
+    if (!Number.isFinite(n) || n <= 0) {
+      return { ok: false, error: "Monto a pagar inválido" };
+    }
+    montoPagado = n;
+  } else {
+    const sum = (montoTransferencia ?? 0) + (montoCheque ?? 0);
+    if (sum > 0) montoPagado = sum;
+  }
+
+  return {
+    ok: true,
+    data: {
+      fechaPago: fechaPagoRaw,
+      metodoPago: metodoRaw as MetodoPagoTaller,
+      observacionPago,
+      montoTransferencia,
+      detalleTransferencia,
+      montoCheque,
+      detalleCheque,
+    },
+    montoPagado,
+  };
+}
+
 router.get("/", authenticate, async (_req, res) => {
   try {
     const items = await prisma.tallerProveedor.findMany({
@@ -132,32 +221,107 @@ router.post(
         res.status(404).json({ error: "Movimiento no encontrado" });
         return;
       }
-      const fechaPagoRaw = req.body?.fechaPago
-        ? new Date(String(req.body.fechaPago))
-        : new Date();
-      if (Number.isNaN(fechaPagoRaw.getTime())) {
-        res.status(400).json({ error: "Fecha de pago inválida" });
+      if (mov.estado !== "PENDIENTE") {
+        res.status(400).json({ error: "El movimiento ya está pagado" });
         return;
       }
-      const metodoRaw = String(req.body?.metodoPago ?? "").toUpperCase();
-      if (!(metodoRaw in MetodoPagoTaller)) {
+      const parsed = parsePagoBody(req.body);
+      if (!parsed.ok) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+      const adeudado = mov.montoFacturado;
+      const montoPagado = parsed.montoPagado ?? adeudado;
+      if (montoPagado <= 0) {
+        res.status(400).json({ error: "Monto a pagar inválido" });
+        return;
+      }
+      if (montoPagado > adeudado + 0.009) {
         res.status(400).json({
-          error: "Indicá método de pago (transferencia, cheque o efectivo)",
+          error: `El monto no puede superar lo adeudado (${adeudado})`,
         });
         return;
       }
+
+      const esParcial = montoPagado < adeudado - 0.009;
+      if (esParcial) {
+        const resto = Math.round((adeudado - montoPagado) * 100) / 100;
+        const result = await prisma.$transaction(async (tx) => {
+          const pagado = await tx.tallerMovimiento.update({
+            where: { id: mov.id },
+            data: {
+              estado: "PAGADO",
+              montoFacturado: Math.round(montoPagado * 100) / 100,
+              ...parsed.data,
+            },
+          });
+          await tx.tallerMovimiento.create({
+            data: {
+              tallerProveedorId: mov.tallerProveedorId,
+              otId: mov.otId,
+              montoFacturado: resto,
+              fechaFactura: mov.fechaFactura,
+              estado: "PENDIENTE",
+            },
+          });
+          return pagado;
+        });
+        res.json({ ...result, parcial: true, saldoPendiente: resto });
+        return;
+      }
+
       const updated = await prisma.tallerMovimiento.update({
         where: { id: mov.id },
         data: {
           estado: "PAGADO",
-          fechaPago: fechaPagoRaw,
-          metodoPago: metodoRaw as MetodoPagoTaller,
+          ...parsed.data,
         },
       });
       res.json(updated);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al marcar pago" });
+    }
+  }
+);
+
+/** Paga varios ítems pendientes del mismo proveedor con la misma forma de pago. */
+router.post(
+  "/:id/movimientos/pagar-lote",
+  authenticate,
+  async (req: AuthedRequest, res) => {
+    try {
+      if (!isInternalOpsRole(req.user!.rol)) {
+        res.status(403).json({ error: "Sin permiso" });
+        return;
+      }
+      const ids = Array.isArray(req.body?.movimientoIds)
+        ? req.body.movimientoIds.map(String).filter(Boolean)
+        : [];
+      if (!ids.length) {
+        res.status(400).json({ error: "Seleccioná al menos un ítem pendiente" });
+        return;
+      }
+      const parsed = parsePagoBody(req.body);
+      if (!parsed.ok) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+      const result = await prisma.tallerMovimiento.updateMany({
+        where: {
+          id: { in: ids },
+          tallerProveedorId: req.params.id,
+          estado: "PENDIENTE",
+        },
+        data: {
+          estado: "PAGADO",
+          ...parsed.data,
+        },
+      });
+      res.json({ actualizados: result.count });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al pagar el lote" });
     }
   }
 );
@@ -180,7 +344,16 @@ router.post(
       }
       const updated = await prisma.tallerMovimiento.update({
         where: { id: mov.id },
-        data: { estado: "PENDIENTE", fechaPago: null, metodoPago: null },
+        data: {
+          estado: "PENDIENTE",
+          fechaPago: null,
+          metodoPago: null,
+          observacionPago: null,
+          montoTransferencia: null,
+          detalleTransferencia: null,
+          montoCheque: null,
+          detalleCheque: null,
+        },
       });
       res.json(updated);
     } catch (err) {

@@ -184,6 +184,20 @@ export const TIPO_TALLER_LABEL: Record<TipoTaller, string> = {
   FRIO: "Frío",
 };
 
+/** Chips de color por tipo de taller (ABM proveedores / filtros). */
+export const TIPO_TALLER_CHIP: Record<TipoTaller, string> = {
+  MECANICA:
+    "border-blue-500/50 bg-blue-500/15 text-blue-900 dark:border-blue-400/50 dark:text-blue-100",
+  REPUESTEROS:
+    "border-amber-500/50 bg-amber-500/15 text-amber-950 dark:border-amber-400/50 dark:text-amber-100",
+  GOMERIAS:
+    "border-emerald-500/50 bg-emerald-500/15 text-emerald-900 dark:border-emerald-400/50 dark:text-emerald-100",
+  BATERIAS:
+    "border-violet-500/50 bg-violet-500/15 text-violet-900 dark:border-violet-400/50 dark:text-violet-100",
+  GNC: "border-cyan-500/50 bg-cyan-500/15 text-cyan-900 dark:border-cyan-400/50 dark:text-cyan-100",
+  FRIO: "border-sky-500/50 bg-sky-500/15 text-sky-900 dark:border-sky-400/50 dark:text-sky-100",
+};
+
 export const MARCAS_CAMIONETA = [
   "Fiat",
   "Peugeot",
@@ -404,8 +418,15 @@ export type CategoriaDiagnostico = {
 };
 
 export function currentAsignacion(camioneta: Camioneta): AsignacionFlota | null {
+  const list = currentAsignaciones(camioneta);
+  return list[0] ?? null;
+}
+
+/** Todas las asignaciones abiertas (varios choferes por patente). */
+export function currentAsignaciones(camioneta: Camioneta): AsignacionFlota[] {
   const list = camioneta.asignaciones ?? [];
-  return list.find((a) => !a.periodoHasta) ?? list[0] ?? null;
+  const abiertas = list.filter((a) => !a.periodoHasta);
+  return abiertas.length ? abiertas : list.slice(0, 1);
 }
 
 export function currentChoferAsignacion(chofer: Chofer): AsignacionFlota | null {

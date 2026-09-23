@@ -21,6 +21,7 @@ import {
   TIPO_TALLER_LABEL,
   canWriteMaster,
   currentAsignacion,
+  currentAsignaciones,
   formatDate,
   isInternalOps,
   tiposFrioParaEquipo,
@@ -202,7 +203,7 @@ export function M5FichaPage() {
   const [fTallerTipos, setFTallerTipos] = useState<TipoTaller[]>([]);
   const [asigEmpresaId, setAsigEmpresaId] = useState("");
   const [asigChoferByUnit, setAsigChoferByUnit] = useState<
-    Record<string, string>
+    Record<string, string[]>
   >({});
   const [asigSavingId, setAsigSavingId] = useState<string | null>(null);
   const [asigError, setAsigError] = useState<string | null>(null);
@@ -886,9 +887,10 @@ export function M5FichaPage() {
   const unidadesPorChoferAsig = useMemo(() => {
     const map = new Map<string, number>();
     for (const c of unidadesDeEmpresaAsig) {
-      const a = currentAsignacion(c);
-      if (!a?.choferId) continue;
-      map.set(a.choferId, (map.get(a.choferId) ?? 0) + 1);
+      for (const a of currentAsignaciones(c)) {
+        if (!a?.choferId) continue;
+        map.set(a.choferId, (map.get(a.choferId) ?? 0) + 1);
+      }
     }
     return map;
   }, [unidadesDeEmpresaAsig]);
@@ -906,19 +908,33 @@ export function M5FichaPage() {
       setAsigChoferByUnit({});
       return;
     }
-    const next: Record<string, string> = {};
+    const next: Record<string, string[]> = {};
     for (const c of unidadesDeEmpresaAsig) {
-      const a = currentAsignacion(c);
-      next[c.id] = a?.choferId ?? "";
+      next[c.id] = currentAsignaciones(c)
+        .map((a) => a.choferId)
+        .filter(Boolean);
     }
     setAsigChoferByUnit(next);
   }, [asigEmpresaId, unidadesDeEmpresaAsig]);
 
+  function toggleAsigChofer(camionetaId: string, choferId: string) {
+    setAsigChoferByUnit((prev) => {
+      const cur = prev[camionetaId] ?? [];
+      const on = cur.includes(choferId);
+      return {
+        ...prev,
+        [camionetaId]: on
+          ? cur.filter((id) => id !== choferId)
+          : [...cur, choferId],
+      };
+    });
+  }
+
   async function guardarAsignacionUnidad(camionetaId: string) {
     if (!token || !asigEmpresaId) return;
-    const choferId = asigChoferByUnit[camionetaId];
-    if (!choferId) {
-      setAsigError("Elegí un chofer para guardar la asignación");
+    const choferIds = asigChoferByUnit[camionetaId] ?? [];
+    if (choferIds.length === 0) {
+      setAsigError("Elegí al menos un chofer para guardar la asignación");
       return;
     }
     setAsigSavingId(camionetaId);
@@ -928,7 +944,7 @@ export function M5FichaPage() {
         `/api/camionetas/${camionetaId}/asignacion`,
         {
           method: "POST",
-          body: JSON.stringify({ choferId, empresaId: asigEmpresaId }),
+          body: JSON.stringify({ choferIds, empresaId: asigEmpresaId }),
         },
         token
       );
@@ -1346,8 +1362,8 @@ export function M5FichaPage() {
       {!loading && !error && tab === "asignacion" && (
         <div className="space-y-4">
           <p className="text-sm text-[var(--vl-text-muted)]">
-            Elegí la empresa y asigná un chofer a cada unidad. Solo aparecen
-            choferes de esa empresa (o libres para incorporar); no los de otra.
+            Elegí la empresa y asigná uno o más choferes a cada patente. Solo
+            aparecen choferes de esa empresa.
           </p>
           <label className="block max-w-md text-xs text-[var(--vl-text-muted)]">
             Empresa de transporte
@@ -1366,9 +1382,8 @@ export function M5FichaPage() {
           </label>
           {empresaAsig && !empresaAsig.permiteMultiCamioneta && (
             <p className="text-xs text-amber-700 dark:text-amber-400">
-              Esta empresa tiene restringido un chofer a una sola patente. Al
-              asignar una nueva se libera la anterior. Podés cambiarlo en
-              Empresas.
+              Esta empresa restringe un chofer a una sola patente a la vez. Al
+              sumarlo a otra unidad se libera la anterior.
             </p>
           )}
           {asigError && (
@@ -1389,14 +1404,20 @@ export function M5FichaPage() {
                 <thead className="bg-[var(--vl-page)] text-xs text-[var(--vl-text-muted)]">
                   <tr>
                     <th className="px-3 py-2">Patente</th>
-                    <th className="px-3 py-2">Chofer actual</th>
-                    <th className="px-3 py-2">Asignar chofer</th>
+                    <th className="px-3 py-2">Choferes asignados</th>
+                    <th className="px-3 py-2">Selección múltiple</th>
                     <th className="px-3 py-2" />
                   </tr>
                 </thead>
                 <tbody>
                   {unidadesDeEmpresaAsig.map((c) => {
-                    const a = currentAsignacion(c);
+                    const abiertas = currentAsignaciones(c);
+                    const selected = asigChoferByUnit[c.id] ?? [];
+                    const sameSet =
+                      selected.length === abiertas.length &&
+                      selected.every((id) =>
+                        abiertas.some((a) => a.choferId === id)
+                      );
                     return (
                       <tr
                         key={c.id}
@@ -1404,62 +1425,60 @@ export function M5FichaPage() {
                       >
                         <td className="px-3 py-2 font-medium">{c.patente}</td>
                         <td className="px-3 py-2 text-[var(--vl-text-muted)]">
-                          {a?.chofer?.nombre ?? "Sin chofer"}
-                          {a?.choferId &&
-                          (unidadesPorChoferAsig.get(a.choferId) ?? 0) > 1
-                            ? ` · ${unidadesPorChoferAsig.get(a.choferId)} unidades`
-                            : ""}
+                          {abiertas.length
+                            ? abiertas
+                                .map((a) => {
+                                  const n = a.chofer
+                                    ? `${a.chofer.apellido ? `${a.chofer.apellido}, ` : ""}${a.chofer.nombre}`
+                                    : "—";
+                                  const extra =
+                                    a.choferId &&
+                                    (unidadesPorChoferAsig.get(a.choferId) ?? 0) >
+                                      1
+                                      ? ` (${unidadesPorChoferAsig.get(a.choferId)} u.)`
+                                      : "";
+                                  return `${n}${extra}`;
+                                })
+                                .join(" · ")
+                            : "Sin chofer"}
                         </td>
                         <td className="px-3 py-2">
-                          <select
-                            className={inputClass}
-                            value={asigChoferByUnit[c.id] ?? ""}
-                            onChange={(e) =>
-                              setAsigChoferByUnit((prev) => ({
-                                ...prev,
-                                [c.id]: e.target.value,
-                              }))
-                            }
-                            disabled={!canAssign}
-                          >
-                            <option value="">—</option>
+                          <div className="flex max-w-md flex-wrap gap-1.5">
                             {choferesDeEmpresaAsig.map((ch) => {
-                                const n = unidadesPorChoferAsig.get(ch.id) ?? 0;
-                                return (
-                                  <option key={ch.id} value={ch.id}>
-                                    {ch.nombre}
-                                    {n > 0
-                                      ? ` (${n})`
-                                      : ""}
-                                  </option>
-                                );
-                              })}
-                            {/* Conservar valor actual si quedó fuera del filtro */}
-                            {(() => {
-                              const curId = asigChoferByUnit[c.id];
-                              if (
-                                !curId ||
-                                choferesDeEmpresaAsig.some((ch) => ch.id === curId)
-                              ) {
-                                return null;
-                              }
-                              const cur = choferes.find((ch) => ch.id === curId);
-                              return cur ? (
-                                <option key={cur.id} value={cur.id}>
-                                  {cur.nombre} (otra empresa)
-                                </option>
-                              ) : null;
-                            })()}
-                          </select>
+                              const on = selected.includes(ch.id);
+                              return (
+                                <label
+                                  key={ch.id}
+                                  className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
+                                    on
+                                      ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                                      : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                                  } ${!canAssign ? "opacity-50" : ""}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={on}
+                                    disabled={!canAssign}
+                                    onChange={() =>
+                                      toggleAsigChofer(c.id, ch.id)
+                                    }
+                                  />
+                                  {ch.nombre}
+                                  {ch.apellido ? ` ${ch.apellido}` : ""}
+                                </label>
+                              );
+                            })}
+                          </div>
                         </td>
                         <td className="px-3 py-2 text-right">
                           {canAssign && (
                             <button
                               type="button"
                               disabled={
-                                !asigChoferByUnit[c.id] ||
+                                selected.length === 0 ||
                                 asigSavingId === c.id ||
-                                a?.choferId === asigChoferByUnit[c.id]
+                                sameSet
                               }
                               onClick={() => void guardarAsignacionUnidad(c.id)}
                               className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
