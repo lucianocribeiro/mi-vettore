@@ -9,6 +9,15 @@ import {
   type TipoTaller,
 } from "../../types";
 
+type MetodoPagoLinea = "TRANSFERENCIA" | "CHEQUE" | "EFECTIVO";
+
+type PagoLinea = {
+  key: string;
+  metodo: MetodoPagoLinea;
+  monto: string;
+  detalle: string;
+};
+
 type MetodoPago = "TRANSFERENCIA" | "CHEQUE" | "EFECTIVO" | "MIXTO";
 
 type Saldo = {
@@ -32,6 +41,28 @@ type Saldo = {
 
 function money(n: number) {
   return `$${n.toLocaleString("es-AR")}`;
+}
+
+function nuevaPagoLinea(
+  parcial?: Partial<PagoLinea>
+): PagoLinea {
+  return {
+    key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    metodo: "TRANSFERENCIA",
+    monto: "",
+    detalle: "",
+    ...parcial,
+  };
+}
+
+function parseMontoLinea(raw: string): number {
+  if (raw.trim() === "") return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function roundMoney(n: number) {
+  return Math.round(n * 100) / 100;
 }
 
 function whatsappDigits(raw: string | null | undefined): string | null {
@@ -110,13 +141,10 @@ export function TalleresProveedoresPanel({
   const [pagoFecha, setPagoFecha] = useState(() =>
     new Date().toISOString().slice(0, 10)
   );
-  const [pagoMetodo, setPagoMetodo] = useState<MetodoPago>("TRANSFERENCIA");
-  const [pagoMontoTransf, setPagoMontoTransf] = useState("");
-  const [pagoDetTransf, setPagoDetTransf] = useState("");
-  const [pagoMontoCheque, setPagoMontoCheque] = useState("");
-  const [pagoDetCheque, setPagoDetCheque] = useState("");
+  const [pagoLineas, setPagoLineas] = useState<PagoLinea[]>(() => [
+    nuevaPagoLinea(),
+  ]);
   const [pagoObs, setPagoObs] = useState("");
-  const [pagoMontoAPagar, setPagoMontoAPagar] = useState("");
   const [pagoSaving, setPagoSaving] = useState(false);
   const [pagoError, setPagoError] = useState<string | null>(null);
 
@@ -192,24 +220,82 @@ export function TalleresProveedoresPanel({
 
   function resetPagoForm() {
     setPagoFecha(new Date().toISOString().slice(0, 10));
-    setPagoMetodo("TRANSFERENCIA");
-    setPagoMontoTransf("");
-    setPagoDetTransf("");
-    setPagoMontoCheque("");
-    setPagoDetCheque("");
+    setPagoLineas([nuevaPagoLinea()]);
     setPagoObs("");
-    setPagoMontoAPagar("");
     setPagoError(null);
   }
 
   function openPago(tallerId: string, movIds: string[]) {
     if (!movIds.length) return;
     const taller = saldos.find((s) => s.id === tallerId);
-    const totalAdeudado = (taller?.movimientos ?? [])
-      .filter((m) => movIds.includes(m.id))
-      .reduce((a, m) => a + m.montoFacturado, 0);
+    const totalAdeudado = roundMoney(
+      (taller?.movimientos ?? [])
+        .filter((m) => movIds.includes(m.id))
+        .reduce((a, m) => a + m.montoFacturado, 0)
+    );
     setPagoModal({ tallerId, movIds, totalAdeudado });
     resetPagoForm();
+  }
+
+  function montoObjetivoPago(): number {
+    if (!pagoModal) return 0;
+    return roundMoney(pagoModal.totalAdeudado);
+  }
+
+  function sumLineas(lineas: PagoLinea[] = pagoLineas): number {
+    return roundMoney(lineas.reduce((a, l) => a + parseMontoLinea(l.monto), 0));
+  }
+
+  /** Si un método no cubre el total de ítems, agrega otro con el resto. */
+  function syncPagoLineas(next: PagoLinea[], objetivo: number) {
+    let lines = next.length ? [...next] : [nuevaPagoLinea()];
+
+    while (
+      lines.length > 1 &&
+      parseMontoLinea(lines[lines.length - 1].monto) <= 0 &&
+      !lines[lines.length - 1].detalle.trim()
+    ) {
+      lines.pop();
+    }
+
+    let sum = sumLineas(lines);
+    let falta = roundMoney(objetivo - sum);
+
+    if (falta < -0.009 && lines.length >= 2) {
+      const withoutLast = lines.slice(0, -1);
+      const sumPrev = sumLineas(withoutLast);
+      const resto = roundMoney(objetivo - sumPrev);
+      if (resto > 0.009) {
+        lines = [
+          ...withoutLast,
+          { ...lines[lines.length - 1], monto: String(resto) },
+        ];
+      } else {
+        lines = withoutLast;
+      }
+      sum = sumLineas(lines);
+      falta = roundMoney(objetivo - sum);
+    }
+
+    if (falta > 0.009) {
+      const last = lines[lines.length - 1];
+      const lastMonto = parseMontoLinea(last.monto);
+      if (lastMonto > 0 || last.detalle.trim()) {
+        lines.push(nuevaPagoLinea({ monto: String(falta) }));
+      } else if (lines.length > 1) {
+        lines[lines.length - 1] = { ...last, monto: String(falta) };
+      }
+    }
+
+    setPagoLineas(lines.length ? lines : [nuevaPagoLinea()]);
+  }
+
+  function updatePagoLinea(key: string, patch: Partial<PagoLinea>) {
+    const objetivo = montoObjetivoPago();
+    const next = pagoLineas.map((l) =>
+      l.key === key ? { ...l, ...patch } : l
+    );
+    syncPagoLineas(next, objetivo);
   }
 
   function toggleMov(tallerId: string, movId: string) {
@@ -231,18 +317,67 @@ export function TalleresProveedoresPanel({
   }
 
   function buildPagoBody() {
+    const objetivo = montoObjetivoPago();
+    let montoTransferencia = 0;
+    let montoCheque = 0;
+    let montoEfectivo = 0;
+    const detTransf: string[] = [];
+    const detCheque: string[] = [];
+    const detEfec: string[] = [];
+
+    for (const l of pagoLineas) {
+      const m = parseMontoLinea(l.monto);
+      if (m <= 0) continue;
+      if (l.metodo === "TRANSFERENCIA") {
+        montoTransferencia = roundMoney(montoTransferencia + m);
+        if (l.detalle.trim()) detTransf.push(l.detalle.trim());
+      } else if (l.metodo === "CHEQUE") {
+        montoCheque = roundMoney(montoCheque + m);
+        if (l.detalle.trim()) detCheque.push(l.detalle.trim());
+      } else {
+        montoEfectivo = roundMoney(montoEfectivo + m);
+        if (l.detalle.trim()) detEfec.push(l.detalle.trim());
+      }
+    }
+
+    const usaT = montoTransferencia > 0;
+    const usaC = montoCheque > 0;
+    const usaE = montoEfectivo > 0;
+    let metodoPago: MetodoPago = "TRANSFERENCIA";
+    if ((usaT && usaC) || (usaT && usaE) || (usaC && usaE)) {
+      metodoPago = "MIXTO";
+    } else if (usaC) metodoPago = "CHEQUE";
+    else if (usaE) metodoPago = "EFECTIVO";
+    else if (usaT) metodoPago = "TRANSFERENCIA";
+    else metodoPago = pagoLineas[0]?.metodo ?? "TRANSFERENCIA";
+
+    const obsParts: string[] = [];
+    if (pagoObs.trim()) obsParts.push(pagoObs.trim());
+    if (usaE && (usaT || usaC)) {
+      obsParts.push(`Efectivo: $${montoEfectivo.toLocaleString("es-AR")}`);
+    }
+    if (detEfec.length && (usaT || usaC)) {
+      obsParts.push(`Detalle efectivo: ${detEfec.join(" · ")}`);
+    }
+
     const body: Record<string, unknown> = {
       fechaPago: pagoFecha,
-      metodoPago: pagoMetodo,
+      metodoPago,
+      montoPagado: objetivo,
     };
-    if (pagoObs.trim()) body.observacionPago = pagoObs.trim();
-    if (pagoMontoTransf !== "") body.montoTransferencia = Number(pagoMontoTransf);
-    if (pagoDetTransf.trim()) body.detalleTransferencia = pagoDetTransf.trim();
-    if (pagoMontoCheque !== "") body.montoCheque = Number(pagoMontoCheque);
-    if (pagoDetCheque.trim()) body.detalleCheque = pagoDetCheque.trim();
-    if (pagoMontoAPagar !== "") {
-      const n = Number(pagoMontoAPagar);
-      if (Number.isFinite(n) && n > 0) body.montoPagado = n;
+    if (obsParts.length) body.observacionPago = obsParts.join(" · ");
+    if (usaT) {
+      body.montoTransferencia = montoTransferencia;
+      if (detTransf.length) body.detalleTransferencia = detTransf.join(" · ");
+    }
+    if (usaC) {
+      body.montoCheque = montoCheque;
+      if (detCheque.length) body.detalleCheque = detCheque.join(" · ");
+    }
+    if (usaE && !usaT && !usaC && detEfec.length) {
+      body.observacionPago = [pagoObs.trim(), detEfec.join(" · ")]
+        .filter(Boolean)
+        .join(" · ");
     }
     return body;
   }
@@ -253,22 +388,22 @@ export function TalleresProveedoresPanel({
       setPagoError("La fecha es obligatoria");
       return;
     }
-    if (!pagoMetodo) {
-      setPagoError("El método es obligatorio");
+    const objetivo = montoObjetivoPago();
+    if (objetivo <= 0) {
+      setPagoError("No hay monto a pagar");
       return;
     }
-    if (pagoMontoAPagar !== "") {
-      const n = Number(pagoMontoAPagar);
-      if (!Number.isFinite(n) || n <= 0) {
-        setPagoError("Indicá un monto a pagar válido");
-        return;
-      }
-      if (n > pagoModal.totalAdeudado + 0.009) {
-        setPagoError(
-          `El monto no puede superar lo adeudado (${pagoModal.totalAdeudado})`
-        );
-        return;
-      }
+    const sumaMetodos = sumLineas();
+    const hayMontosMetodo = pagoLineas.some((l) => parseMontoLinea(l.monto) > 0);
+    if (!hayMontosMetodo) {
+      setPagoError("Indicá al menos un monto en un método de pago");
+      return;
+    }
+    if (Math.abs(sumaMetodos - objetivo) > 0.009) {
+      setPagoError(
+        `La suma de métodos (${money(sumaMetodos)}) debe ser igual al total de ítems (${money(objetivo)})`
+      );
+      return;
     }
     setPagoSaving(true);
     setPagoError(null);
@@ -337,10 +472,9 @@ export function TalleresProveedoresPanel({
     });
   }, [items, filtroTipo, busqueda]);
 
-  const showPagoDetalle =
-    pagoMetodo === "TRANSFERENCIA" ||
-    pagoMetodo === "CHEQUE" ||
-    pagoMetodo === "MIXTO";
+  const pagoObjetivo = pagoModal ? montoObjetivoPago() : 0;
+  const pagoSumaMetodos = sumLineas();
+  const pagoFalta = roundMoney(pagoObjetivo - pagoSumaMetodos);
 
   return (
     <div>
@@ -768,27 +902,18 @@ export function TalleresProveedoresPanel({
             <h3 className="mb-1 font-bold text-[var(--vl-heading)]">Registrar pago</h3>
             <p className="mb-3 text-xs text-[var(--vl-text-muted)]">
               {pagoModal.movIds.length === 1
-                ? `1 ítem · adeudado $${pagoModal.totalAdeudado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
-                : `${pagoModal.movIds.length} ítems · adeudado $${pagoModal.totalAdeudado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`}
-              {" — "}
-              si pagás menos, el saldo queda pendiente (no se marca todo como pagado).
+                ? `1 ítem seleccionado`
+                : `${pagoModal.movIds.length} ítems seleccionados`}
+              . La suma de métodos debe cubrir ese total.
             </p>
-            <label className="mb-2 block text-xs">
-              Monto a pagar
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                max={pagoModal.totalAdeudado}
-                className={input}
-                value={pagoMontoAPagar}
-                onChange={(e) => setPagoMontoAPagar(e.target.value)}
-                placeholder={`Vacío = todo ($${pagoModal.totalAdeudado.toLocaleString("es-AR", { minimumFractionDigits: 2 })})`}
-              />
-              <span className="mt-0.5 block text-[10px] text-[var(--vl-text-muted)]">
-                Con varios ítems el monto se reparte en proporción. También podés indicar solo el monto de transferencia/cheque: si es menor, queda saldo pendiente.
-              </span>
-            </label>
+            <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--vl-text-muted)]">
+                Monto a pagar (ítems seleccionados)
+              </p>
+              <p className="text-lg font-bold text-[var(--vl-heading)]">
+                {money(pagoModal.totalAdeudado)}
+              </p>
+            </div>
             <label className="block text-xs">
               Fecha
               <input
@@ -799,71 +924,84 @@ export function TalleresProveedoresPanel({
                 onChange={(e) => setPagoFecha(e.target.value)}
               />
             </label>
-            <label className="mt-2 block text-xs">
-              Método
-              <select
-                className={input}
-                value={pagoMetodo}
-                onChange={(e) => setPagoMetodo(e.target.value as MetodoPago)}
-              >
-                <option value="TRANSFERENCIA">Transferencia</option>
-                <option value="CHEQUE">Cheque</option>
-                <option value="EFECTIVO">Efectivo</option>
-                <option value="MIXTO">Mixto (transf. + cheque)</option>
-              </select>
-            </label>
-            {showPagoDetalle && (
-              <div className="mt-2 space-y-2">
-                {(pagoMetodo === "TRANSFERENCIA" || pagoMetodo === "MIXTO") && (
-                  <>
-                    <label className="block text-xs">
-                      Monto transferencia (opcional)
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className={input}
-                        value={pagoMontoTransf}
-                        onChange={(e) => setPagoMontoTransf(e.target.value)}
-                      />
-                    </label>
-                    <label className="block text-xs">
-                      Detalle transferencia (opcional)
-                      <input
-                        className={input}
-                        value={pagoDetTransf}
-                        onChange={(e) => setPagoDetTransf(e.target.value)}
-                        placeholder="Nº operación, banco…"
-                      />
-                    </label>
-                  </>
-                )}
-                {(pagoMetodo === "CHEQUE" || pagoMetodo === "MIXTO") && (
-                  <>
-                    <label className="block text-xs">
-                      Monto cheque (opcional)
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className={input}
-                        value={pagoMontoCheque}
-                        onChange={(e) => setPagoMontoCheque(e.target.value)}
-                      />
-                    </label>
-                    <label className="block text-xs">
-                      Detalle cheque (opcional)
-                      <input
-                        className={input}
-                        value={pagoDetCheque}
-                        onChange={(e) => setPagoDetCheque(e.target.value)}
-                        placeholder="Nº cheque, banco…"
-                      />
-                    </label>
-                  </>
-                )}
+
+            <div className="mt-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-[var(--vl-heading)]">
+                  Métodos de pago
+                </p>
+                <p className="text-[10px] text-[var(--vl-text-muted)]">
+                  Suma {money(pagoSumaMetodos)}
+                  {pagoFalta > 0.009
+                    ? ` · faltan ${money(pagoFalta)}`
+                    : pagoFalta < -0.009
+                      ? ` · sobran ${money(-pagoFalta)}`
+                      : " · completo"}
+                </p>
               </div>
-            )}
+              <p className="text-[10px] text-[var(--vl-text-muted)]">
+                Si un método no alcanza el total, se agrega otro con el resto
+                automáticamente.
+              </p>
+              {pagoLineas.map((linea, idx) => (
+                <div
+                  key={linea.key}
+                  className="rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2.5"
+                >
+                  <p className="mb-1.5 text-[10px] font-medium text-[var(--vl-text-muted)]">
+                    Método {idx + 1}
+                  </p>
+                  <label className="block text-xs">
+                    Tipo
+                    <select
+                      className={input}
+                      value={linea.metodo}
+                      onChange={(e) =>
+                        updatePagoLinea(linea.key, {
+                          metodo: e.target.value as MetodoPagoLinea,
+                        })
+                      }
+                    >
+                      <option value="TRANSFERENCIA">Transferencia</option>
+                      <option value="CHEQUE">Cheque</option>
+                      <option value="EFECTIVO">Efectivo</option>
+                    </select>
+                  </label>
+                  <label className="mt-2 block text-xs">
+                    Monto
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className={input}
+                      value={linea.monto}
+                      onChange={(e) =>
+                        updatePagoLinea(linea.key, { monto: e.target.value })
+                      }
+                      placeholder="0"
+                    />
+                  </label>
+                  <label className="mt-2 block text-xs">
+                    Detalle (opcional)
+                    <input
+                      className={input}
+                      value={linea.detalle}
+                      onChange={(e) =>
+                        updatePagoLinea(linea.key, { detalle: e.target.value })
+                      }
+                      placeholder={
+                        linea.metodo === "CHEQUE"
+                          ? "Nº cheque, banco…"
+                          : linea.metodo === "TRANSFERENCIA"
+                            ? "Nº operación, banco…"
+                            : "Referencia…"
+                      }
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+
             <label className="mt-2 block text-xs">
               Observación (opcional)
               <textarea
