@@ -193,14 +193,34 @@ router.put("/:id", ...write, async (req, res) => {
     if (req.body?.password) {
       const password = String(req.body.password) || generateTempPassword();
       const hash = await bcrypt.hash(password, 10);
-      await prisma.usuario.updateMany({
+      const cuit = item.cuit.replace(/\D/g, "");
+      let user = await prisma.usuario.findFirst({
         where: { empresaId: item.id, rol: Role.EMPRESA },
-        data: {
-          passwordHash: hash,
-          debeCambiarPassword: true,
-          estado: "ACTIVO",
-        },
       });
+      if (!user) {
+        await prisma.usuario.create({
+          data: {
+            email: `empresa-${cuit}@acceso.vettore.local`,
+            loginIdentificador: cuit,
+            passwordHash: hash,
+            rol: Role.EMPRESA,
+            nombre: item.nombre,
+            empresaId: item.id,
+            debeCambiarPassword: true,
+            estado: "ACTIVO",
+          },
+        });
+      } else {
+        await prisma.usuario.update({
+          where: { id: user.id },
+          data: {
+            passwordHash: hash,
+            debeCambiarPassword: true,
+            estado: "ACTIVO",
+            loginIdentificador: cuit,
+          },
+        });
+      }
       res.json({ ...item, credencialTemporal: password });
       return;
     }
@@ -349,17 +369,44 @@ router.post("/:id/eliminar", ...write, async (req, res) => {
 
 router.post("/:id/password", ...write, async (req, res) => {
   try {
-    const empresa = await prisma.empresaTransporte.findUnique({ where: { id: req.params.id } });
+    const empresa = await prisma.empresaTransporte.findUnique({
+      where: { id: req.params.id },
+    });
     if (!empresa) {
       res.status(404).json({ error: "Empresa no encontrada" });
       return;
     }
     const password = String(req.body?.password ?? "") || generateTempPassword();
     const hash = await bcrypt.hash(password, 10);
-    await prisma.usuario.updateMany({
+    const cuit = empresa.cuit.replace(/\D/g, "");
+
+    let user = await prisma.usuario.findFirst({
       where: { empresaId: empresa.id, rol: Role.EMPRESA },
-      data: { passwordHash: hash, debeCambiarPassword: true, estado: "ACTIVO" },
     });
+    if (!user) {
+      user = await prisma.usuario.create({
+        data: {
+          email: `empresa-${cuit}@acceso.vettore.local`,
+          loginIdentificador: cuit,
+          passwordHash: hash,
+          rol: Role.EMPRESA,
+          nombre: empresa.nombre,
+          empresaId: empresa.id,
+          debeCambiarPassword: true,
+          estado: "ACTIVO",
+        },
+      });
+    } else {
+      await prisma.usuario.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: hash,
+          debeCambiarPassword: true,
+          estado: "ACTIVO",
+          loginIdentificador: cuit,
+        },
+      });
+    }
     res.json({ credencialTemporal: password });
   } catch (err) {
     console.error(err);

@@ -81,22 +81,57 @@ router.post("/login", async (req, res) => {
     }
 
     const digits = identificador.replace(/\D/g, "");
-    const user = await prisma.usuario.findFirst({
-      where: {
-        OR: [
-          { loginIdentificador: identificador },
-          ...(digits
-            ? [
-                { loginIdentificador: digits },
-                { dni: digits },
-                { empresa: { cuit: digits } },
-              ]
-            : []),
-          { email: identificador },
-        ],
-      },
-      include: { chofer: true, empresa: true },
-    });
+    const isCuit = digits.length === 11;
+    const isDni = digits.length >= 7 && digits.length <= 8;
+
+    const includeLogin = { chofer: true, empresa: true } as const;
+    let user = null as
+      | (Awaited<ReturnType<typeof prisma.usuario.findFirst>> & {
+          chofer: { esDuenoFlota: boolean; verMantenimiento: boolean; verTaller: boolean } | null;
+          empresa: { nombre: string; cuit: string } | null;
+        })
+      | null;
+
+    // CUIT → solo usuario rol EMPRESA (no choferes de esa empresa).
+    if (isCuit) {
+      user = await prisma.usuario.findFirst({
+        where: {
+          rol: Role.EMPRESA,
+          OR: [
+            { loginIdentificador: digits },
+            { empresa: { cuit: digits } },
+          ],
+        },
+        include: includeLogin,
+      });
+    }
+
+    // DNI → personas (chofer / roles internos), no empresa.
+    if (!user && isDni) {
+      user = await prisma.usuario.findFirst({
+        where: {
+          rol: { not: Role.EMPRESA },
+          OR: [{ loginIdentificador: digits }, { dni: digits }],
+        },
+        include: includeLogin,
+      });
+    }
+
+    // Email u otros identificadores.
+    if (!user) {
+      user = await prisma.usuario.findFirst({
+        where: {
+          OR: [
+            { loginIdentificador: identificador },
+            { email: identificador },
+            ...(digits && !isCuit && !isDni
+              ? [{ loginIdentificador: digits }, { dni: digits }]
+              : []),
+          ],
+        },
+        include: includeLogin,
+      });
+    }
     if (!user) {
       res.status(401).json({ error: "Credenciales inválidas" });
       return;
