@@ -362,6 +362,40 @@ function choferOwnsOt(
   return false;
 }
 
+/** Filtro OT: solo unidades de la/s empresa/s indicada/s. */
+function whereOtDeEmpresas(empresaIds: string[]): Prisma.OrdenTrabajoWhereInput {
+  if (empresaIds.length === 0) return { id: "__none__" };
+  return {
+    solicitud: {
+      camioneta: {
+        OR: [
+          { empresaId: { in: empresaIds } },
+          {
+            asignaciones: {
+              some: {
+                empresaId: { in: empresaIds },
+                periodoHasta: null,
+              },
+            },
+          },
+        ],
+      },
+    },
+  };
+}
+
+function camionetaDeEmpresas(
+  cam: {
+    empresaId?: string | null;
+    asignaciones?: Array<{ empresaId: string }>;
+  },
+  empresaIds: string[]
+): boolean {
+  if (empresaIds.length === 0) return false;
+  if (cam.empresaId && empresaIds.includes(cam.empresaId)) return true;
+  return (cam.asignaciones ?? []).some((a) => empresaIds.includes(a.empresaId));
+}
+
 async function nextNumeroOT(): Promise<string> {
   const count = await prisma.ordenTrabajo.count();
   const n = 140 + count + 1;
@@ -418,31 +452,19 @@ router.get("/meta", authenticate, (_req, res) => {
 router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
     const scope = await choferScope(req.user!.id);
+    const me = await prisma.usuario.findUnique({
+      where: { id: req.user!.id },
+      select: { rol: true, empresaId: true },
+    });
     let where: Prisma.OrdenTrabajoWhereInput | undefined = scope
       ? whereOwnSolicitudes(scope)
       : undefined;
     if (scope && contextoAccesoFromReq(req) === "EMPRESA") {
-      const empresas = await empresaIdsDeDueno(req.user!.id);
-      if (empresas.length > 0) {
-        // Todas las OT de unidades de su/s empresa/s (cualquier chofer de la flota).
-        where = {
-          solicitud: {
-            camioneta: {
-              OR: [
-                { empresaId: { in: empresas } },
-                {
-                  asignaciones: {
-                    some: {
-                      empresaId: { in: empresas },
-                      periodoHasta: null,
-                    },
-                  },
-                },
-              ],
-            },
-          },
-        };
-      }
+      // Dueño de flota en modo empresa: OT de toda su flota.
+      where = whereOtDeEmpresas(await empresaIdsDeDueno(req.user!.id));
+    } else if (me?.rol === "EMPRESA") {
+      // Perfil empresa de transporte: solo OT de su flota (nunca el circuito global).
+      where = whereOtDeEmpresas(me.empresaId ? [me.empresaId] : []);
     }
     const items = await prisma.ordenTrabajo.findMany({
       where,
@@ -1104,19 +1126,18 @@ router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
     const scope = await choferScope(req.user!.id);
     const vOpts = await viewerOpts(req.user!.id, req);
+    const me = await prisma.usuario.findUnique({
+      where: { id: req.user!.id },
+      select: { rol: true, empresaId: true },
+    });
+    const cam = item.solicitud.camioneta as {
+      empresaId?: string | null;
+      asignaciones?: Array<{ empresaId: string }>;
+    };
     if (scope) {
       if (vOpts.esDuenoEmpresa) {
         const empresas = await empresaIdsDeDueno(req.user!.id);
-        const cam = item.solicitud.camioneta as {
-          empresaId?: string | null;
-          asignaciones?: Array<{ empresaId: string }>;
-        };
-        const deSuFlota =
-          (!!cam.empresaId && empresas.includes(cam.empresaId)) ||
-          (cam.asignaciones ?? []).some((a) =>
-            empresas.includes(a.empresaId)
-          );
-        if (!deSuFlota) {
+        if (!camionetaDeEmpresas(cam, empresas)) {
           res.status(403).json({
             error: "Solo podés ver solicitudes de unidades de tu empresa",
           });
@@ -1124,6 +1145,14 @@ router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
         }
       } else if (!choferOwnsOt(item, scope)) {
         res.status(403).json({ error: "Solo podés ver tus propias solicitudes" });
+        return;
+      }
+    } else if (me?.rol === "EMPRESA") {
+      const empresas = me.empresaId ? [me.empresaId] : [];
+      if (!camionetaDeEmpresas(cam, empresas)) {
+        res.status(403).json({
+          error: "Solo podés ver solicitudes de unidades de tu empresa",
+        });
         return;
       }
     }

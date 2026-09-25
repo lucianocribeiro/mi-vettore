@@ -90,10 +90,10 @@ const NAV: NavItem[] = [
     label: "Ficha integral (ABM)",
     sub: "Flota",
     icon: CreditCard,
+    // Solo ops internas Vettore — empresa/chofer usan Documentación.
     roles: [
       "ADMINISTRADOR",
       "OPERACIONES",
-      "EMPRESA",
     ],
     children: [
       { to: "/m5", label: "Flota" },
@@ -146,6 +146,7 @@ export function Sidebar({ open, onClose }: Props) {
   const rol = user?.rol;
   const esAccesoEmpresa = user?.rol === "EMPRESA" || !!user?.esDuenoFlota;
   const esChofer = user?.rol === "CHOFER" && !user?.esDuenoFlota;
+  const perfilExterno = rol === "EMPRESA" || rol === "CHOFER";
   const items = NAV.filter((n) => {
     if (n.roles && !(rol && n.roles.includes(rol))) return false;
     if (rol === "CHOFER") {
@@ -153,6 +154,28 @@ export function Sidebar({ open, onClose }: Props) {
       if (n.to === "/m7" && user?.verTaller === false) return false;
     }
     return true;
+  }).map((n) => {
+    if (!perfilExterno) return n;
+    if (n.to === "/m7") {
+      return {
+        ...n,
+        label: "Talleres",
+        sub: esAccesoEmpresa ? "OT de mi flota" : "Mis solicitudes",
+      };
+    }
+    if (n.to === "/m6") {
+      return {
+        ...n,
+        sub: esAccesoEmpresa ? "Km de mi flota" : "Mi unidad",
+      };
+    }
+    if (n.to === "/documentacion") {
+      return {
+        ...n,
+        sub: esAccesoEmpresa ? "Mis unidades y choferes" : "Mi ficha",
+      };
+    }
+    return n;
   });
 
   const fichaOpen =

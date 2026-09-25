@@ -52,7 +52,7 @@ function SugerenciasOnlyGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Agenda / alertas / historial ops: solo roles internos Vettore. */
+/** Agenda / alertas / ficha ABM / historial ops: solo roles internos Vettore. */
 function VettoreOpsGate({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   if (!isInternalOps(user?.rol)) {
@@ -96,7 +96,9 @@ export default function App() {
               path="/m5"
               element={
                 <SugerenciasOnlyGate>
-                  <M5FichaPage />
+                  <VettoreOpsGate>
+                    <M5FichaPage />
+                  </VettoreOpsGate>
                 </SugerenciasOnlyGate>
               }
             />
@@ -104,7 +106,9 @@ export default function App() {
               path="/m5/usuarios"
               element={
                 <SugerenciasOnlyGate>
-                  <M5FichaPage />
+                  <VettoreOpsGate>
+                    <M5FichaPage />
+                  </VettoreOpsGate>
                 </SugerenciasOnlyGate>
               }
             />

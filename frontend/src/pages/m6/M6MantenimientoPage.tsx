@@ -80,7 +80,7 @@ const CARD_TINT: Record<SemaforoLevel, string> = {
 /** M6 — panel de tarjetas: km / aceite + colores por vencimiento. */
 export function M6MantenimientoPage() {
   const { token, user, contextoAcceso } = useAuth();
-  const esDueno = !!user?.esDuenoFlota;
+  const esDueno = !!user?.esDuenoFlota || user?.rol === "EMPRESA";
   const esChoferRol = user?.rol === "CHOFER";
 
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);

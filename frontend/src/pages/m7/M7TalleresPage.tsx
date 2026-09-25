@@ -66,8 +66,8 @@ function roleActionHint(
   rol?: Role | null,
   opts?: { esDuenoEmpresa?: boolean }
 ): string {
-  if (opts?.esDuenoEmpresa) {
-    return "Tu rol (empresa): ves todos los pasos y montos de tu flota. Solo lectura: no editás presupuestos ni avanzás etapas.";
+  if (opts?.esDuenoEmpresa || rol === "EMPRESA") {
+    return "Tu panel de empresa: OT y montos de tu flota. Solo lectura del circuito interno de Vettore.";
   }
   if (rol === "CHOFER") {
     return "Tu rol: crear solicitudes y seguir el avance (sin montos). Podés comentar y enviar sugerencias.";
@@ -206,11 +206,14 @@ export function M7TalleresPage() {
   const { token, user, contextoAcceso } = useAuth();
   const rol = user?.rol;
   const esChofer = rol === "CHOFER";
+  const esRolEmpresa = rol === "EMPRESA";
   /** Solo choferes (incl. dueño en modo empresa) navegan en solo lectura. Perfiles Vettore siempre editan. */
   const esDuenoEmpresa =
-    esChofer && !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA");
+    esRolEmpresa ||
+    (esChofer && !!(user?.esDuenoFlota && contextoAcceso === "EMPRESA"));
   const vistaChofer = esChofer && !esDuenoEmpresa;
-  const vistaBrowse = esChofer;
+  /** Empresa / chofer: panel propio, sin editar el circuito interno. */
+  const vistaBrowse = esChofer || esRolEmpresa;
 
   const [pageTab, setPageTab] = useState<"ots" | "proveedores" | "cc">("ots");
   const [ots, setOts] = useState<OrdenTrabajo[]>([]);
@@ -250,7 +253,7 @@ export function M7TalleresPage() {
     try {
       const data = await apiFetch<{ ots: OrdenTrabajo[] }>("/api/talleres", {}, token);
       setOts(data.ots);
-      if (!esChofer) {
+      if (isOps(rol)) {
         const t = await apiFetch<TallerProveedor[]>("/api/talleres-proveedores", {}, token);
         setTalleres(t.filter((x) => x.activo));
       }
@@ -259,7 +262,7 @@ export function M7TalleresPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, esChofer, contextoAcceso]);
+  }, [token, rol, contextoAcceso]);
 
   useEffect(() => {
     void load();
@@ -467,9 +470,11 @@ export function M7TalleresPage() {
             Talleres y órdenes de trabajo
           </h1>
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            {esChofer
-              ? "Seguí el estado de tu solicitud. El detalle interno lo ve solo el equipo de Vettore."
-              : "Solicitud → presupuesto → selección → ajuste de importes → comparación y cierre."}
+            {esRolEmpresa || esDuenoEmpresa
+              ? "Seguí las OT de tu flota. El circuito de proveedores y cuenta corriente es interno de Vettore."
+              : esChofer
+                ? "Seguí el estado de tu solicitud. El detalle interno lo ve solo el equipo de Vettore."
+                : "Solicitud → presupuesto → selección → ajuste de importes → comparación y cierre."}
           </p>
           <p className="mt-1 text-xs font-medium text-[#1e4080] dark:text-sky-300">
             {roleActionHint(rol, {
