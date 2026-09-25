@@ -36,6 +36,7 @@ import {
 } from "../../types";
 import { FichaDrawer } from "./FichaDrawer";
 import { Field, FormModal, inputClass } from "./FormModal";
+import { NoticeDialog } from "../../components/NoticeDialog";
 import { EquiposFrioAbmPanel } from "./EquiposFrioAbmPanel";
 import {
   MarcasModelosAbmPanel,
@@ -211,6 +212,38 @@ export function M5FichaPage() {
   const [userEmpresaId, setUserEmpresaId] = useState("");
   const [userRol, setUserRol] = useState<"" | Role>("");
   const [userAdvOpen, setUserAdvOpen] = useState(false);
+  const [notice, setNotice] = useState<{
+    title: string;
+    message?: string;
+    highlight?: string;
+    variant?: "info" | "success" | "danger" | "confirm";
+    confirmLabel?: string;
+    onConfirm?: () => void;
+  } | null>(null);
+
+  function showNotice(n: NonNullable<typeof notice>) {
+    setNotice(n);
+  }
+
+  function showErrorNotice(message: string) {
+    setNotice({
+      title: "No se pudo completar",
+      message,
+      variant: "danger",
+      confirmLabel: "Entendido",
+    });
+  }
+
+  function showPasswordNotice(password: string, title = "Contraseña temporal") {
+    setNotice({
+      title,
+      message:
+        "Copiala ahora: se muestra una sola vez. En el próximo ingreso el usuario deberá cambiarla.",
+      highlight: password,
+      variant: "success",
+      confirmLabel: "Listo",
+    });
+  }
 
   const modelosParaMarca = useMemo(() => {
     if (!fMarca) return [] as string[];
@@ -463,35 +496,38 @@ export function M5FichaPage() {
     id: string
   ) {
     if (!token || !canEdit) return;
-    if (
-      !confirm(
-        "¿Generar una contraseña temporal? Se mostrará una sola vez y el usuario deberá cambiarla en el próximo ingreso."
-      )
-    ) {
-      return;
-    }
-    const path =
-      kind === "usuario"
-        ? `/api/usuarios/${id}/password`
-        : kind === "empresa"
-          ? `/api/empresas/${id}/password`
-          : `/api/choferes/${id}/password`;
-    try {
-      const res = await apiFetch<{ credencialTemporal: string }>(
-        path,
-        { method: "POST", body: "{}" },
-        token
-      );
-      alert(
-        `Contraseña temporal (copiala ahora; se muestra una sola vez):\n\n${res.credencialTemporal}`
-      );
-    } catch (err) {
-      alert(
-        err instanceof ApiError
-          ? err.message
-          : "No se pudo generar la contraseña temporal"
-      );
-    }
+    showNotice({
+      title: "Generar contraseña temporal",
+      message:
+        "Se creará una contraseña nueva. Se mostrará una sola vez y el usuario deberá cambiarla en el próximo ingreso.",
+      variant: "confirm",
+      confirmLabel: "Generar",
+      onConfirm: () => {
+        setNotice(null);
+        void (async () => {
+          const path =
+            kind === "usuario"
+              ? `/api/usuarios/${id}/password`
+              : kind === "empresa"
+                ? `/api/empresas/${id}/password`
+                : `/api/choferes/${id}/password`;
+          try {
+            const res = await apiFetch<{ credencialTemporal: string }>(
+              path,
+              { method: "POST", body: "{}" },
+              token
+            );
+            showPasswordNotice(res.credencialTemporal);
+          } catch (err) {
+            showErrorNotice(
+              err instanceof ApiError
+                ? err.message
+                : "No se pudo generar la contraseña temporal"
+            );
+          }
+        })();
+      },
+    });
   }
 
   async function submitForm() {
@@ -555,19 +591,20 @@ export function M5FichaPage() {
             token
           );
           if (updated.credencialTemporal) {
-            alert(
-              `Contraseña actualizada (mostrala una sola vez): ${updated.credencialTemporal}`
-            );
+            showPasswordNotice(updated.credencialTemporal, "Contraseña actualizada");
           }
           setEmpresas((prev) =>
             prev.map((e) => (e.id === updated.id ? updated : e))
           );
         } else {
-          const created = await apiFetch<Empresa>(
+          const created = await apiFetch<Empresa & { credencialTemporal?: string }>(
             "/api/empresas",
             { method: "POST", body: JSON.stringify(body) },
             token
           );
+          if (created.credencialTemporal) {
+            showPasswordNotice(created.credencialTemporal, "Empresa creada");
+          }
           setEmpresas((prev) =>
             [...prev, created].sort((a, b) => a.nombre.localeCompare(b.nombre))
           );
@@ -732,8 +769,9 @@ export function M5FichaPage() {
             token
           );
           if (created.credencialTemporal) {
-            alert(
-              `Usuario creado. Contraseña temporal (se muestra una sola vez): ${created.credencialTemporal}`
+            showPasswordNotice(
+              created.credencialTemporal,
+              "Usuario creado"
             );
           }
           setUsuarios((prev) =>
@@ -2609,6 +2647,19 @@ export function M5FichaPage() {
             </>
           )}
         </FormModal>
+      )}
+
+      {notice && (
+        <NoticeDialog
+          open
+          title={notice.title}
+          message={notice.message}
+          highlight={notice.highlight}
+          variant={notice.variant ?? "info"}
+          confirmLabel={notice.confirmLabel}
+          onConfirm={notice.onConfirm}
+          onClose={() => setNotice(null)}
+        />
       )}
     </div>
   );
