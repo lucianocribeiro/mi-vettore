@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { apiFetch, ApiError } from "../../lib/api";
 import type { TipoServicio } from "../../types";
@@ -15,7 +15,7 @@ type EquipoFrio = {
   }[];
 };
 
-export function EquiposFrioAbmPanel() {
+export function EquiposFrioAbmPanel({ query = "" }: { query?: string }) {
   const { token } = useAuth();
   const [items, setItems] = useState<EquipoFrio[]>([]);
   const [tipos, setTipos] = useState<TipoServicio[]>([]);
@@ -114,6 +114,20 @@ export function EquiposFrioAbmPanel() {
     );
   }
 
+  const itemsFiltrados = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((item) => {
+      const hay = [
+        item.nombre,
+        ...item.tipos.map((t) => t.tipoServicio.nombre),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, query]);
+
   return (
     <div className="space-y-4">
       <div>
@@ -186,7 +200,7 @@ export function EquiposFrioAbmPanel() {
       </div>
 
       <div className="space-y-2">
-        {items.map((item) => (
+        {itemsFiltrados.map((item) => (
           <div
             key={item.id}
             className="flex flex-col gap-2 rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3 sm:flex-row sm:items-center sm:justify-between"

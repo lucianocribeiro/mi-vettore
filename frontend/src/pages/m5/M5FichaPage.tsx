@@ -129,7 +129,8 @@ export function M5FichaPage() {
   const [drawer, setDrawer] = useState<DrawerOpen>(null);
   const [unitFilters, setUnitFilters] =
     useState<FlotaUnitFilters>(EMPTY_FLOTA_FILTERS);
-  const [choferQuery, setChoferQuery] = useState("");
+  /** Buscador único del ABM (todas las pestañas). */
+  const [abmQuery, setAbmQuery] = useState("");
   const [choferEstadoFiltro, setChoferEstadoFiltro] = useState<
     "ACTIVO" | "INACTIVO" | "TODOS"
   >("ACTIVO");
@@ -355,6 +356,10 @@ export function M5FichaPage() {
     if (vistaUsuarios) setTab("usuarios");
     else if (tab === "usuarios") setTab("empresas");
   }, [vistaUsuarios]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setAbmQuery("");
+  }, [tab]);
 
   function openCreate(kind: NonNullable<typeof form>["kind"]) {
     setFormError(null);
@@ -1015,11 +1020,63 @@ export function M5FichaPage() {
       unitFilters.estado.length === 0
         ? list.filter((c) => c.estado !== "INACTIVA")
         : list;
-    return filterCamionetas(visibles, unitFilters);
-  }, [camionetas, unitFilters]);
+    return filterCamionetas(visibles, {
+      ...unitFilters,
+      query: abmQuery || unitFilters.query,
+    });
+  }, [camionetas, unitFilters, abmQuery]);
+
+  const empresasFiltradas = useMemo(() => {
+    const q = abmQuery.trim().toLowerCase();
+    const list = Array.isArray(empresas) ? empresas : [];
+    if (!q) return list;
+    return list.filter((e) => {
+      const choferesTxt = (e.choferes ?? [])
+        .map((c) => `${c.nombre} ${c.apellido ?? ""} ${c.dni}`)
+        .join(" ");
+      const hay = [e.nombre, e.cuit, e.contacto, choferesTxt]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [empresas, abmQuery]);
+
+  const tiposServicioFiltrados = useMemo(() => {
+    const q = abmQuery.trim().toLowerCase();
+    const list = Array.isArray(tiposServicio) ? tiposServicio : [];
+    if (!q) return list;
+    return list.filter((t) =>
+      [t.nombre, String(t.orden), t.activo ? "activo" : "inactivo"]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [tiposServicio, abmQuery]);
+
+  const talleresFiltrados = useMemo(() => {
+    const q = abmQuery.trim().toLowerCase();
+    const list = Array.isArray(talleres) ? talleres : [];
+    if (!q) return list;
+    return list.filter((t) => {
+      const hay = [
+        t.cuit,
+        t.razonSocial,
+        t.mail,
+        t.celular,
+        t.direccion,
+        (t.tipos ?? []).map((x) => x.tipo).join(" "),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [talleres, abmQuery]);
 
   const unidadesDeEmpresaAsig = useMemo(() => {
     if (!asigEmpresaId) return [] as Camioneta[];
+    const q = abmQuery.trim().toLowerCase();
     return (Array.isArray(camionetas) ? camionetas : [])
       .filter((c) => {
         if (c.estado === "INACTIVA" || c.estado === "FUERA_SERVICIO") return false;
@@ -1027,8 +1084,32 @@ export function M5FichaPage() {
         const a = currentAsignacion(c);
         return a?.empresaId === asigEmpresaId;
       })
+      .filter((c) => {
+        if (!q) return true;
+        const choferesTxt = currentAsignaciones(c)
+          .map((a) =>
+            [a?.chofer?.nombre, a?.chofer?.apellido, a?.chofer?.dni]
+              .filter(Boolean)
+              .join(" ")
+          )
+          .join(" ");
+        const hay = [c.patente, c.marca, c.modelo, choferesTxt]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      })
       .sort((a, b) => a.patente.localeCompare(b.patente));
-  }, [camionetas, asigEmpresaId]);
+  }, [camionetas, asigEmpresaId, abmQuery]);
+
+  const empresasParaAsig = useMemo(() => {
+    const q = abmQuery.trim().toLowerCase();
+    const list = Array.isArray(empresas) ? empresas : [];
+    if (!q || asigEmpresaId) return list;
+    return list.filter((e) =>
+      [e.nombre, e.cuit].filter(Boolean).join(" ").toLowerCase().includes(q)
+    );
+  }, [empresas, abmQuery, asigEmpresaId]);
 
   const empresaAsig = useMemo(
     () => empresas.find((e) => e.id === asigEmpresaId) ?? null,
@@ -1128,11 +1209,12 @@ export function M5FichaPage() {
     } else if (choferEstadoFiltro === "INACTIVO") {
       list = list.filter((c) => c.estado === "INACTIVO");
     }
-    const q = choferQuery.trim().toLowerCase();
+    const q = abmQuery.trim().toLowerCase();
     if (!q) return list;
     return list.filter((c) => {
       const hay = [
         c.nombre,
+        c.apellido,
         c.dni,
         c.cuil,
         c.email,
@@ -1144,7 +1226,7 @@ export function M5FichaPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [choferes, choferQuery, choferEstadoFiltro]);
+  }, [choferes, abmQuery, choferEstadoFiltro]);
 
   const usuariosFiltrados = useMemo(() => {
     const internos: Role[] = ["ADMINISTRADOR", "OPERACIONES", "SUGERENCIAS"];
@@ -1225,19 +1307,45 @@ export function M5FichaPage() {
       </div>
       )}
 
-      {(canEdit || tab === "camioneta") && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+      {(canEdit || tab === "camioneta" || !vistaUsuarios) && (
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           {canEdit && CREATE_KIND_BY_TAB[tab] && (
             <button
               type="button"
               onClick={() => openCreate(CREATE_KIND_BY_TAB[tab]!)}
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
             >
               <Plus size={14} />
               {tab === "camioneta"
                 ? "Nueva unidad"
                 : `Nuevo ${CREATE_LABEL_BY_TAB[tab]}`}
             </button>
+          )}
+          {!vistaUsuarios && (
+            <input
+              type="search"
+              value={abmQuery}
+              onChange={(e) => setAbmQuery(e.target.value)}
+              placeholder={
+                tab === "empresas"
+                  ? "Buscar empresa: nombre, CUIT…"
+                  : tab === "camioneta"
+                    ? "Buscar unidad: patente, empresa…"
+                    : tab === "chofer"
+                      ? "Buscar chofer: nombre, DNI, CUIL…"
+                      : tab === "asignacion"
+                        ? "Buscar patente, chofer o empresa…"
+                        : tab === "tiposServicio"
+                          ? "Buscar tipo de servicio…"
+                          : tab === "marcasModelos"
+                            ? "Buscar marca o modelo…"
+                            : tab === "equiposFrio"
+                              ? "Buscar equipo de frío…"
+                              : "Buscar…"
+              }
+              autoComplete="off"
+              className="min-h-11 w-full min-w-0 flex-1 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080] sm:max-w-md"
+            />
           )}
         </div>
       )}
@@ -1265,6 +1373,7 @@ export function M5FichaPage() {
             total={camionetas.length}
             shown={camionetasFiltradas.length}
             hideDetalleUnidad
+            hideQuery
             empresas={empresas.map((e) => ({ id: e.id, nombre: e.nombre }))}
             unidades={camionetas}
           />
@@ -1419,13 +1528,6 @@ export function M5FichaPage() {
                 </button>
               </div>
             )}
-            <input
-              type="search"
-              value={choferQuery}
-              onChange={(e) => setChoferQuery(e.target.value)}
-              placeholder="Buscar chofer por nombre, DNI, CUIL…"
-              className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
-            />
             <p className="text-[11px] text-[var(--vl-text-muted)]">
               Mostrando {choferesFiltrados.length}
               {choferEstadoFiltro === "TODOS"
@@ -1525,7 +1627,7 @@ export function M5FichaPage() {
               onChange={(e) => setAsigEmpresaId(e.target.value)}
             >
               <option value="">Elegí una empresa…</option>
-              {empresas.map((e) => (
+              {empresasParaAsig.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.nombre}
                 </option>
@@ -1652,7 +1754,7 @@ export function M5FichaPage() {
       {!loading && !error && tab === "empresas" && (
         <EntityTable
           headers={["Nombre", "CUIT", "Estado", "Choferes", ""]}
-          rows={empresas.map((e) => {
+          rows={empresasFiltradas.map((e) => {
             const wa = whatsappDigits(e.contacto);
             const choferesEmp = e.choferes ?? [];
             const activa = e.activo !== false;
@@ -1830,7 +1932,7 @@ export function M5FichaPage() {
       {!loading && !error && tab === "tiposServicio" && (
         <EntityTable
           headers={["Nombre", "Orden", "Estado", ""]}
-          rows={tiposServicio.map((t) => [
+          rows={tiposServicioFiltrados.map((t) => [
             t.nombre,
             String(t.orden),
             t.activo ? "Activo" : "Inactivo",
@@ -1855,16 +1957,18 @@ export function M5FichaPage() {
         />
       )}
 
-      {!loading && !error && tab === "equiposFrio" && <EquiposFrioAbmPanel />}
+      {!loading && !error && tab === "equiposFrio" && (
+        <EquiposFrioAbmPanel query={abmQuery} />
+      )}
 
       {!loading && !error && tab === "marcasModelos" && (
-        <MarcasModelosAbmPanel />
+        <MarcasModelosAbmPanel query={abmQuery} />
       )}
 
       {!loading && !error && tab === "talleres" && (
         <EntityTable
           headers={["CUIT", "Razón social", "Tipos", "Mail", "Celular", ""]}
-          rows={talleres.map((t) => [
+          rows={talleresFiltrados.map((t) => [
             t.cuit,
             t.razonSocial,
             (t.tipos ?? []).map((x) => x.tipo).join(", ") || "—",

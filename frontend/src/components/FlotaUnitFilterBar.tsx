@@ -121,6 +121,8 @@ type Props = {
   unidades?: Camioneta[];
   /** Muestra nombre de unidad + propietario en el selector (en lugar de solo patente). */
   labelUnidad?: boolean;
+  /** Oculta el campo de texto libre (cuando hay un buscador externo). */
+  hideQuery?: boolean;
 };
 
 export function FlotaUnitFilterBar({
@@ -131,6 +133,7 @@ export function FlotaUnitFilterBar({
   placeholder = "Buscar patente o empresa…",
   hideEstado,
   hideDetalleUnidad,
+  hideQuery,
   labelUnidad,
   empresas = [],
   unidades = [],
@@ -184,13 +187,15 @@ export function FlotaUnitFilterBar({
           ))}
         </select>
       </div>
-      <input
-        type="search"
-        value={value.query}
-        onChange={(e) => onChange({ ...value, query: e.target.value })}
-        placeholder={placeholder}
-        className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
-      />
+      {!hideQuery && (
+        <input
+          type="search"
+          value={value.query}
+          onChange={(e) => onChange({ ...value, query: e.target.value })}
+          placeholder={placeholder}
+          className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
+        />
+      )}
       {(!hideEstado || !hideDetalleUnidad) && (
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {!hideEstado && (

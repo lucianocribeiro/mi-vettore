@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { apiFetch, ApiError } from "../../lib/api";
 import { canWriteMaster } from "../../types";
@@ -18,7 +18,7 @@ export type MarcaCamionetaAbm = {
   modelos: ModeloCamionetaAbm[];
 };
 
-export function MarcasModelosAbmPanel() {
+export function MarcasModelosAbmPanel({ query = "" }: { query?: string }) {
   const { token, user } = useAuth();
   const canEdit = canWriteMaster(user?.rol);
   const [items, setItems] = useState<MarcaCamionetaAbm[]>([]);
@@ -134,6 +134,17 @@ export function MarcasModelosAbmPanel() {
     await load();
   }
 
+  const itemsFiltrados = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((item) => {
+      const hay = [item.nombre, ...item.modelos.map((m) => m.nombre)]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, query]);
+
   return (
     <div className="space-y-4">
       <div>
@@ -194,7 +205,7 @@ export function MarcasModelosAbmPanel() {
       )}
 
       <div className="space-y-2">
-        {items.map((item) => (
+        {itemsFiltrados.map((item) => (
           <div
             key={item.id}
             className="flex flex-col gap-2 rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3 sm:flex-row sm:items-center sm:justify-between"
