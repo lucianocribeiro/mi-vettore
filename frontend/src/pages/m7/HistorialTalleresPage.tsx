@@ -317,7 +317,7 @@ export function HistorialTalleresPage() {
               : "border border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
           }`}
         >
-          Por concepto (arbolito)
+          Por concepto
         </button>
       </div>
 
