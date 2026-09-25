@@ -15,6 +15,7 @@ import { M7TalleresPage } from "./pages/m7/M7TalleresPage";
 import { HistorialTalleresPage } from "./pages/m7/HistorialTalleresPage";
 import { DocumentacionPage } from "./pages/documentacion/DocumentacionPage";
 import { SugerenciasPage } from "./pages/SugerenciasPage";
+import { isInternalOps } from "./types";
 
 function RootEntry() {
   const { user, loading } = useAuth();
@@ -51,6 +52,15 @@ function SugerenciasOnlyGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Agenda / alertas / historial ops: solo roles internos Vettore. */
+function VettoreOpsGate({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (!isInternalOps(user?.rol)) {
+    return <Navigate to={user ? homePathForUser(user) : "/login"} replace />;
+  }
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -66,7 +76,9 @@ export default function App() {
               path="/m3"
               element={
                 <SugerenciasOnlyGate>
-                  <M3ComunicacionesPage />
+                  <VettoreOpsGate>
+                    <M3ComunicacionesPage />
+                  </VettoreOpsGate>
                 </SugerenciasOnlyGate>
               }
             />
@@ -74,7 +86,9 @@ export default function App() {
               path="/m4"
               element={
                 <SugerenciasOnlyGate>
-                  <M4AlertasPage />
+                  <VettoreOpsGate>
+                    <M4AlertasPage />
+                  </VettoreOpsGate>
                 </SugerenciasOnlyGate>
               }
             />
@@ -122,7 +136,9 @@ export default function App() {
               path="/historial-talleres"
               element={
                 <SugerenciasOnlyGate>
-                  <HistorialTalleresPage />
+                  <VettoreOpsGate>
+                    <HistorialTalleresPage />
+                  </VettoreOpsGate>
                 </SugerenciasOnlyGate>
               }
             />

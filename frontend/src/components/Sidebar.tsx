@@ -64,7 +64,6 @@ const NAV: NavItem[] = [
     roles: [
       "ADMINISTRADOR",
       "OPERACIONES",
-      "EMPRESA",
     ],
   },
   {
@@ -113,7 +112,6 @@ const NAV: NavItem[] = [
     roles: [
       "ADMINISTRADOR",
       "OPERACIONES",
-      "EMPRESA",
     ],
   },
   {
@@ -124,7 +122,6 @@ const NAV: NavItem[] = [
     roles: [
       "ADMINISTRADOR",
       "OPERACIONES",
-      "EMPRESA",
     ],
   },
 ];
@@ -148,6 +145,7 @@ export function Sidebar({ open, onClose }: Props) {
   const isDev = import.meta.env.DEV;
   const rol = user?.rol;
   const esAccesoEmpresa = user?.rol === "EMPRESA" || !!user?.esDuenoFlota;
+  const esChofer = user?.rol === "CHOFER" && !user?.esDuenoFlota;
   const items = NAV.filter((n) => {
     if (n.roles && !(rol && n.roles.includes(rol))) return false;
     if (rol === "CHOFER") {
@@ -189,13 +187,22 @@ export function Sidebar({ open, onClose }: Props) {
                 Empresa
               </span>
             )}
+            {esChofer && (
+              <span className="shrink-0 rounded bg-slate-600 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                Chofer
+              </span>
+            )}
           </div>
           <div className="truncate text-[10px] leading-tight text-[var(--vl-brand-sub)]">
             {user?.empresaNombre
               ? user.empresaNombre
               : esAccesoEmpresa
                 ? "Empresa de transporte"
-                : "Vettore Logística"}
+                : esChofer
+                  ? user?.nombre
+                    ? `Chofer · ${user.nombre}`
+                    : "Perfil chofer"
+                  : "Vettore Logística"}
           </div>
         </div>
         <button
