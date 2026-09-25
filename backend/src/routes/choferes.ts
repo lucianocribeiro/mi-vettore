@@ -1,9 +1,11 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { EstadoChofer } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendExcel } from "../lib/excel-export.js";
 import { ensureUsuarioForChofer } from "../lib/usuario-chofer.js";
+import { generateTempPassword } from "../lib/temp-password.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 import { parseDateOnly } from "../lib/date-only.js";
 import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
@@ -368,6 +370,56 @@ router.post("/:id/baja", ...write, async (req, res) => {
     res.json(item);
   } catch {
     res.status(404).json({ error: "Chofer no encontrado" });
+  }
+});
+
+/** Contraseña temporal del usuario vinculado al chofer (login DNI). */
+router.post("/:id/password", ...write, async (req, res) => {
+  try {
+    const chofer = await prisma.chofer.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!chofer) {
+      res.status(404).json({ error: "Chofer no encontrado" });
+      return;
+    }
+    let user = await prisma.usuario.findFirst({
+      where: { choferId: chofer.id },
+    });
+    if (!user) {
+      const created = await ensureUsuarioForChofer({
+        choferId: chofer.id,
+        email: chofer.email,
+        nombre: chofer.nombre,
+        dni: chofer.dni,
+        empresaId: chofer.empresaId,
+      });
+      if (created.tempPassword) {
+        res.json({ credencialTemporal: created.tempPassword });
+        return;
+      }
+      user = await prisma.usuario.findFirst({ where: { choferId: chofer.id } });
+    }
+    if (!user) {
+      res.status(400).json({
+        error: "El chofer no tiene usuario de acceso. Cargá DNI o email y guardá primero.",
+      });
+      return;
+    }
+    const password = String(req.body?.password ?? "") || generateTempPassword();
+    const hash = await bcrypt.hash(password, 10);
+    await prisma.usuario.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: hash,
+        debeCambiarPassword: true,
+        estado: "ACTIVO",
+      },
+    });
+    res.json({ credencialTemporal: password });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "No se pudo generar la contraseña temporal" });
   }
 });
 

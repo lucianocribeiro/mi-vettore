@@ -458,6 +458,42 @@ export function M5FichaPage() {
     setForm({ kind: "usuario", item });
   }
 
+  async function generarPasswordTemporal(
+    kind: "usuario" | "empresa" | "chofer",
+    id: string
+  ) {
+    if (!token || !canEdit) return;
+    if (
+      !confirm(
+        "¿Generar una contraseña temporal? Se mostrará una sola vez y el usuario deberá cambiarla en el próximo ingreso."
+      )
+    ) {
+      return;
+    }
+    const path =
+      kind === "usuario"
+        ? `/api/usuarios/${id}/password`
+        : kind === "empresa"
+          ? `/api/empresas/${id}/password`
+          : `/api/choferes/${id}/password`;
+    try {
+      const res = await apiFetch<{ credencialTemporal: string }>(
+        path,
+        { method: "POST", body: "{}" },
+        token
+      );
+      alert(
+        `Contraseña temporal (copiala ahora; se muestra una sola vez):\n\n${res.credencialTemporal}`
+      );
+    } catch (err) {
+      alert(
+        err instanceof ApiError
+          ? err.message
+          : "No se pudo generar la contraseña temporal"
+      );
+    }
+  }
+
   async function submitForm() {
     if (!token || !form) return;
     setFormError(null);
@@ -513,11 +549,16 @@ export function M5FichaPage() {
           password: fPasswordEmpresa || undefined,
         };
         if (form.item) {
-          const updated = await apiFetch<Empresa>(
+          const updated = await apiFetch<Empresa & { credencialTemporal?: string }>(
             `/api/empresas/${form.item.id}`,
             { method: "PUT", body: JSON.stringify(body) },
             token
           );
+          if (updated.credencialTemporal) {
+            alert(
+              `Contraseña actualizada (mostrala una sola vez): ${updated.credencialTemporal}`
+            );
+          }
           setEmpresas((prev) =>
             prev.map((e) => (e.id === updated.id ? updated : e))
           );
@@ -1941,6 +1982,26 @@ export function M5FichaPage() {
                     ))}
                 </select>
               </Field>
+              {form.item && (
+                <div className="rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-3">
+                  <p className="text-xs font-medium text-[var(--vl-heading)]">
+                    Acceso a la app (DNI)
+                  </p>
+                  <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                    Generá una contraseña temporal; el chofer la cambia en el
+                    primer ingreso.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void generarPasswordTemporal("chofer", form.item!.id)
+                    }
+                    className="mt-2 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold text-[var(--vl-heading)] hover:bg-[var(--vl-card)]"
+                  >
+                    Generar contraseña temporal
+                  </button>
+                </div>
+              )}
             </>
           )}
 
@@ -1959,10 +2020,33 @@ export function M5FichaPage() {
                   type="password"
                   className={inputClass}
                   value={fPasswordEmpresa}
-                  placeholder={form.item ? "Vacío = no cambiar" : "Vacío = generar temporal"}
+                  placeholder={
+                    form.item
+                      ? "Opcional: escribir una nueva"
+                      : "Vacío = generar temporal"
+                  }
                   onChange={(e) => setFPasswordEmpresa(e.target.value)}
                 />
               </Field>
+              {form.item && (
+                <div className="rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-3">
+                  <p className="text-xs font-medium text-[var(--vl-heading)]">
+                    Contraseña temporal
+                  </p>
+                  <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                    Generá una nueva; la empresa deberá cambiarla al ingresar.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void generarPasswordTemporal("empresa", form.item!.id)
+                    }
+                    className="mt-2 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold text-[var(--vl-heading)] hover:bg-[var(--vl-card)]"
+                  >
+                    Generar contraseña temporal
+                  </button>
+                </div>
+              )}
             </>
           )}
 
@@ -2463,7 +2547,7 @@ export function M5FichaPage() {
               <Field
                 label={
                   form.item
-                    ? "Password (dejar vacío para no cambiar)"
+                    ? "Password (opcional: escribir una nueva)"
                     : "Password"
                 }
               >
@@ -2475,6 +2559,26 @@ export function M5FichaPage() {
                   placeholder={form.item ? "" : "Vacío = generar temporal"}
                 />
               </Field>
+              {form.item && (
+                <div className="rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-3">
+                  <p className="text-xs font-medium text-[var(--vl-heading)]">
+                    Contraseña temporal
+                  </p>
+                  <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                    Disponible para todos los roles. El usuario la cambia en el
+                    próximo ingreso.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void generarPasswordTemporal("usuario", form.item!.id)
+                    }
+                    className="mt-2 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold text-[var(--vl-heading)] hover:bg-[var(--vl-card)]"
+                  >
+                    Generar contraseña temporal
+                  </button>
+                </div>
+              )}
               <Field label="Rol">
                 <select
                   className={inputClass}

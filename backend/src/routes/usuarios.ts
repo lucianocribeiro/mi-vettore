@@ -241,6 +241,7 @@ router.put("/:id", ...write, async (req, res) => {
     }
     if (req.body?.password) {
       data.passwordHash = await bcrypt.hash(String(req.body.password), 10);
+      data.debeCambiarPassword = true;
     }
     if (req.body?.rol !== undefined) {
       const r = String(req.body.rol).toUpperCase();
@@ -324,6 +325,33 @@ router.delete("/:id", ...write, async (req, res) => {
     res.status(204).send();
   } catch {
     res.status(404).json({ error: "Usuario no encontrado" });
+  }
+});
+
+/** Genera contraseña temporal y obliga a cambiarla en el próximo ingreso (cualquier rol). */
+router.post("/:id/password", ...write, async (req, res) => {
+  try {
+    const existing = await prisma.usuario.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!existing) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+    const password = String(req.body?.password ?? "") || generateTempPassword();
+    const hash = await bcrypt.hash(password, 10);
+    await prisma.usuario.update({
+      where: { id: existing.id },
+      data: {
+        passwordHash: hash,
+        debeCambiarPassword: true,
+        estado: "ACTIVO",
+      },
+    });
+    res.json({ credencialTemporal: password });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "No se pudo generar la contraseña temporal" });
   }
 });
 

@@ -190,6 +190,20 @@ router.put("/:id", ...write, async (req, res) => {
       where: { id: req.params.id },
       data,
     });
+    if (req.body?.password) {
+      const password = String(req.body.password) || generateTempPassword();
+      const hash = await bcrypt.hash(password, 10);
+      await prisma.usuario.updateMany({
+        where: { empresaId: item.id, rol: Role.EMPRESA },
+        data: {
+          passwordHash: hash,
+          debeCambiarPassword: true,
+          estado: "ACTIVO",
+        },
+      });
+      res.json({ ...item, credencialTemporal: password });
+      return;
+    }
     res.json(item);
   } catch (err: unknown) {
     if (
