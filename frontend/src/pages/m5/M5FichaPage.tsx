@@ -234,11 +234,16 @@ export function M5FichaPage() {
     });
   }
 
-  function showPasswordNotice(password: string, title = "Contraseña temporal") {
+  function showPasswordNotice(
+    password: string,
+    title = "Contraseña temporal",
+    loginHint?: string
+  ) {
     setNotice({
       title,
-      message:
-        "Copiala ahora: se muestra una sola vez. En el próximo ingreso el usuario deberá cambiarla.",
+      message: loginHint
+        ? `${loginHint} Copiala ahora: se muestra una sola vez. En el próximo ingreso deberá cambiarla.`
+        : "Copiala ahora: se muestra una sola vez. En el próximo ingreso el usuario deberá cambiarla.",
       highlight: password,
       variant: "success",
       confirmLabel: "Listo",
@@ -517,7 +522,13 @@ export function M5FichaPage() {
               { method: "POST", body: "{}" },
               token
             );
-            showPasswordNotice(res.credencialTemporal);
+            const hint =
+              kind === "chofer"
+                ? "Acceso con DNI."
+                : kind === "empresa"
+                  ? "Acceso con CUIT."
+                  : undefined;
+            showPasswordNotice(res.credencialTemporal, "Contraseña temporal", hint);
           } catch (err) {
             showErrorNotice(
               err instanceof ApiError
@@ -567,7 +578,9 @@ export function M5FichaPage() {
             setDrawer({ tipo: "chofer", item: updated });
           }
         } else {
-          const created = await apiFetch<Chofer>(
+          const created = await apiFetch<
+            Chofer & { credencialTemporal?: string | null }
+          >(
             "/api/choferes",
             { method: "POST", body: JSON.stringify(body) },
             token
@@ -575,6 +588,14 @@ export function M5FichaPage() {
           setChoferes((prev) =>
             [...prev, created].sort((a, b) => a.nombre.localeCompare(b.nombre))
           );
+          if (created.credencialTemporal) {
+            const dni = String(created.dni || fDni).replace(/\D/g, "");
+            showPasswordNotice(
+              created.credencialTemporal,
+              "Chofer creado",
+              `Acceso con DNI ${dni}.`
+            );
+          }
         }
       }
 
@@ -591,7 +612,12 @@ export function M5FichaPage() {
             token
           );
           if (updated.credencialTemporal) {
-            showPasswordNotice(updated.credencialTemporal, "Contraseña actualizada");
+            const cuit = String(updated.cuit || fCuit).replace(/\D/g, "");
+            showPasswordNotice(
+              updated.credencialTemporal,
+              "Contraseña actualizada",
+              `Acceso con CUIT ${cuit}.`
+            );
           }
           setEmpresas((prev) =>
             prev.map((e) => (e.id === updated.id ? updated : e))
@@ -603,7 +629,12 @@ export function M5FichaPage() {
             token
           );
           if (created.credencialTemporal) {
-            showPasswordNotice(created.credencialTemporal, "Empresa creada");
+            const cuit = String(created.cuit || fCuit).replace(/\D/g, "");
+            showPasswordNotice(
+              created.credencialTemporal,
+              "Empresa creada",
+              `Acceso con CUIT ${cuit}.`
+            );
           }
           setEmpresas((prev) =>
             [...prev, created].sort((a, b) => a.nombre.localeCompare(b.nombre))
@@ -2020,6 +2051,13 @@ export function M5FichaPage() {
                     ))}
                 </select>
               </Field>
+              {!form.item && (
+                <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+                  Al guardar se genera una contraseña temporal. El chofer entra
+                  con el <strong>DNI</strong> y esa clave (la cambia en el
+                  primer ingreso).
+                </p>
+              )}
               {form.item && (
                 <div className="rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-3">
                   <p className="text-xs font-medium text-[var(--vl-heading)]">
@@ -2053,6 +2091,13 @@ export function M5FichaPage() {
                   required
                 />
               </Field>
+              {!form.item && (
+                <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+                  Al guardar se genera una contraseña temporal. La empresa entra
+                  con el <strong>CUIT</strong> y esa clave (la cambia en el
+                  primer ingreso).
+                </p>
+              )}
               <Field label="Contraseña de acceso (CUIT)">
                 <input
                   type="password"

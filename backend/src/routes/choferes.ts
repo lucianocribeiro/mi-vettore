@@ -248,7 +248,25 @@ router.post("/", ...write, async (req, res) => {
       dni: item.dni,
       empresaId: item.empresaId,
     });
-    res.status(201).json({ ...item, credencialTemporal: access.tempPassword ?? null });
+    let credencialTemporal = access.tempPassword ?? null;
+    // Alta siempre entrega una temporal (DNI + esta clave) aunque el usuario ya existiera.
+    if (!credencialTemporal) {
+      const user = await prisma.usuario.findFirst({ where: { choferId: item.id } });
+      if (user) {
+        credencialTemporal = generateTempPassword();
+        await prisma.usuario.update({
+          where: { id: user.id },
+          data: {
+            passwordHash: await bcrypt.hash(credencialTemporal, 10),
+            debeCambiarPassword: true,
+            dni: item.dni,
+            loginIdentificador: item.dni,
+            estado: "ACTIVO",
+          },
+        });
+      }
+    }
+    res.status(201).json({ ...item, credencialTemporal });
   } catch (err: unknown) {
     if (
       typeof err === "object" &&
