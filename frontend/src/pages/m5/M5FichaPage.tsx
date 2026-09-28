@@ -776,10 +776,6 @@ export function M5FichaPage() {
           telefono: fTelefono.trim() || null,
         };
         if (fPassword) body.password = fPassword;
-        if (!form.item && !fChoferEmpresaId && (fRol === "EMPRESA" || fRol === "CHOFER")) {
-          setFormError("Elegí la empresa del usuario");
-          return;
-        }
         if (form.item) {
           const updated = await apiFetch<User>(
             `/api/usuarios/${form.item.id}`,
@@ -2690,22 +2686,6 @@ export function M5FichaPage() {
                   onChange={(e) => setFDni(e.target.value)}
                   required
                 />
-              </Field>
-              <Field label="Empresa">
-                <select
-                  className={inputClass}
-                  value={fChoferEmpresaId}
-                  onChange={(e) => setFChoferEmpresaId(e.target.value)}
-                >
-                  <option value="">Opcional (solo si aplica)</option>
-                  {empresas
-                    .filter((e) => e.activo !== false)
-                    .map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.nombre} · {e.cuit || "sin CUIT"}
-                      </option>
-                    ))}
-                </select>
               </Field>
               <Field label="Teléfono / WhatsApp">
                 <input

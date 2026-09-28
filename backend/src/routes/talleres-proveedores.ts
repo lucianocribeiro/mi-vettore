@@ -89,6 +89,13 @@ function parsePagoBody(body: unknown): {
       return { ok: false, error: "Monto a pagar inválido" };
     }
     montoPagado = n;
+    const sumMetodos = (montoTransferencia ?? 0) + (montoCheque ?? 0);
+    if (sumMetodos > n + 0.009) {
+      return {
+        ok: false,
+        error: "La suma de métodos de pago supera el monto a pagar",
+      };
+    }
   } else {
     const sum = (montoTransferencia ?? 0) + (montoCheque ?? 0);
     if (sum > 0) montoPagado = sum;

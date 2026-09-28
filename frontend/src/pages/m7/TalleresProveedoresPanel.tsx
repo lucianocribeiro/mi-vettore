@@ -141,6 +141,8 @@ export function TalleresProveedoresPanel({
   const [pagoFecha, setPagoFecha] = useState(() =>
     new Date().toISOString().slice(0, 10)
   );
+  /** Monto a pagar ahora (≤ total adeudado). Menor al total = pago parcial. */
+  const [pagoMonto, setPagoMonto] = useState("");
   const [pagoLineas, setPagoLineas] = useState<PagoLinea[]>(() => [
     nuevaPagoLinea(),
   ]);
@@ -218,8 +220,9 @@ export function TalleresProveedoresPanel({
     }
   }
 
-  function resetPagoForm() {
+  function resetPagoForm(totalAdeudado: number) {
     setPagoFecha(new Date().toISOString().slice(0, 10));
+    setPagoMonto(String(totalAdeudado));
     setPagoLineas([nuevaPagoLinea()]);
     setPagoObs("");
     setPagoError(null);
@@ -234,12 +237,18 @@ export function TalleresProveedoresPanel({
         .reduce((a, m) => a + m.montoFacturado, 0)
     );
     setPagoModal({ tallerId, movIds, totalAdeudado });
-    resetPagoForm();
+    resetPagoForm(totalAdeudado);
   }
 
-  function montoObjetivoPago(): number {
+  function montoObjetivoPago(raw: string = pagoMonto): number {
     if (!pagoModal) return 0;
-    return roundMoney(pagoModal.totalAdeudado);
+    return roundMoney(parseMontoLinea(raw));
+  }
+
+  function cambiarMontoPago(raw: string) {
+    setPagoMonto(raw);
+    setPagoError(null);
+    setPagoLineas([nuevaPagoLinea()]);
   }
 
   function sumLineas(lineas: PagoLinea[] = pagoLineas): number {
@@ -390,7 +399,13 @@ export function TalleresProveedoresPanel({
     }
     const objetivo = montoObjetivoPago();
     if (objetivo <= 0) {
-      setPagoError("No hay monto a pagar");
+      setPagoError("Indicá el monto a pagar");
+      return;
+    }
+    if (objetivo > pagoModal.totalAdeudado + 0.009) {
+      setPagoError(
+        `El monto a pagar no puede superar el total adeudado (${money(pagoModal.totalAdeudado)})`
+      );
       return;
     }
     const sumaMetodos = sumLineas();
@@ -401,7 +416,7 @@ export function TalleresProveedoresPanel({
     }
     if (Math.abs(sumaMetodos - objetivo) > 0.009) {
       setPagoError(
-        `La suma de métodos (${money(sumaMetodos)}) debe ser igual al total de ítems (${money(objetivo)})`
+        `La suma de métodos (${money(sumaMetodos)}) debe ser igual al monto a pagar (${money(objetivo)})`
       );
       return;
     }
@@ -475,6 +490,13 @@ export function TalleresProveedoresPanel({
   const pagoObjetivo = pagoModal ? montoObjetivoPago() : 0;
   const pagoSumaMetodos = sumLineas();
   const pagoFalta = roundMoney(pagoObjetivo - pagoSumaMetodos);
+  const pagoExcede =
+    !!pagoModal && pagoObjetivo > pagoModal.totalAdeudado + 0.009;
+  const pagoSaldoRestante = pagoModal
+    ? roundMoney(pagoModal.totalAdeudado - pagoObjetivo)
+    : 0;
+  const pagoCerrado =
+    pagoObjetivo > 0 && !pagoExcede && Math.abs(pagoFalta) <= 0.009;
 
   return (
     <div>
@@ -904,16 +926,37 @@ export function TalleresProveedoresPanel({
               {pagoModal.movIds.length === 1
                 ? `1 ítem seleccionado`
                 : `${pagoModal.movIds.length} ítems seleccionados`}
-              . La suma de métodos debe cubrir ese total.
+              . La suma de métodos debe cerrar exacto con el monto a pagar.
             </p>
             <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2">
               <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--vl-text-muted)]">
-                Monto a pagar (ítems seleccionados)
+                Total adeudado (ítems seleccionados)
               </p>
               <p className="text-lg font-bold text-[var(--vl-heading)]">
                 {money(pagoModal.totalAdeudado)}
               </p>
             </div>
+            <label className="mb-3 block text-xs">
+              Monto a pagar
+              <input
+                type="number"
+                min={0}
+                max={pagoModal.totalAdeudado}
+                step="0.01"
+                className={input}
+                value={pagoMonto}
+                onChange={(e) => cambiarMontoPago(e.target.value)}
+              />
+              {pagoExcede ? (
+                <span className="mt-1 block text-[11px] text-red-600">
+                  No puede superar el total adeudado.
+                </span>
+              ) : pagoObjetivo > 0 && pagoSaldoRestante > 0.009 ? (
+                <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-400">
+                  Pago parcial: quedan pendientes {money(pagoSaldoRestante)}.
+                </span>
+              ) : null}
+            </label>
             <label className="block text-xs">
               Fecha
               <input
@@ -940,8 +983,8 @@ export function TalleresProveedoresPanel({
                 </p>
               </div>
               <p className="text-[10px] text-[var(--vl-text-muted)]">
-                Si un método no alcanza el total, se agrega otro con el resto
-                automáticamente.
+                Si un método no alcanza el monto a pagar, se agrega otro con el
+                resto automáticamente.
               </p>
               {pagoLineas.map((linea, idx) => (
                 <div
@@ -1017,11 +1060,15 @@ export function TalleresProveedoresPanel({
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                disabled={pagoSaving}
+                disabled={pagoSaving || !pagoCerrado}
                 onClick={() => void confirmarPago()}
                 className="flex-1 rounded-md bg-emerald-600 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {pagoSaving ? "Guardando…" : "Confirmar"}
+                {pagoSaving
+                  ? "Guardando…"
+                  : pagoSaldoRestante > 0.009
+                    ? "Confirmar pago parcial"
+                    : "Confirmar"}
               </button>
               <button
                 type="button"
