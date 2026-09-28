@@ -255,56 +255,34 @@ export function TalleresProveedoresPanel({
     return roundMoney(lineas.reduce((a, l) => a + parseMontoLinea(l.monto), 0));
   }
 
-  /** Si un método no cubre el total de ítems, agrega otro con el resto. */
-  function syncPagoLineas(next: PagoLinea[], objetivo: number) {
-    let lines = next.length ? [...next] : [nuevaPagoLinea()];
-
-    while (
-      lines.length > 1 &&
-      parseMontoLinea(lines[lines.length - 1].monto) <= 0 &&
-      !lines[lines.length - 1].detalle.trim()
-    ) {
-      lines.pop();
-    }
-
-    let sum = sumLineas(lines);
-    let falta = roundMoney(objetivo - sum);
-
-    if (falta < -0.009 && lines.length >= 2) {
-      const withoutLast = lines.slice(0, -1);
-      const sumPrev = sumLineas(withoutLast);
-      const resto = roundMoney(objetivo - sumPrev);
-      if (resto > 0.009) {
-        lines = [
-          ...withoutLast,
-          { ...lines[lines.length - 1], monto: String(resto) },
-        ];
-      } else {
-        lines = withoutLast;
-      }
-      sum = sumLineas(lines);
-      falta = roundMoney(objetivo - sum);
-    }
-
-    if (falta > 0.009) {
-      const last = lines[lines.length - 1];
-      const lastMonto = parseMontoLinea(last.monto);
-      if (lastMonto > 0 || last.detalle.trim()) {
-        lines.push(nuevaPagoLinea({ monto: String(falta) }));
-      } else if (lines.length > 1) {
-        lines[lines.length - 1] = { ...last, monto: String(falta) };
-      }
-    }
-
-    setPagoLineas(lines.length ? lines : [nuevaPagoLinea()]);
+  function updatePagoLinea(key: string, patch: Partial<PagoLinea>) {
+    setPagoLineas((prev) =>
+      prev.map((l) => (l.key === key ? { ...l, ...patch } : l))
+    );
   }
 
-  function updatePagoLinea(key: string, patch: Partial<PagoLinea>) {
+  /**
+   * Al terminar de cargar el monto de un método: los métodos siguientes se
+   * reemplazan por uno solo con el resto (si queda algo por cubrir).
+   */
+  function cerrarRestoDesde(key: string) {
     const objetivo = montoObjetivoPago();
-    const next = pagoLineas.map((l) =>
-      l.key === key ? { ...l, ...patch } : l
-    );
-    syncPagoLineas(next, objetivo);
+    setPagoLineas((prev) => {
+      const idx = prev.findIndex((l) => l.key === key);
+      if (idx < 0) return prev;
+      const hasta = prev.slice(0, idx + 1);
+      const resto = roundMoney(objetivo - sumLineas(hasta));
+      if (resto > 0.009) {
+        const siguiente = prev[idx + 1];
+        return [
+          ...hasta,
+          siguiente
+            ? { ...siguiente, monto: String(resto) }
+            : nuevaPagoLinea({ monto: String(resto) }),
+        ];
+      }
+      return hasta;
+    });
   }
 
   function toggleMov(tallerId: string, movId: string) {
@@ -983,8 +961,8 @@ export function TalleresProveedoresPanel({
                 </p>
               </div>
               <p className="text-[10px] text-[var(--vl-text-muted)]">
-                Si un método no alcanza el monto a pagar, se agrega otro con el
-                resto automáticamente.
+                Al terminar de cargar un monto, si no alcanza se agrega un
+                método nuevo con el resto.
               </p>
               {pagoLineas.map((linea, idx) => (
                 <div
@@ -1021,6 +999,13 @@ export function TalleresProveedoresPanel({
                       onChange={(e) =>
                         updatePagoLinea(linea.key, { monto: e.target.value })
                       }
+                      onBlur={() => cerrarRestoDesde(linea.key)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          cerrarRestoDesde(linea.key);
+                        }
+                      }}
                       placeholder="0"
                     />
                   </label>
