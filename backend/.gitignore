@@ -6,3 +6,4 @@ prisma/data/accesos-generados.json
 .env
 *.log
 uploads/
+backups/

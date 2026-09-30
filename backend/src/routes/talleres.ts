@@ -409,9 +409,12 @@ async function maxNumeroConPrefijo(prefijo: string): Promise<number> {
   return max;
 }
 
+/** Hasta OT-0201 ya se emitieron números antes del borrado del historial (sep 2026): no reutilizar. */
+const ULTIMO_NUMERO_OT_EMITIDO = 201;
+
 /** Correlativo por máximo existente (no por cantidad): los números borrados no se reutilizan. */
 async function nextNumeroOT(): Promise<string> {
-  const n = Math.max(140, await maxNumeroConPrefijo("OT-")) + 1;
+  const n = Math.max(ULTIMO_NUMERO_OT_EMITIDO, await maxNumeroConPrefijo("OT-")) + 1;
   return `OT-${String(n).padStart(4, "0")}`;
 }
 
