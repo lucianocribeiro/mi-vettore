@@ -156,6 +156,7 @@ export function M6MantenimientoPage() {
         creadas: number;
         actualizadas?: number;
         omitidas: number;
+        semaforoActualizadas?: number;
         errores?: string[];
       }>("/api/camionetas/mantenimiento/import", { method: "POST", body: fd }, token);
       setMantMsg(
@@ -165,9 +166,13 @@ export function M6MantenimientoPage() {
           (data.creadas && importModoMant === "actualizar"
             ? ` · nuevas ${data.creadas}`
             : "") +
+          (data.semaforoActualizadas
+            ? ` · semáforo actualizado en ${data.semaforoActualizadas} unidades`
+            : "") +
           (data.omitidas ? ` · omitidas ${data.omitidas}` : "") +
           (data.errores?.length ? ` · ${data.errores[0]}` : "")
       );
+      void load();
     } catch (err) {
       setMantMsg(err instanceof ApiError ? err.message : "No se pudo importar");
     } finally {

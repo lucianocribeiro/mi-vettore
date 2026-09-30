@@ -15,6 +15,7 @@ import {
 } from "../../components/FlotaUnitFilterBar";
 import { Download, Plus } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
+import { FlotaImportPanel } from "./FlotaImportPanel";
 import {
   EQUIPO_FRIO_MARCAS,
   ROLE_LABELS,
@@ -1272,15 +1273,20 @@ export function M5FichaPage() {
           </p>
         </div>
         {isInternalOps(user?.rol) && (
-          <button
-            type="button"
-            onClick={() => void exportarExcel()}
-            disabled={exportando}
-            className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm font-medium text-[var(--vl-text)] hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
-          >
-            <Download size={14} />
-            {exportando ? "Exportando…" : "Exportar Excel"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {canEdit && !vistaUsuarios && (
+              <FlotaImportPanel onImported={() => void load()} />
+            )}
+            <button
+              type="button"
+              onClick={() => void exportarExcel()}
+              disabled={exportando}
+              className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm font-medium text-[var(--vl-text)] hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
+            >
+              <Download size={14} />
+              {exportando ? "Exportando…" : "Exportar Excel"}
+            </button>
+          </div>
         )}
       </div>
 

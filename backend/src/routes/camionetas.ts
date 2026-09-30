@@ -165,7 +165,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       { header: "Marca", key: "marca", width: 14 },
       { header: "Modelo", key: "modelo", width: 14 },
       { header: "Capacidad", key: "capacidad", width: 18 },
-      { header: "Equipo de frÃ­o", key: "equipoFrio", width: 18 },
+      { header: "Equipo de frío", key: "equipoFrio", width: 18 },
       { header: "Tipo servicio", key: "tipoServicio", width: 16 },
       { header: "Estado", key: "estado", width: 16 },
       { header: "Km", key: "km", width: 10 },
@@ -222,7 +222,34 @@ const MANT_HEADERS = [
   { header: "Taller", key: "taller", width: 24 },
 ] as const;
 
-/** Plantilla vacÃ­a para carga histÃ³rica de mantenimiento (reimportable). */
+type CampoFechaMant =
+  | "fechaUltimoAceite"
+  | "fechaCambioCorrea"
+  | "fechaCambioNeumaticos"
+  | "fechaCambioBateria";
+
+/** Normaliza el Tipo de la planilla y dice qué fecha del semáforo actualiza. */
+function tipoMantenimiento(raw: string): { tipo: string; campo: CampoFechaMant | null } {
+  const t = raw
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (!t) return { tipo: "REPARACION", campo: null };
+  if (t.includes("aceite") || t.includes("service") || t.includes("lubric")) {
+    return { tipo: "ACEITE", campo: "fechaUltimoAceite" };
+  }
+  if (t.includes("correa") || t.includes("distribuci") || t.includes("poli v")) {
+    return { tipo: "CORREA", campo: "fechaCambioCorrea" };
+  }
+  if (t.includes("neum") || t.includes("cubierta")) {
+    return { tipo: "NEUMATICOS", campo: "fechaCambioNeumaticos" };
+  }
+  if (t.includes("bater")) return { tipo: "BATERIA", campo: "fechaCambioBateria" };
+  return { tipo: raw.trim().toUpperCase(), campo: null };
+}
+
+/** Plantilla vacía para carga histórica de mantenimiento (reimportable). */
 router.get("/mantenimiento/plantilla", authenticate, async (req: AuthedRequest, res) => {
   try {
     if (!isInternalOpsRole(req.user!.rol)) {
@@ -241,6 +268,20 @@ router.get("/mantenimiento/plantilla", authenticate, async (req: AuthedRequest, 
       detalle: "Cambio de aceite ejemplo",
       taller: "Taller ejemplo",
     });
+    sheet.getRow(2).font = { italic: true, color: { argb: "FF888888" } };
+    const ayuda = workbook.addWorksheet("Instrucciones");
+    ayuda.getColumn(1).width = 110;
+    [
+      "Obligatorias: Patente y Fecha (AAAA-MM-DD). Km, Tipo, Detalle y Taller son opcionales.",
+      "La fila de ejemplo (patente AA000AA) se ignora al importar.",
+      "Tipo — estos valores actualizan la fecha del semáforo de la unidad:",
+      "   ACEITE (service / cambio de aceite)",
+      "   CORREA (distribución / correa)",
+      "   NEUMATICOS (cubiertas)",
+      "   BATERIA",
+      "Cualquier otro texto (ej. REPARACION, FRENOS) queda solo como registro en el historial.",
+      "La fecha del semáforo solo se actualiza si la de la planilla es más nueva que la cargada.",
+    ].forEach((t) => ayuda.addRow([t]));
     const filename = "plantilla_mantenimiento_historico.xlsx";
     res.setHeader(
       "Content-Type",
@@ -307,7 +348,7 @@ router.post(
         return;
       }
       if (!req.file?.buffer) {
-        res.status(400).json({ error: "SubÃ­ un archivo Excel (.xlsx)" });
+        res.status(400).json({ error: "Subí un archivo Excel (.xlsx)" });
         return;
       }
       const modoRaw = String(req.body?.modo ?? req.query?.modo ?? "nuevos")
@@ -346,9 +387,9 @@ router.post(
       };
       const cPatente = col("patente", "unidad");
       const cFecha = col("fecha", "fecha evento", "fechaevento");
-      const cKm = col("km", "kilometros", "kilÃ³metros");
+      const cKm = col("km", "kilometros", "kilómetros");
       const cTipo = col("tipo");
-      const cDetalle = col("detalle", "descripcion", "descripciÃ³n");
+      const cDetalle = col("detalle", "descripcion", "descripción");
       const cTaller = col("taller");
       if (!cPatente || !cFecha) {
         res.status(400).json({
@@ -361,6 +402,8 @@ router.post(
       let actualizadas = 0;
       let omitidas = 0;
       const errores: string[] = [];
+      /** camionetaId → campo → fecha más nueva de la planilla. */
+      const fechasSemaforo = new Map<string, Partial<Record<CampoFechaMant, Date>>>();
       for (let r = 2; r <= sheet.rowCount; r++) {
         const row = sheet.getRow(r);
         const patente = String(row.getCell(cPatente).value ?? "")
@@ -383,7 +426,7 @@ router.post(
         }
         if (!fecha) {
           omitidas++;
-          errores.push(`Fila ${r}: fecha invÃ¡lida`);
+          errores.push(`Fila ${r}: fecha inválida`);
           continue;
         }
         const camioneta = await prisma.camioneta.findFirst({
@@ -395,9 +438,14 @@ router.post(
           continue;
         }
         const kmRaw = cKm ? Number(row.getCell(cKm).value) : NaN;
-        const tipo = cTipo
-          ? String(row.getCell(cTipo).value ?? "").trim() || "REPARACION"
-          : "REPARACION";
+        const { tipo, campo } = tipoMantenimiento(
+          cTipo ? String(row.getCell(cTipo).value ?? "") : ""
+        );
+        if (campo) {
+          const prev = fechasSemaforo.get(camioneta.id) ?? {};
+          if (!prev[campo] || fecha > prev[campo]!) prev[campo] = fecha;
+          fechasSemaforo.set(camioneta.id, prev);
+        }
         const detalle = cDetalle
           ? String(row.getCell(cDetalle).value ?? "").trim() || null
           : null;
@@ -448,10 +496,35 @@ router.post(
         });
         creadas++;
       }
+
+      let semaforoActualizadas = 0;
+      for (const [camionetaId, fechas] of fechasSemaforo) {
+        const cam = await prisma.camioneta.findUnique({
+          where: { id: camionetaId },
+          select: {
+            fechaUltimoAceite: true,
+            fechaCambioCorrea: true,
+            fechaCambioNeumaticos: true,
+            fechaCambioBateria: true,
+          },
+        });
+        if (!cam) continue;
+        const data: Partial<Record<CampoFechaMant, Date>> = {};
+        for (const [campo, fecha] of Object.entries(fechas) as [CampoFechaMant, Date][]) {
+          const actual = cam[campo];
+          if (!actual || fecha > actual) data[campo] = fecha;
+        }
+        if (Object.keys(data).length) {
+          await prisma.camioneta.update({ where: { id: camionetaId }, data });
+          semaforoActualizadas++;
+        }
+      }
+
       res.json({
         creadas,
         actualizadas,
         omitidas,
+        semaforoActualizadas,
         modo: modoActualizar ? "actualizar" : "nuevos",
         errores: errores.slice(0, 10),
       });
@@ -498,7 +571,7 @@ router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
         { header: "Km anterior", key: "kmAnterior", width: 12 },
         { header: "Km nuevo", key: "kmNuevo", width: 12 },
         { header: "Delta", key: "delta", width: 10 },
-        { header: "AnomalÃ­a", key: "anomalia", width: 10 },
+        { header: "Anomalía", key: "anomalia", width: 10 },
       ];
       sheet.getRow(1).font = { bold: true };
       for (const r of rows) {
@@ -508,7 +581,7 @@ router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
           kmAnterior: r.kmAnterior,
           kmNuevo: r.kmNuevo,
           delta: r.delta,
-          anomalia: r.anomalia ? "SÃ­" : "No",
+          anomalia: r.anomalia ? "Sí" : "No",
         });
       }
       const filename = `km_reporte_${new Date().toISOString().slice(0, 10)}.xlsx`;
@@ -625,7 +698,7 @@ function isoDay(d: Date | null | undefined): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Planilla Excel de un mÃ³vil (reuniÃ³n 12/08: "enviar planillas"). */
+/** Planilla Excel de un móvil (reunión 12/08: "enviar planillas"). */
 router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.camioneta.findUnique({
@@ -678,8 +751,8 @@ router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
       ["Patente", item.patente],
       ["Marca", item.marca ?? ""],
       ["Modelo", item.modelo ?? ""],
-      ["AÃ±o", item.anio ?? ""],
-      ["Equipo de frÃ­o", item.equipoFrio ?? ""],
+      ["Año", item.anio ?? ""],
+      ["Equipo de frío", item.equipoFrio ?? ""],
       [
         "Capacidad",
         formatCapacidad(item.capacidadValor, item.capacidadUnidad, item.capacidad),
@@ -690,8 +763,8 @@ router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
       ["Km actualizado", isoDay(item.kmActualizadoAt)],
       ["Aceite", isoDay(item.fechaUltimoAceite)],
       ["Correa", isoDay(item.fechaCambioCorrea)],
-      ["NeumÃ¡ticos", isoDay(item.fechaCambioNeumaticos)],
-      ["BaterÃ­a", isoDay(item.fechaCambioBateria)],
+      ["Neumáticos", isoDay(item.fechaCambioNeumaticos)],
+      ["Batería", isoDay(item.fechaCambioBateria)],
       ["Seguro", item.seguroCompania ?? ""],
       ["Seguro vence", isoDay(item.seguroVencimiento)],
       ["VTV vence", isoDay(item.vtbVencimiento)],
@@ -706,7 +779,7 @@ router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
       { header: "Km anterior", key: "antes", width: 14 },
       { header: "Km nuevo", key: "nuevo", width: 14 },
       { header: "Delta", key: "delta", width: 10 },
-      { header: "AnomalÃ­a", key: "anomalia", width: 12 },
+      { header: "Anomalía", key: "anomalia", width: 12 },
     ];
     kmSheet.getRow(1).font = { bold: true };
     for (const r of item.kmRegistros) {
@@ -715,7 +788,7 @@ router.get("/:id/planilla", authenticate, async (req: AuthedRequest, res) => {
         antes: r.kmAnterior,
         nuevo: r.kmNuevo,
         delta: r.delta,
-        anomalia: r.anomalia ? "SÃ­" : "",
+        anomalia: r.anomalia ? "Sí" : "",
       });
     }
 
@@ -783,12 +856,12 @@ router.post("/", ...write, async (req, res) => {
     }
     const estadoRaw = String(req.body?.estado ?? "OPERATIVA").toUpperCase();
     if (!(estadoRaw in EstadoCamioneta)) {
-      res.status(400).json({ error: "Estado invÃ¡lido" });
+      res.status(400).json({ error: "Estado inválido" });
       return;
     }
     const tipo = parseTipoTransporte(req.body?.tipoTransporte);
     if (req.body?.tipoTransporte && tipo === undefined) {
-      res.status(400).json({ error: "Tipo de transporte invÃ¡lido" });
+      res.status(400).json({ error: "Tipo de transporte inválido" });
       return;
     }
     const km = Number(req.body?.km ?? 0);
@@ -822,7 +895,7 @@ router.post("/", ...write, async (req, res) => {
     }
     const cedulaFoto = String(req.body?.cedulaFoto ?? "");
     if (!req.body?.omitirCedula && !cedulaFoto.startsWith("data:image/")) {
-      res.status(400).json({ error: "La cÃ©dula requiere una foto" });
+      res.status(400).json({ error: "La cédula requiere una foto" });
       return;
     }
     const item = await prisma.camioneta.create({
@@ -984,7 +1057,7 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
     if (req.body?.tipoTransporte !== undefined) {
       const tipo = parseTipoTransporte(req.body.tipoTransporte);
       if (tipo === undefined && req.body.tipoTransporte) {
-        res.status(400).json({ error: "Tipo de transporte invÃ¡lido" });
+        res.status(400).json({ error: "Tipo de transporte inválido" });
         return;
       }
       data.tipoTransporte = tipo ?? null;
@@ -996,7 +1069,7 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
     if (req.body?.km !== undefined) {
       const km = Number(req.body.km);
       if (!Number.isFinite(km) || km < 0) {
-        res.status(400).json({ error: "Kilometraje invÃ¡lido" });
+        res.status(400).json({ error: "Kilometraje inválido" });
         return;
       }
       const next = Math.floor(km);
@@ -1041,7 +1114,7 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
     if (req.body?.estado !== undefined) {
       const s = String(req.body.estado).toUpperCase();
       if (!(s in EstadoCamioneta)) {
-        res.status(400).json({ error: "Estado invÃ¡lido" });
+        res.status(400).json({ error: "Estado inválido" });
         return;
       }
       data.estado = s as EstadoCamioneta;
@@ -1080,7 +1153,7 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
         ? {
             alertaKmAnomalia: true,
             mensaje:
-              "El salto de kilometraje es inusualmente alto; se registrÃ³ una alerta (no se bloqueÃ³ la carga).",
+              "El salto de kilometraje es inusualmente alto; se registró una alerta (no se bloqueó la carga).",
           }
         : {}),
     });
@@ -1117,7 +1190,7 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
     if (rol === "CHOFER") {
       const ok = await choferPuedeEditarCamioneta(req.user!.id, camionetaId, contextoAccesoFromReq(req));
       if (!ok) {
-        res.status(403).json({ error: "Solo podÃ©s actualizar unidades de tu flota" });
+        res.status(403).json({ error: "Solo podés actualizar unidades de tu flota" });
         return;
       }
     } else if (!isMaster && rol !== "OPERACIONES" && rol !== "ADMINISTRADOR") {
@@ -1130,7 +1203,7 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
     if (req.body?.km !== undefined) {
       const km = Number(req.body.km);
       if (!Number.isFinite(km) || km < 0) {
-        res.status(400).json({ error: "Kilometraje invÃ¡lido" });
+        res.status(400).json({ error: "Kilometraje inválido" });
         return;
       }
       const next = Math.floor(km);
@@ -1155,12 +1228,12 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
           data: [
             {
               rolDestino: "OPERACIONES",
-              titulo: `Km anÃ³malo â€” ${existing.patente}`,
-              mensaje: `Se cargaron ${applied.delta} km de golpe (umbral ${kmAnomaliaMaxDelta()}). No se bloqueÃ³ la carga.`,
+              titulo: `Km anómalo — ${existing.patente}`,
+              mensaje: `Se cargaron ${applied.delta} km de golpe (umbral ${kmAnomaliaMaxDelta()}). No se bloqueó la carga.`,
             },
             {
               rolDestino: "ADMINISTRADOR",
-              titulo: `Km anÃ³malo â€” ${existing.patente}`,
+              titulo: `Km anómalo — ${existing.patente}`,
               mensaje: `Se cargaron ${applied.delta} km de golpe (umbral ${kmAnomaliaMaxDelta()}).`,
             },
           ],
