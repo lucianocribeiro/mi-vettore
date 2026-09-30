@@ -61,7 +61,6 @@ const NAV: NavItem[] = [
       {
         to: "/m7/externos",
         label: "Taller externo",
-        roles: ["ADMINISTRADOR", "OPERACIONES"],
         dotClass: "bg-violet-400",
       },
     ],

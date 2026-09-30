@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { Plus, X } from "../../components/icons";
 import { apiFetch, ApiError } from "../../lib/api";
-import { currentAsignacion, type Camioneta } from "../../types";
+import { currentAsignacion, isInternalOps, type Camioneta } from "../../types";
 
 type CatDiag = {
   id: string;
@@ -38,7 +38,8 @@ function fmtFecha(iso: string) {
 }
 
 export function TallerExternoPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const puedeCargar = isInternalOps(user?.rol);
   const [ots, setOts] = useState<OtExterna[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,16 +108,22 @@ export function TallerExternoPage() {
             Taller externo
           </h1>
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            Reparaciones hechas fuera del circuito interno. Sin presupuestos ni montos: se carga la solicitud y queda en el historial de talleres como OTE.
+            {puedeCargar
+              ? "Reparaciones hechas fuera del circuito interno. Sin presupuestos ni montos: se carga la solicitud y queda en el historial de talleres como OTE."
+              : user?.rol === "EMPRESA" || user?.esDuenoFlota
+                ? "Reparaciones en talleres externos de las unidades de tu flota."
+                : "Reparaciones en talleres externos de tu unidad."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowForm(true)}
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-violet-700 px-3 text-xs font-medium text-white hover:bg-violet-800"
-        >
-          <Plus size={13} /> Nueva solicitud
-        </button>
+        {puedeCargar && (
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-violet-700 px-3 text-xs font-medium text-white hover:bg-violet-800"
+          >
+            <Plus size={13} /> Nueva solicitud
+          </button>
+        )}
       </div>
 
       {loading && <p className="text-sm text-[var(--vl-text-muted)]">Cargando…</p>}
@@ -135,13 +142,15 @@ export function TallerExternoPage() {
                 placeholder="Buscar patente…"
                 className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
               />
-              <input
-                type="search"
-                value={filtroEmpresa}
-                onChange={(e) => setFiltroEmpresa(e.target.value)}
-                placeholder="Buscar empresa de transporte…"
-                className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
-              />
+              {puedeCargar && (
+                <input
+                  type="search"
+                  value={filtroEmpresa}
+                  onChange={(e) => setFiltroEmpresa(e.target.value)}
+                  placeholder="Buscar empresa de transporte…"
+                  className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                />
+              )}
             </div>
             {visibles.length === 0 && (
               <p className="rounded-lg border border-[var(--vl-card-border)] p-3 text-xs text-[var(--vl-text-muted)]">
@@ -212,6 +221,7 @@ export function TallerExternoPage() {
                 <div className="text-[11px] text-[var(--vl-text-muted)]">Comentario</div>
                 <p className="mt-0.5 whitespace-pre-wrap">{ot.comentario}</p>
               </div>
+              {puedeCargar && (
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 {confirmBorrar ? (
                   <>
@@ -242,12 +252,13 @@ export function TallerExternoPage() {
                   </button>
                 )}
               </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {showForm && (
+      {showForm && puedeCargar && (
         <NuevaSolicitudExternaForm
           onClose={() => setShowForm(false)}
           onCreated={(nueva) => {

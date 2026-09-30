@@ -141,9 +141,7 @@ export default function App() {
               path="/m7/externos"
               element={
                 <SugerenciasOnlyGate>
-                  <VettoreOpsGate>
-                    <TallerExternoPage />
-                  </VettoreOpsGate>
+                  <TallerExternoPage />
                 </SugerenciasOnlyGate>
               }
             />

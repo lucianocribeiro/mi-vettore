@@ -16,7 +16,11 @@ import {
   type TipoOtItem,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { choferPuedeEditarCamioneta, empresaIdsDeDueno } from "../lib/flota.js";
+import {
+  camionetasParaUsuarioChofer,
+  choferPuedeEditarCamioneta,
+  empresaIdsDeDueno,
+} from "../lib/flota.js";
 import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
 import { sendOtMail } from "../lib/mailer.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
@@ -1313,13 +1317,27 @@ function serializeOtExterna(
 /** Taller externo (OTE): solicitudes sin montos, van directo al historial. */
 router.get("/externos", authenticate, async (req: AuthedRequest, res) => {
   try {
-    if (!isInternalOpsRole(req.user!.rol)) {
+    const rol = req.user!.rol as Role;
+    let alcance: Prisma.OrdenTrabajoWhereInput = {};
+    if (rol === "EMPRESA") {
+      const me = await prisma.usuario.findUnique({
+        where: { id: req.user!.id },
+        select: { empresaId: true },
+      });
+      alcance = whereOtDeEmpresas(me?.empresaId ? [me.empresaId] : []);
+    } else if (rol === "CHOFER") {
+      const unidades = await camionetasParaUsuarioChofer(
+        req.user!.id,
+        contextoAccesoFromReq(req)
+      );
+      alcance = { solicitud: { camionetaId: { in: unidades.map((c) => c.id) } } };
+    } else if (!isInternalOpsRole(rol)) {
       res.status(403).json({ error: "Sin permiso" });
       return;
     }
     const [ots, cats] = await Promise.all([
       prisma.ordenTrabajo.findMany({
-        where: { externo: true },
+        where: { AND: [{ externo: true }, alcance] },
         include: includeOtExterna,
         orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
       }),
