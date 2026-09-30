@@ -159,7 +159,7 @@ type OrdenTrabajo = {
 };
 
 function canCreateSolicitud(rol?: Role | null) {
-  return rol === "CHOFER" || isInternalOps(rol);
+  return rol === "CHOFER" || rol === "EMPRESA" || isInternalOps(rol);
 }
 
 function canAdvanceFromStep(rol: Role | undefined, step: number) {

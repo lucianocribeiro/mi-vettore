@@ -1354,7 +1354,8 @@ router.get("/externos", authenticate, async (req: AuthedRequest, res) => {
 
 router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
   try {
-    if (!isInternalOpsRole(req.user!.rol)) {
+    const rol = req.user!.rol as Role;
+    if (!canCreateSolicitud(rol)) {
       res.status(403).json({ error: "Sin permiso" });
       return;
     }
@@ -1387,6 +1388,24 @@ router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
     });
     if (!camioneta || !camionetaDeEmpresas(camioneta, [empresaId])) {
       return void res.status(400).json({ error: "La patente no pertenece a esa empresa" });
+    }
+    if (rol === "EMPRESA") {
+      const me = await prisma.usuario.findUnique({
+        where: { id: req.user!.id },
+        select: { empresaId: true },
+      });
+      if (!me?.empresaId || me.empresaId !== empresaId) {
+        return void res.status(403).json({ error: "Solo podés cargar unidades de tu flota" });
+      }
+    } else if (rol === "CHOFER") {
+      const ok = await choferPuedeEditarCamioneta(
+        req.user!.id,
+        camionetaId,
+        contextoAccesoFromReq(req)
+      );
+      if (!ok) {
+        return void res.status(403).json({ error: "Solo podés cargar tu unidad" });
+      }
     }
     const [categoria, hijos] = await Promise.all([
       prisma.categoriaDiagnostico.findUnique({ where: { id: categoriaId } }),
@@ -1654,6 +1673,14 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
         });
         return;
       }
+    } else if (rol === "EMPRESA") {
+      if (!me?.empresaId || !camionetaDeEmpresas(camioneta, [me.empresaId])) {
+        res.status(403).json({
+          error: "Solo podés solicitar taller para unidades de tu flota",
+        });
+        return;
+      }
+      choferId = camioneta.asignaciones[0]?.choferId ?? null;
     } else {
       // Ops: la OT es por unidad, no exige vínculo con chofer.
       choferId = req.body?.choferId ? String(req.body.choferId) : null;

@@ -148,6 +148,7 @@ export function isCierreStep(step: number): boolean {
 export function canCreateSolicitud(rol: Role): boolean {
   return (
     rol === Role.CHOFER ||
+    rol === Role.EMPRESA ||
     isInternalOpsRole(rol)
   );
 }

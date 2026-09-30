@@ -40,6 +40,8 @@ function fmtFecha(iso: string) {
 export function TallerExternoPage() {
   const { token, user } = useAuth();
   const puedeCargar = isInternalOps(user?.rol);
+  const puedeSolicitar =
+    puedeCargar || user?.rol === "EMPRESA" || user?.rol === "CHOFER";
   const [ots, setOts] = useState<OtExterna[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +117,7 @@ export function TallerExternoPage() {
                 : "Reparaciones en talleres externos de tu unidad."}
           </p>
         </div>
-        {puedeCargar && (
+        {puedeSolicitar && (
           <button
             type="button"
             onClick={() => setShowForm(true)}
@@ -258,7 +260,7 @@ export function TallerExternoPage() {
         </div>
       )}
 
-      {showForm && puedeCargar && (
+      {showForm && puedeSolicitar && (
         <NuevaSolicitudExternaForm
           onClose={() => setShowForm(false)}
           onCreated={(nueva) => {
@@ -332,6 +334,14 @@ function NuevaSolicitudExternaForm({
     [camionetas, empresaId]
   );
   const selected = camionetas.find((c) => c.id === camionetaId) ?? null;
+
+  useEffect(() => {
+    if (!empresaId && empresasOpts.length === 1) setEmpresaId(empresasOpts[0].id);
+  }, [empresaId, empresasOpts]);
+
+  useEffect(() => {
+    if (!camionetaId && unidades.length === 1) setCamionetaId(unidades[0].id);
+  }, [camionetaId, unidades]);
 
   const nivel1 = cats.filter((c) => c.nivel === 1);
   const nivel2 = cats.filter((c) => c.nivel === 2 && c.padreId === n1);
