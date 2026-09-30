@@ -467,7 +467,7 @@ export function M7TalleresPage() {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-bold text-[var(--vl-heading)] sm:text-xl">
-            Talleres y órdenes de trabajo
+            {isOps(rol) ? "Taller interno · órdenes de trabajo" : "Talleres y órdenes de trabajo"}
           </h1>
           <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
             {esRolEmpresa || esDuenoEmpresa

@@ -8,6 +8,7 @@ export type HistorialReparacionRow = {
   id: string;
   otId: string;
   numeroOT: string;
+  externo: boolean;
   patente: string;
   chofer: string | null;
   falla: string;
@@ -17,6 +18,7 @@ export type HistorialReparacionRow = {
   taller: string;
   fecha: Date;
   cerradaAt: Date | null;
+  kmAlMomento: number | null;
   reparacion: string | null;
   reparacionNivel1: string | null;
   reparacionNivel2: string | null;
@@ -57,12 +59,15 @@ export async function queryHistorialReparaciones(opts: {
   const [cats, items] = await Promise.all([
     prisma.categoriaDiagnostico.findMany({
       where: { activo: true },
-      select: { id: true, nombre: true, padreId: true, nivel: true },
+      select: { id: true, nombre: true, padreId: true, nivel: true, orden: true },
+      orderBy: [{ nivel: "asc" }, { orden: "asc" }, { nombre: "asc" }],
     }),
     prisma.otItem.findMany({
       where: {
-        categoriaDiagnosticoId: { not: null },
-        tipo: { in: ["FACTURA", "RENDICION", "PRESUPUESTO"] },
+        OR: [
+          { tipo: { in: ["FACTURA", "RENDICION"] } },
+          { tipo: "PRESUPUESTO", aprobado: true },
+        ],
       },
       include: {
         categoriaDiagnostico: true,
@@ -77,11 +82,19 @@ export async function queryHistorialReparaciones(opts: {
         },
       },
       orderBy: [{ ot: { cerradaAt: "desc" } }, { createdAt: "desc" }],
-      take: 2000,
+      take: 5000,
     }),
   ]);
 
-  const rows: HistorialReparacionRow[] = items.map((i) => {
+  // Una sola fuente por OT: gasto real (factura/rendición) si existe; si no, presupuesto aprobado.
+  const otsConGasto = new Set(
+    items.filter((i) => i.tipo !== "PRESUPUESTO").map((i) => i.otId)
+  );
+  const itemsFuente = items.filter((i) =>
+    otsConGasto.has(i.otId) ? i.tipo !== "PRESUPUESTO" : true
+  );
+
+  const rows: HistorialReparacionRow[] = itemsFuente.map((i) => {
     const catId = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id;
     const diag = diagnosticoPathFromId(cats, catId);
     const ot = i.ot;
@@ -97,6 +110,7 @@ export async function queryHistorialReparaciones(opts: {
       id: i.id,
       otId: ot.id,
       numeroOT: ot.numeroOT,
+      externo: ot.externo,
       patente: ot.solicitud.camioneta.patente,
       chofer: ot.solicitud.chofer?.nombre ?? null,
       falla: ot.solicitud.falla,
@@ -106,6 +120,7 @@ export async function queryHistorialReparaciones(opts: {
       taller,
       fecha,
       cerradaAt: ot.cerradaAt,
+      kmAlMomento: ot.kmAlMomento,
       reparacion: diag.path,
       reparacionNivel1: diag.nivel1,
       reparacionNivel2: diag.nivel2,
@@ -183,6 +198,15 @@ export async function queryHistorialReparaciones(opts: {
     items: filtered,
     resumen: [...resumenMap.values()].sort((a, b) => b.total - a.total),
     resumenTaller: [...resumenTallerMap.values()].sort((a, b) => b.total - a.total),
-    opciones: { ramas, talleres },
+    opciones: {
+      ramas,
+      talleres,
+      arbol: cats.map((c) => ({
+        id: c.id,
+        nombre: c.nombre,
+        nivel: c.nivel,
+        padreId: c.padreId,
+      })),
+    },
   };
 }

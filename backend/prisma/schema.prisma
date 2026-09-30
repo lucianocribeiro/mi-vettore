@@ -414,6 +414,8 @@ model OrdenTrabajo {
   pedidoNotificacionId    String?
   sinPresupuesto          Boolean   @default(false)
   sinPresupuestoMotivo    String?
+  /// Reparación en taller externo (OTE-xxxx): se carga ya cerrada, fuera del circuito OT.
+  externo                 Boolean   @default(false)
   cerradaAt               DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt

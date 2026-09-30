@@ -20,6 +20,7 @@ type NavChild = {
   to: string;
   label: string;
   roles?: Role[];
+  dotClass?: string;
 };
 
 type NavItem = {
@@ -54,6 +55,15 @@ const NAV: NavItem[] = [
       "ADMINISTRADOR",
       "OPERACIONES",
       "EMPRESA",
+    ],
+    children: [
+      { to: "/m7", label: "Taller interno", dotClass: "bg-sky-400" },
+      {
+        to: "/m7/externos",
+        label: "Taller externo",
+        roles: ["ADMINISTRADOR", "OPERACIONES"],
+        dotClass: "bg-violet-400",
+      },
     ],
   },
   {
@@ -178,8 +188,8 @@ export function Sidebar({ open, onClose }: Props) {
     return n;
   });
 
-  const fichaOpen =
-    location.pathname === "/m5" || location.pathname.startsWith("/m5/");
+  const grupoAbierto = (to: string) =>
+    location.pathname === to || location.pathname.startsWith(`${to}/`);
 
   useEffect(() => {
     if (location.pathname === "/documentacion") {
@@ -273,15 +283,16 @@ export function Sidebar({ open, onClose }: Props) {
             childVisible(c, rol)
           );
           const hasSubmenu = children.length > 1;
-          const groupActive =
-            n.to === "/m5" ? fichaOpen : location.pathname === n.to;
+          const groupActive = hasSubmenu
+            ? grupoAbierto(n.to)
+            : location.pathname === n.to;
 
           if (hasSubmenu) {
             return (
               <div key={n.to} className="space-y-0.5">
                 <NavLink
                   to={n.to}
-                  end={n.to === "/m5"}
+                  end
                   onClick={onClose}
                   className={() =>
                     [
@@ -307,23 +318,26 @@ export function Sidebar({ open, onClose }: Props) {
                     {n.sub}
                   </span>
                 </NavLink>
-                {fichaOpen && (
+                {groupActive && (
                   <div className="ml-3 space-y-0.5 border-l border-[var(--vl-sidebar-border)] pl-2">
                     {children.map((c) => (
                       <NavLink
                         key={c.to}
                         to={c.to}
-                        end={c.to === "/m5"}
+                        end={c.to === n.to}
                         onClick={onClose}
                         className={({ isActive }) =>
                           [
-                            "flex min-h-9 w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition",
+                            "flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition",
                             isActive
                               ? "bg-[var(--vl-sidebar-search)] font-semibold text-white"
                               : "text-[var(--vl-nav-muted)] hover:bg-[var(--vl-sidebar-search)] hover:text-[#c8ddf0]",
                           ].join(" ")
                         }
                       >
+                        {c.dotClass && (
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${c.dotClass}`} />
+                        )}
                         {c.label}
                       </NavLink>
                     ))}

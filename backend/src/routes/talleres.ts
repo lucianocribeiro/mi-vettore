@@ -396,10 +396,28 @@ function camionetaDeEmpresas(
   return (cam.asignaciones ?? []).some((a) => empresaIds.includes(a.empresaId));
 }
 
+async function maxNumeroConPrefijo(prefijo: string): Promise<number> {
+  const rows = await prisma.ordenTrabajo.findMany({
+    where: { numeroOT: { startsWith: prefijo } },
+    select: { numeroOT: true },
+  });
+  let max = 0;
+  for (const r of rows) {
+    const n = Number(r.numeroOT.slice(prefijo.length));
+    if (Number.isInteger(n) && n > max) max = n;
+  }
+  return max;
+}
+
+/** Correlativo por máximo existente (no por cantidad): los números borrados no se reutilizan. */
 async function nextNumeroOT(): Promise<string> {
-  const count = await prisma.ordenTrabajo.count();
-  const n = 140 + count + 1;
+  const n = Math.max(140, await maxNumeroConPrefijo("OT-")) + 1;
   return `OT-${String(n).padStart(4, "0")}`;
+}
+
+async function nextNumeroOTE(): Promise<string> {
+  const n = (await maxNumeroConPrefijo("OTE-")) + 1;
+  return `OTE-${String(n).padStart(4, "0")}`;
 }
 
 async function registrarPedidoBaja(
@@ -467,7 +485,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       where = whereOtDeEmpresas(me.empresaId ? [me.empresaId] : []);
     }
     const items = await prisma.ordenTrabajo.findMany({
-      where,
+      where: where ? { AND: [where, { externo: false }] } : { externo: false },
       include: includeOTFor(req.user!.id),
       orderBy: { createdAt: "desc" },
     });
@@ -490,6 +508,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
     const items = await prisma.ordenTrabajo.findMany({
+      where: { externo: false },
       include: includeOTFor(req.user!.id),
       orderBy: { createdAt: "desc" },
     });
@@ -631,6 +650,7 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
       return {
         id: ot.id,
         numeroOT: ot.numeroOT,
+        externo: ot.externo,
         patente: ot.solicitud.camioneta.patente,
         falla: ot.solicitud.falla,
         detalle: ot.solicitud.detalle,
@@ -696,6 +716,8 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
     sheet.columns = [
       { header: "Patente", key: "patente", width: 12 },
       { header: "OT", key: "ot", width: 12 },
+      { header: "Tipo OT", key: "tipoOt", width: 16 },
+      { header: "Km", key: "km", width: 10 },
       { header: "Fecha solicitud", key: "fechaSolicitud", width: 14 },
       { header: "Falla", key: "falla", width: 28 },
       { header: "Detalle", key: "detalle", width: 32 },
@@ -714,9 +736,13 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
       if (q && !patente.toLowerCase().includes(q) && !ot.numeroOT.toLowerCase().includes(q)) {
         continue;
       }
+      const gasto = ot.items.filter((i) => i.tipo === "FACTURA" || i.tipo === "RENDICION");
+      const fuente = gasto.length
+        ? gasto
+        : ot.items.filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado);
       const items =
-        ot.items.length > 0
-          ? ot.items
+        fuente.length > 0
+          ? fuente
           : [
               {
                 descripcion: ot.solicitud.falla,
@@ -730,6 +756,8 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
         sheet.addRow({
           patente,
           ot: ot.numeroOT,
+          tipoOt: ot.externo ? "Taller externo" : "OT",
+          km: ot.kmAlMomento ?? "",
           fechaSolicitud: ot.solicitud.createdAt.toISOString().slice(0, 10),
           falla: ot.solicitud.falla,
           detalle: ot.solicitud.detalle,
@@ -765,6 +793,88 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
 const uploadHistorial = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
+});
+
+/** Plantilla de carga del historial + hoja con el árbol de conceptos válido. */
+router.get("/historial/plantilla", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const cats = await prisma.categoriaDiagnostico.findMany({
+      where: { activo: true },
+      select: { id: true, nombre: true, padreId: true, nivel: true },
+      orderBy: [{ nivel: "asc" }, { orden: "asc" }, { nombre: "asc" }],
+    });
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Historial");
+    sheet.columns = [
+      { header: "Patente", key: "patente", width: 12 },
+      { header: "Fecha", key: "fecha", width: 12 },
+      { header: "Km", key: "km", width: 10 },
+      { header: "Tipo", key: "tipo", width: 10 },
+      { header: "Falla", key: "falla", width: 28 },
+      { header: "Detalle", key: "detalle", width: 32 },
+      { header: "Nivel 1", key: "n1", width: 18 },
+      { header: "Nivel 2", key: "n2", width: 18 },
+      { header: "Nivel 3", key: "n3", width: 20 },
+      { header: "Taller", key: "taller", width: 24 },
+      { header: "Descripcion", key: "descripcion", width: 32 },
+      { header: "Importe", key: "importe", width: 12 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+    const ejemplo = cats.find((c) => c.nivel === 3);
+    const ej = diagnosticoPathFromId(cats, ejemplo?.id);
+    sheet.addRow({
+      patente: "AB123CD",
+      fecha: new Date().toISOString().slice(0, 10),
+      km: 120000,
+      tipo: "Interno",
+      falla: "Service",
+      detalle: "Ejemplo: borrar esta fila",
+      n1: ej.nivel1 ?? "",
+      n2: ej.nivel2 ?? "",
+      n3: ej.nivel3 ?? "",
+      taller: "Taller X",
+      descripcion: "Cambio de aceite y filtros",
+      importe: 85000,
+    });
+    sheet.getRow(2).font = { italic: true, color: { argb: "FF888888" } };
+
+    const arbol = workbook.addWorksheet("Conceptos");
+    arbol.columns = [
+      { header: "Nivel 1", key: "n1", width: 24 },
+      { header: "Nivel 2", key: "n2", width: 24 },
+      { header: "Nivel 3", key: "n3", width: 28 },
+    ];
+    arbol.getRow(1).font = { bold: true };
+    for (const c of cats.filter((x) => x.nivel === 3)) {
+      const p = diagnosticoPathFromId(cats, c.id);
+      arbol.addRow({ n1: p.nivel1 ?? "", n2: p.nivel2 ?? "", n3: p.nivel3 ?? "" });
+    }
+
+    const ayuda = workbook.addWorksheet("Instrucciones");
+    ayuda.getColumn(1).width = 110;
+    [
+      "Obligatorias: Patente y Falla. El resto es opcional pero recomendado.",
+      "Fecha: AAAA-MM-DD. Km: kilometraje al momento de la reparación.",
+      "Tipo: 'Interno' (OT) o 'Externo' (OTE, taller externo: no se guarda importe).",
+      "Nivel 1 / 2 / 3: copiar exactamente desde la hoja Conceptos.",
+      "La patente debe existir en la flota; si no, la fila se omite.",
+    ].forEach((t) => ayuda.addRow([t]));
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", 'attachment; filename="plantilla_historial_talleres.xlsx"');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al generar la plantilla" });
+  }
 });
 
 /** Importa historial cerrado desde Excel (Patente, Falla, Taller, Descripcion, Importe, Fecha). */
@@ -825,6 +935,11 @@ router.post(
       const cDesc = col("descripcion", "descripción");
       const cImporte = col("importe", "monto");
       const cFecha = col("fecha", "cerrada");
+      const cKm = col("km", "kilometraje");
+      const cN1 = col("nivel 1", "nivel1");
+      const cN2 = col("nivel 2", "nivel2");
+      const cN3 = col("nivel 3", "nivel3");
+      const cTipo = col("tipo", "taller interno/externo");
       if (!cPatente || !cFalla) {
         res.status(400).json({
           error: "El Excel debe tener columnas Patente y Falla (mínimo)",
@@ -837,12 +952,45 @@ router.post(
       let omitidas = 0;
       const errores: string[] = [];
 
+      const catsImport = await prisma.categoriaDiagnostico.findMany({
+        where: { activo: true },
+        select: { id: true, nombre: true, padreId: true, nivel: true },
+      });
+      const normCat = (s: string) =>
+        s.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const buscarCat = (nombre: string, nivel: number, padreId: string | null) =>
+        catsImport.find(
+          (c) =>
+            c.nivel === nivel &&
+            (padreId === null || c.padreId === padreId) &&
+            normCat(c.nombre) === normCat(nombre)
+        ) ?? null;
+      const celda = (c: number, row: ExcelJS.Row) =>
+        c ? String(row.getCell(c).value ?? "").trim() : "";
+
       for (let r = 2; r <= sheet.rowCount; r++) {
         const row = sheet.getRow(r);
         const patente = String(row.getCell(cPatente).value ?? "")
           .trim()
           .toUpperCase();
         if (!patente) continue;
+        const kmRaw = cKm ? Number(row.getCell(cKm).value) : NaN;
+        const kmFila = Number.isFinite(kmRaw) && kmRaw >= 0 ? Math.round(kmRaw) : null;
+        const tipoFila = normCat(celda(cTipo, row));
+        const esExterno = tipoFila === "externo" || tipoFila === "ote" || tipoFila === "taller externo";
+        let categoriaFila: string | null = null;
+        const n1 = celda(cN1, row);
+        if (n1) {
+          const c1 = buscarCat(n1, 1, null);
+          const n2 = celda(cN2, row);
+          const c2 = c1 && n2 ? buscarCat(n2, 2, c1.id) : null;
+          const n3 = celda(cN3, row);
+          const c3 = c2 && n3 ? buscarCat(n3, 3, c2.id) : null;
+          categoriaFila = (c3 ?? c2 ?? c1)?.id ?? null;
+          if (!c1 || (n2 && !c2) || (n3 && !c3)) {
+            errores.push(`Fila ${r}: concepto "${[n1, n2, n3].filter(Boolean).join(" › ")}" no coincide con el árbol`);
+          }
+        }
         const falla = String(row.getCell(cFalla).value ?? "").trim() || "Importación historial";
         const detalle = cDetalle
           ? String(row.getCell(cDetalle).value ?? "").trim()
@@ -897,9 +1045,10 @@ router.post(
                   tallerAsignado: taller || existente.tallerAsignado,
                   valorFinal: importe > 0 ? importe : existente.valorFinal,
                   cerradaAt: fecha,
+                  kmAlMomento: kmFila ?? existente.kmAlMomento,
                 },
               });
-              if (descripcion || importe > 0) {
+              if (descripcion || importe > 0 || categoriaFila) {
                 const firstItem = existente.items[0];
                 if (firstItem) {
                   await tx.otItem.update({
@@ -909,6 +1058,8 @@ router.post(
                       descripcion: descripcion || firstItem.descripcion,
                       importe: importe > 0 ? importe : firstItem.importe,
                       fecha,
+                      categoriaDiagnosticoId:
+                        categoriaFila ?? firstItem.categoriaDiagnosticoId,
                     },
                   });
                 } else {
@@ -920,6 +1071,7 @@ router.post(
                       descripcion,
                       importe,
                       fecha,
+                      categoriaDiagnosticoId: categoriaFila,
                       clasificacion: "OTRO",
                       clasificacionOtro: "Importación historial",
                     },
@@ -932,7 +1084,7 @@ router.post(
           }
         }
 
-        const numeroOT = await nextNumeroOT();
+        const numeroOT = esExterno ? await nextNumeroOTE() : await nextNumeroOT();
         await prisma.$transaction(async (tx) => {
           const solicitud = await tx.solicitudTaller.create({
             data: {
@@ -949,26 +1101,28 @@ router.post(
             data: {
               solicitudTallerId: solicitud.id,
               numeroOT,
+              externo: esExterno,
               currentStep: 4,
               maxStepReached: 4,
               sinPresupuesto: true,
               tallerAsignado: taller || null,
-              valorFinal: importe > 0 ? importe : null,
+              valorFinal: !esExterno && importe > 0 ? importe : null,
               cerradaAt: fecha,
-              kmAlMomento: camioneta.km,
+              kmAlMomento: kmFila,
             },
           });
-          if (descripcion || importe > 0) {
+          if (descripcion || importe > 0 || categoriaFila) {
             await tx.otItem.create({
               data: {
                 otId: ot.id,
                 tipo: "FACTURA",
-                tallerNombre: taller,
+                tallerNombre: taller || (esExterno ? "Taller externo" : ""),
                 descripcion,
-                importe,
+                importe: esExterno ? 0 : importe,
                 fecha,
+                categoriaDiagnosticoId: categoriaFila,
                 clasificacion: "OTRO",
-                clasificacionOtro: "Importación historial",
+                clasificacionOtro: esExterno ? "Taller externo" : "Importación historial",
               },
             });
           }
@@ -1044,7 +1198,9 @@ router.get(
         { header: "Nivel 2", key: "n2", width: 18 },
         { header: "Nivel 3", key: "n3", width: 20 },
         { header: "OT", key: "ot", width: 12 },
+        { header: "Tipo OT", key: "tipoOt", width: 16 },
         { header: "Patente", key: "patente", width: 12 },
+        { header: "Km", key: "km", width: 10 },
         { header: "Fecha", key: "fecha", width: 12 },
         { header: "Taller", key: "taller", width: 24 },
         { header: "Descripción", key: "desc", width: 32 },
@@ -1059,7 +1215,9 @@ router.get(
           n2: r.reparacionNivel2 ?? "",
           n3: r.reparacionNivel3 ?? "",
           ot: r.numeroOT,
+          tipoOt: r.externo ? "Taller externo" : "OT",
           patente: r.patente,
+          km: r.kmAlMomento ?? "",
           fecha: r.fecha ? new Date(r.fecha).toISOString().slice(0, 10) : "",
           taller: r.taller,
           desc: r.descripcion,
@@ -1113,6 +1271,217 @@ router.get(
     }
   }
 );
+
+const includeOtExterna = {
+  solicitud: {
+    include: {
+      camioneta: { include: { empresa: { select: { id: true, nombre: true } } } },
+    },
+  },
+  items: { include: { categoriaDiagnostico: true } },
+} as const;
+
+type OtExternaLoaded = Prisma.OrdenTrabajoGetPayload<{ include: typeof includeOtExterna }>;
+
+function serializeOtExterna(
+  ot: OtExternaLoaded,
+  cats: { id: string; nombre: string; padreId: string | null; nivel: number }[]
+) {
+  const item = ot.items[0];
+  const diag = diagnosticoPathFromId(cats, item?.categoriaDiagnosticoId);
+  return {
+    id: ot.id,
+    numeroOT: ot.numeroOT,
+    patente: ot.solicitud.camioneta.patente,
+    camionetaId: ot.solicitud.camionetaId,
+    empresa: ot.solicitud.camioneta.empresa,
+    kmAlMomento: ot.kmAlMomento,
+    fechaReparacion: ot.cerradaAt ?? ot.createdAt,
+    comentario: ot.solicitud.detalle,
+    categoriaId: item?.categoriaDiagnosticoId ?? null,
+    reparacion: diag.path,
+    reparacionNivel1: diag.nivel1,
+    reparacionNivel2: diag.nivel2,
+    reparacionNivel3: diag.nivel3,
+    createdAt: ot.createdAt,
+  };
+}
+
+/** Taller externo (OTE): solicitudes sin montos, van directo al historial. */
+router.get("/externos", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const [ots, cats] = await Promise.all([
+      prisma.ordenTrabajo.findMany({
+        where: { externo: true },
+        include: includeOtExterna,
+        orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
+      }),
+      prisma.categoriaDiagnostico.findMany({
+        select: { id: true, nombre: true, padreId: true, nivel: true },
+      }),
+    ]);
+    res.json({ ots: ots.map((ot) => serializeOtExterna(ot, cats)) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al listar talleres externos" });
+  }
+});
+
+router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const body = req.body ?? {};
+    const empresaId = String(body.empresaId ?? "").trim();
+    const camionetaId = String(body.camionetaId ?? "").trim();
+    const categoriaId = String(body.categoriaDiagnosticoId ?? "").trim();
+    const comentario = String(body.comentario ?? "").trim();
+    const km = Number(body.km);
+    const fecha = new Date(String(body.fechaReparacion ?? ""));
+
+    if (!empresaId) return void res.status(400).json({ error: "Elegí la empresa" });
+    if (!camionetaId) return void res.status(400).json({ error: "Elegí la patente" });
+    if (!Number.isInteger(km) || km < 0) {
+      return void res.status(400).json({ error: "Indicá el kilometraje" });
+    }
+    if (Number.isNaN(fecha.getTime())) {
+      return void res.status(400).json({ error: "Indicá la fecha de reparación" });
+    }
+    if (!categoriaId) {
+      return void res.status(400).json({ error: "Elegí el concepto (3 niveles)" });
+    }
+    if (comentario.length < 3) {
+      return void res.status(400).json({ error: "El comentario es obligatorio" });
+    }
+
+    const camioneta = await prisma.camioneta.findUnique({
+      where: { id: camionetaId },
+      include: { asignaciones: { where: { periodoHasta: null }, select: { empresaId: true } } },
+    });
+    if (!camioneta || !camionetaDeEmpresas(camioneta, [empresaId])) {
+      return void res.status(400).json({ error: "La patente no pertenece a esa empresa" });
+    }
+    const [categoria, hijos] = await Promise.all([
+      prisma.categoriaDiagnostico.findUnique({ where: { id: categoriaId } }),
+      prisma.categoriaDiagnostico.count({ where: { padreId: categoriaId, activo: true } }),
+    ]);
+    if (!categoria || !categoria.activo) {
+      return void res.status(400).json({ error: "Concepto inválido" });
+    }
+    if (hijos > 0) {
+      return void res.status(400).json({ error: "Completá los 3 niveles del concepto" });
+    }
+
+    const cats = await prisma.categoriaDiagnostico.findMany({
+      select: { id: true, nombre: true, padreId: true, nivel: true },
+    });
+    const diag = diagnosticoPathFromId(cats, categoriaId);
+    const numeroOT = await nextNumeroOTE();
+
+    const created = await prisma.$transaction(async (tx) => {
+      const solicitud = await tx.solicitudTaller.create({
+        data: {
+          camionetaId,
+          solicitante: SolicitanteTaller.ADMINISTRATIVO,
+          falla: diag.path ?? categoria.nombre,
+          detalle: comentario,
+          habilitadaCircular: true,
+          inhabilitado: false,
+          createdById: req.user!.id,
+        },
+      });
+      const ot = await tx.ordenTrabajo.create({
+        data: {
+          solicitudTallerId: solicitud.id,
+          numeroOT,
+          externo: true,
+          currentStep: 4,
+          maxStepReached: 4,
+          sinPresupuesto: true,
+          sinPresupuestoMotivo: "Taller externo",
+          kmAlMomento: km,
+          cerradaAt: fecha,
+        },
+      });
+      await tx.otItem.create({
+        data: {
+          otId: ot.id,
+          tipo: "FACTURA",
+          tallerNombre: "Taller externo",
+          descripcion: comentario,
+          importe: 0,
+          fecha,
+          categoriaDiagnosticoId: categoriaId,
+          clasificacion: "OTRO",
+          clasificacionOtro: "Taller externo",
+        },
+      });
+      if (km > camioneta.km) {
+        await applyKmUpdate(tx, {
+          camionetaId,
+          existingKm: camioneta.km,
+          nextKm: km,
+          userId: req.user!.id,
+          allowDecrease: false,
+        });
+        await tx.camioneta.update({
+          where: { id: camionetaId },
+          data: { km, kmActualizadoAt: new Date() },
+        });
+      }
+      await syncMantenimientoDesdeOt(tx, {
+        camionetaId,
+        otId: ot.id,
+        numeroOT,
+        tallerNombre: "Taller externo",
+        kmActual: km,
+        itemCategoriaIds: [categoriaId],
+        fecha,
+      });
+      return tx.ordenTrabajo.findUniqueOrThrow({
+        where: { id: ot.id },
+        include: includeOtExterna,
+      });
+    });
+
+    res.status(201).json(serializeOtExterna(created, cats));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al cargar la reparación externa" });
+  }
+});
+
+router.delete("/externos/:id", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const ot = await prisma.ordenTrabajo.findUnique({ where: { id: req.params.id } });
+    if (!ot || !ot.externo) {
+      return void res.status(404).json({ error: "Reparación externa no encontrada" });
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.registroMantenimiento.deleteMany({ where: { otId: ot.id } });
+      await tx.otComentario.deleteMany({ where: { otId: ot.id } });
+      await tx.otAuditoria.deleteMany({ where: { otId: ot.id } });
+      await tx.ordenTrabajoDiagnostico.deleteMany({ where: { otId: ot.id } });
+      await tx.otItem.deleteMany({ where: { otId: ot.id } });
+      await tx.ordenTrabajo.delete({ where: { id: ot.id } });
+      await tx.solicitudTaller.delete({ where: { id: ot.solicitudTallerId } });
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al borrar la reparación externa" });
+  }
+});
 
 router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
   try {

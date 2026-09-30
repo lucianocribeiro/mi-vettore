@@ -64,13 +64,15 @@ export function categoriaEnRama(
   categoriaId: string | null | undefined,
   filtro: { nivel1?: string; nivel2?: string; nivel3?: string }
 ): boolean {
-  if (!categoriaId) return false;
   const { nivel1, nivel2, nivel3 } = filtro;
   if (!nivel1 && !nivel2 && !nivel3) return true;
+  if (!categoriaId) return false;
 
   const path = diagnosticoPathFromId(cats, categoriaId);
-  if (nivel3) return path.nivel3Id === nivel3;
-  if (nivel2) return path.nivel2Id === nivel2;
-  if (nivel1) return path.nivel1Id === nivel1;
+  const coincide = (id: string | null, nombre: string | null, valor: string) =>
+    id === valor || (!!nombre && nombre.trim().toLowerCase() === valor.trim().toLowerCase());
+  if (nivel3) return coincide(path.nivel3Id, path.nivel3, nivel3);
+  if (nivel2) return coincide(path.nivel2Id, path.nivel2, nivel2);
+  if (nivel1) return coincide(path.nivel1Id, path.nivel1, nivel1);
   return true;
 }
