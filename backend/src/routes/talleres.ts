@@ -795,6 +795,13 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
       }
     }
 
+    if (sheet.rowCount <= 1) {
+      res.status(404).json({
+        error: "No hay OT para exportar. Para cargar datos nuevos descargá la Plantilla.",
+      });
+      return;
+    }
+
     const filename = `historial_talleres_${new Date().toISOString().slice(0, 10)}.xlsx`;
     res.setHeader(
       "Content-Type",
@@ -1209,6 +1216,12 @@ router.get(
         desde: String(req.query?.desde ?? ""),
         hasta: String(req.query?.hasta ?? ""),
       });
+      if (data.items.length === 0) {
+        res.status(404).json({
+          error: "No hay OT para exportar con esos filtros. Para cargar datos nuevos descargá la Plantilla.",
+        });
+        return;
+      }
 
       const workbook = new ExcelJS.Workbook();
       const detalle = workbook.addWorksheet("Detalle");
