@@ -2665,7 +2665,7 @@ router.post("/:id/reabrir", authenticate, async (req: AuthedRequest, res) => {
         where: { id: ot.id },
         data: {
           cerradaAt: null,
-          currentStep: 4,
+          currentStep: 3,
           maxStepReached: Math.max(ot.maxStepReached ?? 0, 4),
         },
       });
