@@ -599,6 +599,8 @@ model OtItem {
   tallerNombre           String              @default("")
   descripcion            String
   importe                Float
+  /// Importe del presupuesto antes del primer ajuste. Null = nunca se ajustó (original = importe).
+  importeOriginal        Float?
   observacion            String?
   archivo                String?
   aprobado               Boolean             @default(false)

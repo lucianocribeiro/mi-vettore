@@ -93,6 +93,7 @@ type OtItem = {
   tallerNombre: string;
   descripcion: string;
   importe: number;
+  importeOriginal?: number | null;
   observacion: string | null;
   archivo: string | null;
   aprobado?: boolean;
@@ -454,10 +455,20 @@ export function M7TalleresPage() {
    * después del avance queda en valorAprobado (congelado).
    * En ajuste, el total editado es totTildados (importes actuales).
    */
+  const totOriginalTildados = itemsPresupuesto
+    .filter(
+      (i) =>
+        !i.adicionalAjuste &&
+        (aprobadoDrafts[i.id] !== undefined ? aprobadoDrafts[i.id] : i.aprobado === true)
+    )
+    .reduce((a, i) => {
+      const v = i.importeOriginal ?? i.importe;
+      return a + (Number.isFinite(v) ? v : 0);
+    }, 0);
   const presupuestoAprobadoFijo =
     ot?.valorAprobado != null && ot.valorAprobado > 0
       ? ot.valorAprobado
-      : totTildados;
+      : totOriginalTildados;
   const enSeleccion = isSeleccionStep(ot?.currentStep ?? -1);
   const enAjuste = isAjusteStep(ot?.currentStep ?? -1);
   const enCierre = isCierreStep(ot?.currentStep ?? -1);
@@ -1667,7 +1678,9 @@ function SeleccionChecklist({
   aprobadoDrafts: Record<string, boolean>;
   setAprobadoDraft: Dispatch<SetStateAction<Record<string, boolean>>>;
 }) {
-  const items = (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO");
+  const items = (ot.items ?? [])
+    .filter((i) => i.tipo === "PRESUPUESTO")
+    .map((i) => (i.importeOriginal != null ? { ...i, importe: i.importeOriginal } : i));
   const isMarcado = (i: OtItem) =>
     aprobadoDrafts[i.id] !== undefined ? aprobadoDrafts[i.id] : !!i.aprobado;
   const marcados = items.filter(isMarcado);
@@ -1908,7 +1921,9 @@ function AjusteImportesChecklist({
     return a + val;
   }, 0);
   const original =
-    ot.valorAprobado != null && ot.valorAprobado > 0 ? ot.valorAprobado : total;
+    ot.valorAprobado != null && ot.valorAprobado > 0
+      ? ot.valorAprobado
+      : itemsBase.reduce((a, i) => a + (i.importeOriginal ?? i.importe), 0);
   const [cats, setCats] = useState<CatDiag[]>([]);
   const [conceptoDrafts, setConceptoDrafts] = useState<Record<string, string | null>>({});
   const [showAdic, setShowAdic] = useState(false);
@@ -2224,6 +2239,11 @@ function AjusteImportesChecklist({
                           }}
                         />
                       )}
+                      {i.importeOriginal != null && i.importeOriginal !== i.importe && (
+                        <div className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
+                          Original {money(i.importeOriginal)}
+                        </div>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -2330,9 +2350,15 @@ function ItemsEditor({
   const [fecha, setFecha] = useState(todayInputDate);
   const [saving, setSaving] = useState(false);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
-  const allItems = (ot.items ?? []).filter((i) =>
-    tipo === "PRESUPUESTO" ? i.tipo === "PRESUPUESTO" : i.tipo !== "PRESUPUESTO"
-  );
+  const allItems = (ot.items ?? [])
+    .filter((i) =>
+      tipo === "PRESUPUESTO" ? i.tipo === "PRESUPUESTO" : i.tipo !== "PRESUPUESTO"
+    )
+    .map((i) =>
+      tipo === "PRESUPUESTO" && i.importeOriginal != null
+        ? { ...i, importe: i.importeOriginal }
+        : i
+    );
   const items = allItems.filter((i) => !pendingDeleteIds.includes(i.id));
   const total = items.reduce((a, i) => a + i.importe, 0);
   const gastoRequiereClasif = tipo === "FACTURA" || !!requireClasif;

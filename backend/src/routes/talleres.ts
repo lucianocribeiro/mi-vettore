@@ -270,6 +270,7 @@ function sanitizeOtForViewer<T extends OtLoaded>(
     .map((i) => ({
       ...i,
       importe: 0,
+      importeOriginal: null,
       observacion: null,
     }));
   return {
@@ -425,6 +426,17 @@ async function nextNumeroOT(): Promise<string> {
 async function nextNumeroOTE(): Promise<string> {
   const n = (await maxNumeroConPrefijo("OTE-")) + 1;
   return `OTE-${String(n).padStart(4, "0")}`;
+}
+
+function totalOriginalAprobado(
+  items: Array<{ tipo: string; aprobado: boolean; adicionalAjuste: boolean; importe: number; importeOriginal: number | null }>
+): number {
+  return items
+    .filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado && !i.adicionalAjuste)
+    .reduce((a, i) => {
+      const v = i.importeOriginal ?? i.importe;
+      return a + (Number.isFinite(v) ? v : 0);
+    }, 0);
 }
 
 async function registrarPedidoBaja(
@@ -2405,10 +2417,10 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
       const seleccionados = (ot.items ?? []).filter(
         (i) => i.tipo === "PRESUPUESTO" && i.aprobado
       );
-      const totalSel = seleccionados.reduce(
-        (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
-        0
-      );
+      const totalSel = seleccionados.reduce((a, i) => {
+        const v = i.importeOriginal ?? i.importe;
+        return a + (Number.isFinite(v) ? v : 0);
+      }, 0);
       if (seleccionados.length > 0) {
         await prisma.otItem.updateMany({
           where: {
@@ -2577,7 +2589,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         data: {
           cerradaAt: new Date(),
           valorFinal: tot.facturado || ot.valorFinal,
-          valorAprobado: tot.presupuesto || ot.valorAprobado,
+          valorAprobado: ot.valorAprobado ?? (totalOriginalAprobado(ot.items) || null),
         },
         include: includeOTFor(req.user!.id),
       });
@@ -3120,6 +3132,17 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
         return;
       }
       data.importe = importe;
+      if (isAsignacionOPresupuestoStep(ot.currentStep)) {
+        data.importeOriginal = null;
+      } else {
+        const actual = await prisma.otItem.findUnique({
+          where: { id: req.params.itemId },
+          select: { importe: true, importeOriginal: true, adicionalAjuste: true },
+        });
+        if (actual && !actual.adicionalAjuste && actual.importeOriginal == null && actual.importe !== importe) {
+          data.importeOriginal = actual.importe;
+        }
+      }
     }
     if (req.body?.observacion !== undefined) {
       data.observacion = String(req.body.observacion).trim() || null;
@@ -3217,7 +3240,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
     if (req.body?.importe !== undefined || wantsSugerido || wantsAprobado) {
       const items = await prisma.otItem.findMany({
         where: { otId: ot.id, tipo: "PRESUPUESTO" },
-        select: { importe: true, sugeridoEmpresa: true, aprobado: true },
+        select: { importe: true, importeOriginal: true, sugeridoEmpresa: true, aprobado: true },
       });
       const dataOt: {
         valorAprobado?: number | null;
@@ -3227,7 +3250,10 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       if (isSeleccionStep(ot.currentStep) && (wantsAprobado || wantsSugerido)) {
         const totalSel = items
           .filter((i) => i.aprobado)
-          .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0);
+          .reduce((a, i) => {
+            const v = i.importeOriginal ?? i.importe;
+            return a + (Number.isFinite(v) ? v : 0);
+          }, 0);
         dataOt.valorAprobado = totalSel > 0 ? totalSel : null;
         dataOt.montoAutorizado = totalSel > 0 ? totalSel : null;
       }
