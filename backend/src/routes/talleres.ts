@@ -797,7 +797,7 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
 
     if (sheet.rowCount <= 1) {
       res.status(404).json({
-        error: "No hay OT para exportar. Para cargar datos nuevos descargá la Plantilla.",
+        error: "No hay OT para exportar. Para cargar datos nuevos marcá «Datos nuevos» y exportá.",
       });
       return;
     }
@@ -1218,7 +1218,7 @@ router.get(
       });
       if (data.items.length === 0) {
         res.status(404).json({
-          error: "No hay OT para exportar con esos filtros. Para cargar datos nuevos descargá la Plantilla.",
+          error: "No hay OT para exportar con esos filtros. Para cargar datos nuevos marcá «Datos nuevos» y exportá.",
         });
         return;
       }

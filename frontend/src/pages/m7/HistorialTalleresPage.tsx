@@ -246,7 +246,9 @@ export function HistorialTalleresPage() {
     if (!token) return;
     setExportando(true);
     try {
-      if (vista === "conceptos") {
+      if (importModo === "nuevos") {
+        await descargarPlantilla();
+      } else if (vista === "conceptos") {
         const q = buildQs(filtrosConceptos);
         await apiDownload(
           `/api/talleres/historial/reparaciones/export${q}`,
@@ -364,13 +366,6 @@ export function HistorialTalleresPage() {
               />
               Actualizar datos
             </label>
-            <button
-              type="button"
-              onClick={() => void descargarPlantilla()}
-              className="rounded-md px-2 py-1 font-semibold text-[#1e4080] underline-offset-2 hover:underline dark:text-sky-300"
-            >
-              Plantilla
-            </button>
             <label className="inline-flex cursor-pointer items-center rounded-md border border-[#1e4080]/40 bg-[var(--vl-page)] px-2 py-1 font-semibold text-[#1e4080] dark:text-sky-300">
               {importando ? "Importando…" : "Importar Excel"}
               <input
