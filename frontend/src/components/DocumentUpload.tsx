@@ -204,6 +204,24 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
     }
   }
 
+  async function eliminar(doc: DocumentoEntidad) {
+    if (!token) return;
+    const m = window.prompt(
+      `Eliminar «${doc.nombreOriginal || "archivo"}». Motivo (obligatorio):`
+    );
+    if (!m || m.trim().length < 3) return;
+    try {
+      await apiFetch(
+        `/api/documentos/${doc.id}`,
+        { method: "DELETE", body: JSON.stringify({ motivo: m.trim() }) },
+        token
+      );
+      setDocs((prev) => prev.filter((d) => d.id !== doc.id));
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo eliminar");
+    }
+  }
+
   async function openDoc(id: string) {
     if (!token) return;
     try {
@@ -325,6 +343,15 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
                     className="min-h-10 rounded-md border border-[var(--vl-card-border)] px-3 text-xs font-medium text-[var(--vl-heading)]"
                   >
                     Ver
+                  </button>
+                )}
+                {canValidate && latest && (
+                  <button
+                    type="button"
+                    onClick={() => void eliminar(latest)}
+                    className="min-h-10 rounded-md border border-red-300 px-3 text-xs font-medium text-red-700 dark:border-red-800 dark:text-red-300"
+                  >
+                    Eliminar
                   </button>
                 )}
                 {canValidate && latest?.estadoValidacion === "PENDIENTE" && (

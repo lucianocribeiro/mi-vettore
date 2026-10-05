@@ -12,6 +12,7 @@ import { choferPuedeEditarCamioneta, choferPuedeVerChofer } from "../lib/flota.j
 import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
 import {
   isSupabaseStorageConfigured,
+  removeDocumento,
   signedDocumentoUrl,
   uploadDocumento,
 } from "../lib/supabase-storage.js";
@@ -361,6 +362,8 @@ router.delete("/:id", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
     await prisma.documentoEntidad.delete({ where: { id: doc.id } });
+    const rm = await removeDocumento(doc.storagePath);
+    if (!rm.ok) console.error("No se pudo borrar del storage:", doc.storagePath, rm.error);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

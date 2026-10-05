@@ -45,6 +45,16 @@ export async function uploadDocumento(opts: {
   return { ok: true, path: opts.path };
 }
 
+export async function removeDocumento(
+  path: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const sb = getSupabaseAdmin();
+  if (!sb) return { ok: false, error: "Supabase Storage no configurado" };
+  const { error } = await sb.storage.from(docsBucket()).remove([path]);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export async function signedDocumentoUrl(
   path: string,
   expiresInSec = 60 * 15
