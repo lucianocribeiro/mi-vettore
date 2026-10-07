@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS, type Role } from "../types";
-import { AppLogo } from "./AppLogo";
 import { ThemeToggle } from "./ThemeToggle";
 import {
   AlertCircle,
@@ -206,9 +205,12 @@ export function Sidebar({ open, onClose }: Props) {
       ].join(" ")}
     >
       <div className="flex items-center gap-2.5 px-4 py-4 safe-top">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0b182c]">
-          <AppLogo size={22} />
-        </div>
+        <img
+          src="/vettore-logo.png"
+          alt="Vettore Logística"
+          className="h-10 w-auto shrink-0 select-none"
+          draggable={false}
+        />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <div className="truncate text-sm font-bold leading-tight text-[#e8edf5]">

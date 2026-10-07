@@ -3,7 +3,6 @@ import { Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch, ApiError } from "../lib/api";
 import { isSugerenciasOnly } from "../types";
-import { AppLogo } from "./AppLogo";
 import { AvisosBell } from "./AvisosBell";
 import { MessageSquare, Menu, X } from "./icons";
 import { Sidebar } from "./Sidebar";
@@ -44,9 +43,12 @@ export function AppLayout() {
           >
             <Menu size={22} />
           </button>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#0b182c]">
-            <AppLogo size={22} />
-          </div>
+          <img
+            src="/vettore-logo.png"
+            alt="Vettore Logística"
+            className="h-9 w-auto shrink-0 select-none"
+            draggable={false}
+          />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <div className="truncate text-sm font-bold text-[#e8edf5]">
