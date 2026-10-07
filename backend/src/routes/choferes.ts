@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { EstadoChofer } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
-import { sendExcel } from "../lib/excel-export.js";
+import { sendFlotaExcel } from "../lib/flota-import.js";
 import { ensureUsuarioForChofer } from "../lib/usuario-chofer.js";
 import { generateTempPassword } from "../lib/temp-password.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
@@ -105,23 +105,15 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
     const items = await prisma.chofer.findMany({
-      orderBy: { nombre: "asc" },
-      include: includeAsignaciones,
+      orderBy: [{ apellido: "asc" }, { nombre: "asc" }],
+      include: { empresa: { select: { cuit: true, nombre: true } } },
     });
-    await sendExcel(res, {
-      sheetName: "Choferes",
-      filename: `choferes_${new Date().toISOString().slice(0, 10)}.xlsx`,
-      columns: [
-        { header: "Nombre", key: "nombre", width: 24 },
-        { header: "DNI", key: "dni", width: 14 },
-        { header: "Email", key: "email", width: 28 },
-        { header: "Teléfono", key: "telefono", width: 16 },
-        { header: "Licencia vence", key: "licencia", width: 14 },
-        { header: "Empresa transp.", key: "dueno", width: 14 },
-        { header: "Estado", key: "estado", width: 12 },
-      ],
-      rows: items.map((c) => ({
+    await sendFlotaExcel(
+      res,
+      "choferes",
+      items.map((c) => ({
         nombre: c.nombre,
+        apellido: c.apellido,
         dni: c.dni,
         email: c.email ?? "",
         telefono: c.telefono ?? "",
@@ -130,8 +122,10 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
           : "",
         dueno: c.esDuenoFlota ? "Sí" : "No",
         estado: c.estado,
+        empresa: c.empresa.nombre,
       })),
-    });
+      `choferes_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al exportar Excel" });

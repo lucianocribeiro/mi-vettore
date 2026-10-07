@@ -713,6 +713,27 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
+/** Formato del Excel exportado del historial; la plantilla y el import usan el mismo. */
+const HISTORIAL_COLUMNAS = [
+  { header: "Patente", key: "patente", width: 12 },
+  { header: "OT", key: "ot", width: 12 },
+  { header: "Tipo OT", key: "tipoOt", width: 16 },
+  { header: "Km", key: "km", width: 10 },
+  { header: "Fecha solicitud", key: "fechaSolicitud", width: 14 },
+  { header: "Falla", key: "falla", width: 28 },
+  { header: "Detalle", key: "detalle", width: 32 },
+  { header: "Chofer", key: "chofer", width: 22 },
+  { header: "Taller", key: "taller", width: 24 },
+  { header: "Descripcion", key: "descripcion", width: 32 },
+  { header: "Importe", key: "importe", width: 12 },
+  { header: "Tipo", key: "tipo", width: 12 },
+  { header: "Fecha ítem", key: "fecha", width: 12 },
+  { header: "Cerrada", key: "cerrada", width: 12 },
+  { header: "Nivel 1", key: "n1", width: 18 },
+  { header: "Nivel 2", key: "n2", width: 18 },
+  { header: "Nivel 3", key: "n3", width: 20 },
+];
+
 /** Export historial por unidad (misma vista del listado). */
 router.get("/historial/export", authenticate, async (req: AuthedRequest, res) => {
   try {
@@ -721,33 +742,23 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
       return;
     }
     const q = String(req.query?.q ?? "").trim().toLowerCase();
-    const ots = await prisma.ordenTrabajo.findMany({
-      include: {
-        solicitud: { include: { camioneta: true, chofer: true } },
-        tallerProveedor: true,
-        items: { orderBy: { createdAt: "asc" } },
-      },
-      orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
-      take: 1000,
-    });
+    const [ots, cats] = await Promise.all([
+      prisma.ordenTrabajo.findMany({
+        include: {
+          solicitud: { include: { camioneta: true, chofer: true } },
+          tallerProveedor: true,
+          items: { orderBy: { createdAt: "asc" } },
+        },
+        orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
+        take: 1000,
+      }),
+      prisma.categoriaDiagnostico.findMany({
+        select: { id: true, nombre: true, padreId: true, nivel: true },
+      }),
+    ]);
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Historial talleres");
-    sheet.columns = [
-      { header: "Patente", key: "patente", width: 12 },
-      { header: "OT", key: "ot", width: 12 },
-      { header: "Tipo OT", key: "tipoOt", width: 16 },
-      { header: "Km", key: "km", width: 10 },
-      { header: "Fecha solicitud", key: "fechaSolicitud", width: 14 },
-      { header: "Falla", key: "falla", width: 28 },
-      { header: "Detalle", key: "detalle", width: 32 },
-      { header: "Chofer", key: "chofer", width: 22 },
-      { header: "Taller", key: "taller", width: 24 },
-      { header: "Descripcion", key: "descripcion", width: 32 },
-      { header: "Importe", key: "importe", width: 12 },
-      { header: "Tipo", key: "tipo", width: 12 },
-      { header: "Fecha ítem", key: "fecha", width: 12 },
-      { header: "Cerrada", key: "cerrada", width: 12 },
-    ];
+    sheet.columns = HISTORIAL_COLUMNAS;
     sheet.getRow(1).font = { bold: true };
 
     for (const ot of ots) {
@@ -772,7 +783,14 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
               },
             ];
       for (const it of items) {
+        const nivel = diagnosticoPathFromId(
+          cats,
+          "categoriaDiagnosticoId" in it ? it.categoriaDiagnosticoId : null
+        );
         sheet.addRow({
+          n1: nivel.nivel1 ?? "",
+          n2: nivel.nivel2 ?? "",
+          n3: nivel.nivel3 ?? "",
           patente,
           ot: ot.numeroOT,
           tipoOt: ot.externo ? "Taller externo" : "OT",
@@ -834,37 +852,30 @@ router.get("/historial/plantilla", authenticate, async (req: AuthedRequest, res)
       orderBy: [{ nivel: "asc" }, { orden: "asc" }, { nombre: "asc" }],
     });
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Historial");
-    sheet.columns = [
-      { header: "Patente", key: "patente", width: 12 },
-      { header: "Fecha", key: "fecha", width: 12 },
-      { header: "Km", key: "km", width: 10 },
-      { header: "Tipo", key: "tipo", width: 10 },
-      { header: "Falla", key: "falla", width: 28 },
-      { header: "Detalle", key: "detalle", width: 32 },
-      { header: "Nivel 1", key: "n1", width: 18 },
-      { header: "Nivel 2", key: "n2", width: 18 },
-      { header: "Nivel 3", key: "n3", width: 20 },
-      { header: "Taller", key: "taller", width: 24 },
-      { header: "Descripcion", key: "descripcion", width: 32 },
-      { header: "Importe", key: "importe", width: 12 },
-    ];
+    const sheet = workbook.addWorksheet("Historial talleres");
+    sheet.columns = HISTORIAL_COLUMNAS;
     sheet.getRow(1).font = { bold: true };
     const ejemplo = cats.find((c) => c.nivel === 3);
     const ej = diagnosticoPathFromId(cats, ejemplo?.id);
+    const hoy = new Date().toISOString().slice(0, 10);
     sheet.addRow({
       patente: "AB123CD",
-      fecha: new Date().toISOString().slice(0, 10),
+      ot: "",
+      tipoOt: "OT",
       km: 120000,
-      tipo: "Interno",
+      fechaSolicitud: hoy,
       falla: "Service",
       detalle: "Ejemplo: borrar esta fila",
-      n1: ej.nivel1 ?? "",
-      n2: ej.nivel2 ?? "",
-      n3: ej.nivel3 ?? "",
+      chofer: "",
       taller: "Taller X",
       descripcion: "Cambio de aceite y filtros",
       importe: 85000,
+      tipo: "FACTURA",
+      fecha: hoy,
+      cerrada: hoy,
+      n1: ej.nivel1 ?? "",
+      n2: ej.nivel2 ?? "",
+      n3: ej.nivel3 ?? "",
     });
     sheet.getRow(2).font = { italic: true, color: { argb: "FF888888" } };
 
@@ -883,9 +894,12 @@ router.get("/historial/plantilla", authenticate, async (req: AuthedRequest, res)
     const ayuda = workbook.addWorksheet("Instrucciones");
     ayuda.getColumn(1).width = 110;
     [
+      "Mismo formato que el Excel que se exporta del historial: podés exportar, editar y volver a importar.",
       "Obligatorias: Patente y Falla. El resto es opcional pero recomendado.",
-      "Fecha: AAAA-MM-DD. Km: kilometraje al momento de la reparación.",
-      "Tipo: 'Interno' (OT) o 'Externo' (OTE, taller externo: no se guarda importe).",
+      "OT: dejar vacío para cargas nuevas. Si tiene número (viene del export), 'Actualizar datos' modifica esa OT.",
+      "Tipo OT: 'OT' (taller interno) o 'Taller externo' (OTE: no se guarda importe).",
+      "Fechas: AAAA-MM-DD. Cerrada es la fecha de la reparación. Km: kilometraje al momento de la reparación.",
+      "Tipo: FACTURA, RENDICION o PRESUPUESTO (si se deja vacío, FACTURA). Chofer es solo de referencia.",
       "Nivel 1 / 2 / 3: copiar exactamente desde la hoja Conceptos.",
       "La patente debe existir en la flota; si no, la fila se omite.",
     ].forEach((t) => ayuda.addRow([t]));
@@ -960,12 +974,16 @@ router.post(
       const cTaller = col("taller");
       const cDesc = col("descripcion", "descripción");
       const cImporte = col("importe", "monto");
-      const cFecha = col("fecha", "cerrada");
+      const cCerrada = col("cerrada", "fecha");
+      const cFechaItem = col("fecha item");
+      const cFechaSol = col("fecha solicitud");
       const cKm = col("km", "kilometraje");
       const cN1 = col("nivel 1", "nivel1");
       const cN2 = col("nivel 2", "nivel2");
       const cN3 = col("nivel 3", "nivel3");
-      const cTipo = col("tipo", "taller interno/externo");
+      const cOT = col("ot");
+      const cTipoOt = col("tipo ot", "taller interno/externo");
+      const cTipo = col("tipo");
       if (!cPatente || !cFalla) {
         res.status(400).json({
           error: "El Excel debe tener columnas Patente y Falla (mínimo)",
@@ -994,6 +1012,18 @@ router.post(
         ) ?? null;
       const celda = (c: number, row: ExcelJS.Row) =>
         c ? String(row.getCell(c).value ?? "").trim() : "";
+      const fechaDe = (c: number, row: ExcelJS.Row): Date | null => {
+        if (!c) return null;
+        const v = row.getCell(c).value;
+        if (v instanceof Date) return v;
+        if (typeof v === "string" || typeof v === "number") {
+          const d = new Date(v);
+          if (!Number.isNaN(d.getTime())) return d;
+        }
+        return null;
+      };
+      /** OT existente → cantidad de filas ya aplicadas (n-ésima fila = n-ésimo ítem). */
+      const filasPorOt = new Map<string, number>();
 
       for (let r = 2; r <= sheet.rowCount; r++) {
         const row = sheet.getRow(r);
@@ -1004,8 +1034,12 @@ router.post(
         if (patente === "AB123CD" && /^ejemplo/i.test(celda(cDetalle, row))) continue;
         const kmRaw = cKm ? Number(row.getCell(cKm).value) : NaN;
         const kmFila = Number.isFinite(kmRaw) && kmRaw >= 0 ? Math.round(kmRaw) : null;
-        const tipoFila = normCat(celda(cTipo, row));
-        const esExterno = tipoFila === "externo" || tipoFila === "ote" || tipoFila === "taller externo";
+        const tipoItemRaw = celda(cTipo, row).toUpperCase();
+        const tipoOtFila = normCat(celda(cTipoOt, row) || tipoItemRaw);
+        const esExterno = ["externo", "ote", "taller externo"].includes(tipoOtFila);
+        const tipoItem: "FACTURA" | "RENDICION" | "PRESUPUESTO" =
+          tipoItemRaw === "RENDICION" || tipoItemRaw === "PRESUPUESTO" ? tipoItemRaw : "FACTURA";
+        const numeroOtFila = celda(cOT, row).toUpperCase();
         let categoriaFila: string | null = null;
         const n1 = celda(cN1, row);
         if (n1) {
@@ -1029,15 +1063,11 @@ router.post(
           : falla;
         const importeRaw = cImporte ? Number(row.getCell(cImporte).value) : 0;
         const importe = Number.isFinite(importeRaw) ? importeRaw : 0;
-        let fecha = new Date();
-        if (cFecha) {
-          const v = row.getCell(cFecha).value;
-          if (v instanceof Date) fecha = v;
-          else if (typeof v === "string" || typeof v === "number") {
-            const d = new Date(v);
-            if (!Number.isNaN(d.getTime())) fecha = d;
-          }
-        }
+        const cerradaFila = fechaDe(cCerrada, row);
+        const fechaItemFila = fechaDe(cFechaItem, row);
+        const fechaSolicitud = fechaDe(cFechaSol, row);
+        const fecha = cerradaFila ?? fechaItemFila ?? fechaSolicitud ?? new Date();
+        const fechaItem = fechaItemFila ?? fecha;
 
         const camioneta = await prisma.camioneta.findFirst({
           where: { patente: { equals: patente, mode: "insensitive" } },
@@ -1046,6 +1076,77 @@ router.post(
           omitidas++;
           errores.push(`Fila ${r}: patente ${patente} no está cargada en Flota`);
           continue;
+        }
+
+        if (numeroOtFila) {
+          const otNum = await prisma.ordenTrabajo.findUnique({
+            where: { numeroOT: numeroOtFila },
+            include: {
+              solicitud: { select: { camionetaId: true } },
+              items: { orderBy: { createdAt: "asc" } },
+            },
+          });
+          if (otNum) {
+            if (otNum.solicitud.camionetaId !== camioneta.id) {
+              omitidas++;
+              errores.push(`Fila ${r}: ${numeroOtFila} es de otra patente`);
+              continue;
+            }
+            if (!modoActualizar) {
+              repetidas++;
+              continue;
+            }
+            if (!otNum.cerradaAt) {
+              omitidas++;
+              errores.push(`Fila ${r}: ${numeroOtFila} está abierta; se edita desde Talleres`);
+              continue;
+            }
+            const idx = filasPorOt.get(otNum.id) ?? 0;
+            filasPorOt.set(otNum.id, idx + 1);
+            const gasto = otNum.items.filter((i) => i.tipo === "FACTURA" || i.tipo === "RENDICION");
+            const fuente = gasto.length
+              ? gasto
+              : otNum.items.filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado);
+            const item = fuente[idx];
+            await prisma.$transaction(async (tx) => {
+              await tx.ordenTrabajo.update({
+                where: { id: otNum.id },
+                data: {
+                  tallerAsignado: taller || otNum.tallerAsignado,
+                  kmAlMomento: kmFila ?? otNum.kmAlMomento,
+                  ...(cerradaFila ? { cerradaAt: cerradaFila } : {}),
+                },
+              });
+              if (item) {
+                await tx.otItem.update({
+                  where: { id: item.id },
+                  data: {
+                    tallerNombre: taller || item.tallerNombre,
+                    descripcion: descripcion || item.descripcion,
+                    importe: !otNum.externo && importe > 0 ? importe : item.importe,
+                    ...(fechaItemFila ? { fecha: fechaItemFila } : {}),
+                    categoriaDiagnosticoId: categoriaFila ?? item.categoriaDiagnosticoId,
+                  },
+                });
+              } else {
+                await tx.otItem.create({
+                  data: {
+                    otId: otNum.id,
+                    tipo: tipoItem,
+                    tallerNombre: taller,
+                    descripcion,
+                    importe: otNum.externo ? 0 : importe,
+                    fecha: fechaItem,
+                    categoriaDiagnosticoId: categoriaFila,
+                    clasificacion: "OTRO",
+                    clasificacionOtro: "Importación historial",
+                  },
+                });
+              }
+            });
+            actualizadas++;
+            continue;
+          }
         }
 
         const dayStart = new Date(fecha);
@@ -1127,6 +1228,7 @@ router.post(
               habilitadaCircular: true,
               inhabilitado: false,
               createdById: req.user!.id,
+              ...(fechaSolicitud ? { createdAt: fechaSolicitud } : {}),
             },
           });
           const ot = await tx.ordenTrabajo.create({
@@ -1147,11 +1249,12 @@ router.post(
             await tx.otItem.create({
               data: {
                 otId: ot.id,
-                tipo: "FACTURA",
+                tipo: tipoItem,
+                ...(tipoItem === "PRESUPUESTO" ? { aprobado: true } : {}),
                 tallerNombre: taller || (esExterno ? "Taller externo" : ""),
                 descripcion,
                 importe: esExterno ? 0 : importe,
-                fecha,
+                fecha: fechaItem,
                 categoriaDiagnosticoId: categoriaFila,
                 clasificacion: "OTRO",
                 clasificacionOtro: esExterno ? "Taller externo" : "Importación historial",

@@ -22,6 +22,7 @@ import { parseDateOnly } from "../lib/date-only.js";
 import { applyKmUpdate } from "../lib/km.js";
 import { reasignarChoferUnidad } from "../lib/asignacion-flota.js";
 import { uploadDocumento } from "../lib/supabase-storage.js";
+import { sendFlotaExcel } from "../lib/flota-import.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -140,6 +141,41 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       res.status(403).json({ error: "Sin permiso para exportar" });
       return;
     }
+    if (req.query.vista === "ficha") {
+      const unidades = await prisma.camioneta.findMany({
+        orderBy: { patente: "asc" },
+        include: {
+          tipoServicio: true,
+          empresa: true,
+          asignaciones: {
+            where: { periodoHasta: null },
+            include: { chofer: true, empresa: true },
+          },
+        },
+      });
+      await sendFlotaExcel(
+        res,
+        "unidades",
+        unidades.map((c) => {
+          const empresa = c.empresa ?? c.asignaciones[0]?.empresa ?? null;
+          return {
+            patente: c.patente,
+            marca: c.marca ?? "",
+            modelo: c.modelo ?? "",
+            capacidad: formatCapacidad(c.capacidadValor, c.capacidadUnidad, c.capacidad),
+            equipoFrio: c.equipoFrio ?? "",
+            tipoServicio: c.tipoServicio?.nombre ?? c.tipoTransporte ?? "",
+            estado: c.estado,
+            chofer: c.asignaciones
+              .map((a) => `${a.chofer.nombre} ${a.chofer.apellido}`.trim())
+              .join(", "),
+            empresa: empresa?.nombre ?? "",
+          };
+        }),
+        `unidades_${new Date().toISOString().slice(0, 10)}.xlsx`
+      );
+      return;
+    }
     const items = await prisma.camioneta.findMany({
       orderBy: { patente: "asc" },
       include: {
@@ -158,7 +194,6 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       },
     });
 
-    const vistaFicha = req.query.vista === "ficha";
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Unidades");
     sheet.columns = [
@@ -169,15 +204,11 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       { header: "Equipo de frío", key: "equipoFrio", width: 18 },
       { header: "Tipo servicio", key: "tipoServicio", width: 16 },
       { header: "Estado", key: "estado", width: 16 },
-      ...(vistaFicha ? [] : [{ header: "Km", key: "km", width: 10 }]),
+      { header: "Km", key: "km", width: 10 },
       { header: "Chofer", key: "chofer", width: 22 },
       { header: "Empresa", key: "empresa", width: 24 },
-      ...(vistaFicha
-        ? []
-        : [
-            { header: "OT abierta", key: "ot", width: 14 },
-            { header: "Paso OT", key: "paso", width: 10 },
-          ]),
+      { header: "OT abierta", key: "ot", width: 14 },
+      { header: "Paso OT", key: "paso", width: 10 },
     ];
     sheet.getRow(1).font = { bold: true };
 

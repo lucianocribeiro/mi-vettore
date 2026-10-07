@@ -15,7 +15,7 @@ import {
 } from "../../components/FlotaUnitFilterBar";
 import { Download, Plus } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
-import { FlotaImportPanel } from "./FlotaImportPanel";
+import { FlotaImportPanel, type HojaFlota } from "./FlotaImportPanel";
 import {
   EQUIPO_FRIO_MARCAS,
   ROLE_LABELS,
@@ -54,6 +54,12 @@ type Tab =
   | "equiposFrio"
   | "talleres"
   | "asignacion";
+
+const HOJA_IMPORT: Partial<Record<Tab, HojaFlota>> = {
+  empresas: "empresas",
+  chofer: "choferes",
+  camioneta: "unidades",
+};
 
 type DrawerOpen =
   | { tipo: "camioneta"; item: Camioneta }
@@ -1274,8 +1280,8 @@ export function M5FichaPage() {
         </div>
         {isInternalOps(user?.rol) && (
           <div className="flex flex-wrap gap-2">
-            {canEdit && !vistaUsuarios && (
-              <FlotaImportPanel onImported={() => void load()} />
+            {canEdit && !vistaUsuarios && HOJA_IMPORT[tab] && (
+              <FlotaImportPanel key={tab} hoja={HOJA_IMPORT[tab]!} onImported={() => void load()} />
             )}
             <button
               type="button"

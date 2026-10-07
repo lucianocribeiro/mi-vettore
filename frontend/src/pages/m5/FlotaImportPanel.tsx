@@ -3,6 +3,8 @@ import { useAuth } from "../../auth/AuthContext";
 import { Download, Upload, X } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
 
+export type HojaFlota = "empresas" | "choferes" | "unidades";
+
 type Conteo = { empresas: number; choferes: number; unidades: number };
 
 type Revision = {
@@ -21,9 +23,11 @@ type Resultado = {
   credenciales: { tipo: "EMPRESA" | "CHOFER"; usuario: string; nombre: string; password: string }[];
 };
 
-function conteoTexto(c: Conteo) {
-  return `${c.empresas} empresas · ${c.choferes} choferes · ${c.unidades} unidades`;
-}
+const LABEL: Record<HojaFlota, { titulo: string; plural: string }> = {
+  empresas: { titulo: "Empresas", plural: "empresas" },
+  choferes: { titulo: "Choferes", plural: "choferes" },
+  unidades: { titulo: "Unidades", plural: "unidades" },
+};
 
 function descargarCredenciales(rows: Resultado["credenciales"]) {
   const csv = [
@@ -41,7 +45,13 @@ function descargarCredenciales(rows: Resultado["credenciales"]) {
   URL.revokeObjectURL(url);
 }
 
-export function FlotaImportPanel({ onImported }: { onImported: () => void }) {
+export function FlotaImportPanel({
+  hoja,
+  onImported,
+}: {
+  hoja: HojaFlota;
+  onImported: () => void;
+}) {
   const { token } = useAuth();
   const [open, setOpen] = useState(false);
   const [modo, setModo] = useState<"nuevos" | "actualizar">("nuevos");
@@ -50,6 +60,7 @@ export function FlotaImportPanel({ onImported }: { onImported: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [revision, setRevision] = useState<Revision | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
+  const { titulo, plural } = LABEL[hoja];
 
   function reset() {
     setFile(null);
@@ -65,6 +76,7 @@ export function FlotaImportPanel({ onImported }: { onImported: () => void }) {
     try {
       const fd = new FormData();
       fd.append("file", file);
+      fd.append("hoja", hoja);
       fd.append("modo", modo);
       if (dryRun) fd.append("dryRun", "1");
       const data = await apiFetch<Revision | Resultado>(
@@ -96,7 +108,7 @@ export function FlotaImportPanel({ onImported }: { onImported: () => void }) {
         className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm font-medium text-[var(--vl-text)] hover:bg-slate-50 dark:hover:bg-slate-800"
       >
         <Upload size={14} />
-        Importar flota
+        Importar {plural}
       </button>
 
       {open && (
@@ -106,7 +118,7 @@ export function FlotaImportPanel({ onImported }: { onImported: () => void }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-bold text-[var(--vl-heading)]">Importar flota desde Excel</h3>
+              <h3 className="font-bold text-[var(--vl-heading)]">Importar {plural} desde Excel</h3>
               <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar" disabled={busy}>
                 <X size={18} />
               </button>
@@ -115,9 +127,9 @@ export function FlotaImportPanel({ onImported }: { onImported: () => void }) {
             {resultado ? (
               <div className="space-y-3 text-sm">
                 <p className="rounded-md bg-emerald-50 px-3 py-2 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-                  Creados: {conteoTexto(resultado.creados)}
+                  Creados: {resultado.creados[hoja]} {plural}
                   <br />
-                  Actualizados: {conteoTexto(resultado.actualizados)}
+                  Actualizados: {resultado.actualizados[hoja]} {plural}
                 </p>
                 {resultado.credenciales.length > 0 && (
                   <div className="rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
@@ -182,11 +194,14 @@ export function FlotaImportPanel({ onImported }: { onImported: () => void }) {
             ) : (
               <div className="space-y-3 text-sm">
                 <p className="text-xs text-[var(--vl-text-muted)]">
-                  Hojas Empresas, Choferes y Unidades. Primero se revisa el archivo; si no hay errores, se importa.
+                  Mismo formato que el Excel que se exporta desde la pestaña {titulo}. Primero se revisa el archivo; si no hay errores, se importa.
                 </p>
                 <button
                   type="button"
-                  onClick={() => token && void apiDownload("/api/flota/plantilla", token, "plantilla_flota.xlsx")}
+                  onClick={() =>
+                    token &&
+                    void apiDownload(`/api/flota/plantilla?hoja=${hoja}`, token, `plantilla_${hoja}.xlsx`)
+                  }
                   className="inline-flex items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold"
                 >
                   <Download size={13} /> Descargar plantilla
@@ -214,7 +229,7 @@ export function FlotaImportPanel({ onImported }: { onImported: () => void }) {
                 {revision && (
                   revision.ok ? (
                     <p className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-                      Archivo OK: {revision.stats ? conteoTexto(revision.stats) : ""}. Podés importar.
+                      Archivo OK: {revision.stats?.[hoja] ?? 0} {plural}. Podés importar.
                     </p>
                   ) : (
                     <div className="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
@@ -222,7 +237,7 @@ export function FlotaImportPanel({ onImported }: { onImported: () => void }) {
                       <ul className="mt-1 list-disc pl-5">
                         {(revision.errores ?? []).slice(0, 30).map((e, i) => (
                           <li key={i}>
-                            {e.hoja}{e.fila ? ` fila ${e.fila}` : ""}: {e.mensaje}
+                            {e.fila ? `Fila ${e.fila}: ` : ""}{e.mensaje}
                           </li>
                         ))}
                       </ul>

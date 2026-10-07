@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { generateTempPassword } from "../lib/temp-password.js";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
-import { sendExcel } from "../lib/excel-export.js";
+import { sendFlotaExcel } from "../lib/flota-import.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
@@ -44,22 +44,17 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
     const items = await prisma.empresaTransporte.findMany({
       orderBy: { nombre: "asc" },
     });
-    await sendExcel(res, {
-      sheetName: "Empresas",
-      filename: `empresas_${new Date().toISOString().slice(0, 10)}.xlsx`,
-      columns: [
-        { header: "Nombre", key: "nombre", width: 28 },
-        { header: "CUIT", key: "cuit", width: 16 },
-        { header: "Contacto", key: "contacto", width: 28 },
-        { header: "Tipo", key: "tipo", width: 12 },
-      ],
-      rows: items.map((e) => ({
+    await sendFlotaExcel(
+      res,
+      "empresas",
+      items.map((e) => ({
         nombre: e.nombre,
         cuit: e.cuit ?? "",
         contacto: e.contacto ?? "",
         tipo: e.tipo,
       })),
-    });
+      `empresas_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al exportar Excel" });
