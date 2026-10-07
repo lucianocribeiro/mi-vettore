@@ -284,6 +284,7 @@ export function HistorialTalleresPage() {
         creadas: number;
         actualizadas?: number;
         omitidas: number;
+        repetidas?: number;
         errores?: string[];
       }>(
         "/api/talleres/historial/import",
@@ -297,6 +298,7 @@ export function HistorialTalleresPage() {
           (data.creadas && importModo === "actualizar"
             ? ` · nuevas ${data.creadas}`
             : "") +
+          (data.repetidas ? ` · ya cargadas ${data.repetidas} (usá Actualizar datos para modificarlas)` : "") +
           (data.omitidas ? ` · omitidas ${data.omitidas}` : "") +
           (data.errores?.length ? ` · ${data.errores[0]}` : "")
       );

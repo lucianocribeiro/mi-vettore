@@ -156,6 +156,7 @@ export function M6MantenimientoPage() {
         creadas: number;
         actualizadas?: number;
         omitidas: number;
+        repetidas?: number;
         semaforoActualizadas?: number;
         errores?: string[];
       }>("/api/camionetas/mantenimiento/import", { method: "POST", body: fd }, token);
@@ -169,6 +170,7 @@ export function M6MantenimientoPage() {
           (data.semaforoActualizadas
             ? ` · semáforo actualizado en ${data.semaforoActualizadas} unidades`
             : "") +
+          (data.repetidas ? ` · ya cargados ${data.repetidas} (usá Actualizar para modificarlos)` : "") +
           (data.omitidas ? ` · omitidas ${data.omitidas}` : "") +
           (data.errores?.length ? ` · ${data.errores[0]}` : "")
       );

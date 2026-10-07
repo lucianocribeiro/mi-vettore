@@ -976,6 +976,7 @@ router.post(
       let creadas = 0;
       let actualizadas = 0;
       let omitidas = 0;
+      let repetidas = 0;
       const errores: string[] = [];
 
       const catsImport = await prisma.categoriaDiagnostico.findMany({
@@ -1000,6 +1001,7 @@ router.post(
           .trim()
           .toUpperCase();
         if (!patente) continue;
+        if (patente === "AB123CD" && /^ejemplo/i.test(celda(cDetalle, row))) continue;
         const kmRaw = cKm ? Number(row.getCell(cKm).value) : NaN;
         const kmFila = Number.isFinite(kmRaw) && kmRaw >= 0 ? Math.round(kmRaw) : null;
         const tipoFila = normCat(celda(cTipo, row));
@@ -1042,7 +1044,7 @@ router.post(
         });
         if (!camioneta) {
           omitidas++;
-          errores.push(`Fila ${r}: patente ${patente} no encontrada`);
+          errores.push(`Fila ${r}: patente ${patente} no está cargada en Flota`);
           continue;
         }
 
@@ -1051,18 +1053,22 @@ router.post(
         const dayEnd = new Date(fecha);
         dayEnd.setHours(23, 59, 59, 999);
 
-        if (modoActualizar) {
-          const existente = await prisma.ordenTrabajo.findFirst({
-            where: {
-              cerradaAt: { gte: dayStart, lte: dayEnd },
-              solicitud: {
-                camionetaId: camioneta.id,
-                falla,
-              },
+        const existente = await prisma.ordenTrabajo.findFirst({
+          where: {
+            cerradaAt: { gte: dayStart, lte: dayEnd },
+            solicitud: {
+              camionetaId: camioneta.id,
+              falla,
             },
-            include: { items: true },
-            orderBy: { cerradaAt: "desc" },
-          });
+          },
+          include: { items: true },
+          orderBy: { cerradaAt: "desc" },
+        });
+        if (existente && !modoActualizar) {
+          repetidas++;
+          continue;
+        }
+        if (modoActualizar) {
           if (existente) {
             await prisma.$transaction(async (tx) => {
               await tx.ordenTrabajo.update({
@@ -1160,6 +1166,7 @@ router.post(
         creadas,
         actualizadas,
         omitidas,
+        repetidas,
         modo: modoActualizar ? "actualizar" : "nuevos",
         errores: errores.slice(0, 20),
       });

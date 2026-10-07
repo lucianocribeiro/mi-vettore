@@ -308,6 +308,12 @@ router.get("/mantenimiento/export", authenticate, async (req: AuthedRequest, res
       orderBy: [{ fecha: "desc" }, { km: "desc" }],
       take: 5000,
     });
+    if (rows.length === 0) {
+      res.status(404).json({
+        error: "No hay registros de mantenimiento para exportar. Para cargar datos usá «Plantilla mantenimiento».",
+      });
+      return;
+    }
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Mantenimiento");
     sheet.columns = [...MANT_HEADERS];
@@ -401,6 +407,7 @@ router.post(
       let creadas = 0;
       let actualizadas = 0;
       let omitidas = 0;
+      let repetidas = 0;
       const errores: string[] = [];
       /** camionetaId → campo → fecha más nueva de la planilla. */
       const fechasSemaforo = new Map<string, Partial<Record<CampoFechaMant, Date>>>();
@@ -434,7 +441,7 @@ router.post(
         });
         if (!camioneta) {
           omitidas++;
-          errores.push(`Fila ${r}: patente ${patente} no encontrada`);
+          errores.push(`Fila ${r}: patente ${patente} no está cargada en Flota`);
           continue;
         }
         const kmRaw = cKm ? Number(row.getCell(cKm).value) : NaN;
@@ -454,19 +461,23 @@ router.post(
           : null;
         const km = Number.isFinite(kmRaw) ? kmRaw : null;
 
+        const dayStart = new Date(fecha);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(fecha);
+        dayEnd.setHours(23, 59, 59, 999);
+        const existente = await prisma.registroMantenimiento.findFirst({
+          where: {
+            camionetaId: camioneta.id,
+            tipo,
+            fecha: { gte: dayStart, lte: dayEnd },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        if (existente && !modoActualizar) {
+          repetidas++;
+          continue;
+        }
         if (modoActualizar) {
-          const dayStart = new Date(fecha);
-          dayStart.setHours(0, 0, 0, 0);
-          const dayEnd = new Date(fecha);
-          dayEnd.setHours(23, 59, 59, 999);
-          const existente = await prisma.registroMantenimiento.findFirst({
-            where: {
-              camionetaId: camioneta.id,
-              tipo,
-              fecha: { gte: dayStart, lte: dayEnd },
-            },
-            orderBy: { createdAt: "desc" },
-          });
           if (existente) {
             await prisma.registroMantenimiento.update({
               where: { id: existente.id },
@@ -524,6 +535,7 @@ router.post(
         creadas,
         actualizadas,
         omitidas,
+        repetidas,
         semaforoActualizadas,
         modo: modoActualizar ? "actualizar" : "nuevos",
         errores: errores.slice(0, 10),
