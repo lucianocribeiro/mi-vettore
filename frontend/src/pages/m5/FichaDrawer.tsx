@@ -216,10 +216,6 @@ export function FichaDrawer({
                   label="Kilometraje"
                   value={`${cam.km.toLocaleString("es-AR")} km`}
                 />
-                <Row
-                  label="Datos técnicos"
-                  value={cam.datosTecnicos || "—"}
-                />
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[var(--vl-text-muted)]">Estado</span>
                   <Badge className={ESTADO_CAMIONETA_STYLE[cam.estado]}>

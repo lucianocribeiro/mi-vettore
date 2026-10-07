@@ -183,7 +183,6 @@ export function M5FichaPage() {
   const [fCapacidadValor, setFCapacidadValor] = useState("");
   const [fCapacidadUnidad, setFCapacidadUnidad] = useState("");
   const [fTipoServicioId, setFTipoServicioId] = useState("");
-  const [fDatosTecnicos, setFDatosTecnicos] = useState("");
   const [fKm, setFKm] = useState("0");
   const [fAceite, setFAceite] = useState("");
   const [fCorrea, setFCorrea] = useState("");
@@ -395,7 +394,6 @@ export function M5FichaPage() {
     setFCapacidadValor("");
     setFCapacidadUnidad("");
     setFTipoServicioId("");
-    setFDatosTecnicos("");
     setFKm("0");
     setFAceite("");
     setFCorrea("");
@@ -468,7 +466,6 @@ export function M5FichaPage() {
     );
     setFCapacidadUnidad(item.capacidadUnidad ?? "");
     setFTipoServicioId(item.tipoServicioId ?? "");
-    setFDatosTecnicos(item.datosTecnicos ?? "");
     setFKm(String(item.km));
     setFAceite(
       item.fechaUltimoAceite ? item.fechaUltimoAceite.slice(0, 10) : ""
@@ -672,7 +669,6 @@ export function M5FichaPage() {
           capacidadValor: fCapacidadValor ? Number(fCapacidadValor) : null,
           capacidadUnidad: fCapacidadUnidad || null,
           tipoServicioId: fTipoServicioId || null,
-          datosTecnicos: fDatosTecnicos || null,
           km: Number(fKm) || 0,
           fechaUltimoAceite: fAceite || null,
           fechaCambioCorrea: fCorrea || null,
@@ -2328,13 +2324,6 @@ export function M5FichaPage() {
                     Para {fEquipoFrio}: {tiposFrioPermitidos.join(", ")}
                   </p>
                 )}
-              </Field>
-              <Field label="Datos técnicos">
-                <input
-                  className={inputClass}
-                  value={fDatosTecnicos}
-                  onChange={(e) => setFDatosTecnicos(e.target.value)}
-                />
               </Field>
               <Field label="Kilometraje">
                 <input
