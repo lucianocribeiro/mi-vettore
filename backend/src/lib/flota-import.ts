@@ -4,7 +4,10 @@ import { anioCamionetaValido } from "./camioneta-fields.js";
 
 export type ImportError = { hoja: string; fila: number; mensaje: string };
 
-/** Nombre de empresa de las filas de ejemplo de la plantilla: se ignoran al importar. */
+/**
+ * Nombre de empresa de las filas de ejemplo de la plantilla: se ignoran al importar.
+ * También se ignoran los choferes titulares sintéticos (DNI "EMP-…", ver dueno-flota.ts).
+ */
 export const EMPRESA_EJEMPLO = "Empresa Ejemplo";
 export const CUIT_EJEMPLO = "30700000001";
 
@@ -278,9 +281,11 @@ export async function parseFlotaWorkbook(
     if (norm(empresa) === norm(EMPRESA_EJEMPLO)) return;
 
     if (hoja === "choferes") {
+      const dniRaw = txt(row, "dni");
+      if (/^EMP-/i.test(dniRaw)) return;
       const nombre = txt(row, "nombre");
       const apellido = txt(row, "apellido");
-      const dni = digits(txt(row, "dni"));
+      const dni = digits(dniRaw);
       if (!dni && !nombre && !apellido) return;
       if (dni.length < 7 || !nombre || !apellido || !empresa) {
         error(n, "Nombre, Apellido, DNI y Empresa son obligatorios");
