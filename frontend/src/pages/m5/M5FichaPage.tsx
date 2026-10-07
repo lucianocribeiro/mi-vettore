@@ -183,13 +183,6 @@ export function M5FichaPage() {
   const [fCapacidadUnidad, setFCapacidadUnidad] = useState("");
   const [fTipoServicioId, setFTipoServicioId] = useState("");
   const [fKm, setFKm] = useState("0");
-  const [fAceite, setFAceite] = useState("");
-  const [fCorrea, setFCorrea] = useState("");
-  const [fNeumaticos, setFNeumaticos] = useState("");
-  const [fBateria, setFBateria] = useState("");
-  const [fSeguroCia, setFSeguroCia] = useState("");
-  const [fSeguroVenc, setFSeguroVenc] = useState("");
-  const [fVtbVenc, setFVtbVenc] = useState("");
   const [fEstadoCam, setFEstadoCam] = useState<
     "OPERATIVA" | "EN_TALLER" | "DE_VACACIONES" | "FUERA_SERVICIO" | "INACTIVA"
   >("OPERATIVA");
@@ -415,13 +408,6 @@ export function M5FichaPage() {
     setFCapacidadUnidad("");
     setFTipoServicioId("");
     setFKm("0");
-    setFAceite("");
-    setFCorrea("");
-    setFNeumaticos("");
-    setFBateria("");
-    setFSeguroCia("");
-    setFSeguroVenc("");
-    setFVtbVenc("");
     setFEstadoCam("OPERATIVA");
     setFEstadoDesde("");
     setFEstadoHasta("");
@@ -487,23 +473,6 @@ export function M5FichaPage() {
     setFCapacidadUnidad(item.capacidadUnidad ?? "");
     setFTipoServicioId(item.tipoServicioId ?? "");
     setFKm(String(item.km));
-    setFAceite(
-      item.fechaUltimoAceite ? item.fechaUltimoAceite.slice(0, 10) : ""
-    );
-    setFCorrea(
-      item.fechaCambioCorrea ? item.fechaCambioCorrea.slice(0, 10) : ""
-    );
-    setFNeumaticos(
-      item.fechaCambioNeumaticos ? item.fechaCambioNeumaticos.slice(0, 10) : ""
-    );
-    setFBateria(
-      item.fechaCambioBateria ? item.fechaCambioBateria.slice(0, 10) : ""
-    );
-    setFSeguroCia(item.seguroCompania ?? "");
-    setFSeguroVenc(
-      item.seguroVencimiento ? item.seguroVencimiento.slice(0, 10) : ""
-    );
-    setFVtbVenc(item.vtbVencimiento ? item.vtbVencimiento.slice(0, 10) : "");
     setFEstadoCam(item.estado);
     setFEstadoDesde(
       item.estadoDesde ? item.estadoDesde.slice(0, 10) : ""
@@ -690,13 +659,6 @@ export function M5FichaPage() {
           capacidadUnidad: fCapacidadUnidad || null,
           tipoServicioId: fTipoServicioId || null,
           km: Number(fKm) || 0,
-          fechaUltimoAceite: fAceite || null,
-          fechaCambioCorrea: fCorrea || null,
-          fechaCambioNeumaticos: fNeumaticos || null,
-          fechaCambioBateria: fBateria || null,
-          seguroCompania: fSeguroCia || null,
-          seguroVencimiento: fSeguroVenc || null,
-          vtbVencimiento: fVtbVenc || null,
           estado: fEstadoCam,
           estadoDesde: fEstadoCam === "OPERATIVA" ? null : fEstadoDesde || null,
           estadoHasta: fEstadoCam === "OPERATIVA" ? null : fEstadoHasta || null,
@@ -2350,61 +2312,6 @@ export function M5FichaPage() {
                   className={inputClass}
                   value={fKm}
                   onChange={(e) => setFKm(e.target.value)}
-                />
-              </Field>
-              <Field label="Último cambio de aceite">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={fAceite}
-                  onChange={(e) => setFAceite(e.target.value)}
-                />
-              </Field>
-              <Field label="Último cambio de distribución">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={fCorrea}
-                  onChange={(e) => setFCorrea(e.target.value)}
-                />
-              </Field>
-              <Field label="Último cambio de neumáticos">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={fNeumaticos}
-                  onChange={(e) => setFNeumaticos(e.target.value)}
-                />
-              </Field>
-              <Field label="Último cambio de batería">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={fBateria}
-                  onChange={(e) => setFBateria(e.target.value)}
-                />
-              </Field>
-              <Field label="Compañía de seguro">
-                <input
-                  className={inputClass}
-                  value={fSeguroCia}
-                  onChange={(e) => setFSeguroCia(e.target.value)}
-                />
-              </Field>
-              <Field label="Vencimiento seguro">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={fSeguroVenc}
-                  onChange={(e) => setFSeguroVenc(e.target.value)}
-                />
-              </Field>
-              <Field label="Vencimiento VTV">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={fVtbVenc}
-                  onChange={(e) => setFVtbVenc(e.target.value)}
                 />
               </Field>
               <Field label="Estado">

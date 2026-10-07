@@ -234,39 +234,8 @@ export function FichaDrawer({
               </section>
 
               <section className="space-y-3 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
-                <SectionTitle>Vencimientos documentación</SectionTitle>
-                <Row
-                  label="Seguro"
-                  value={
-                    cam.seguroCompania
-                      ? `${cam.seguroCompania} · vence ${formatDate(cam.seguroVencimiento)}`
-                      : formatDate(cam.seguroVencimiento)
-                  }
-                />
-                <Row label="VTV vence" value={formatDate(cam.vtbVencimiento)} />
-                <div className="pt-1">
-                  <DocumentUpload camionetaId={cam.id} />
-                </div>
-              </section>
-
-              <section className="space-y-3 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
-                <SectionTitle>Historial mantenimiento</SectionTitle>
-                <Row
-                  label="Últ. cambio de aceite"
-                  value={formatDate(cam.fechaUltimoAceite)}
-                />
-                <Row
-                  label="Últ. cambio de distribución"
-                  value={formatDate(cam.fechaCambioCorrea)}
-                />
-                <Row
-                  label="Últ. cambio de neumáticos"
-                  value={formatDate(cam.fechaCambioNeumaticos)}
-                />
-                <Row
-                  label="Últ. cambio de batería"
-                  value={formatDate(cam.fechaCambioBateria)}
-                />
+                <SectionTitle>Documentación</SectionTitle>
+                <DocumentUpload camionetaId={cam.id} />
               </section>
 
               <div className="rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
