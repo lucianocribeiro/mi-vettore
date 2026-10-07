@@ -25,7 +25,6 @@ const MOTIVOS_INHABILITAR_UNIDAD = [
   { value: "FUERA_SERVICIO", label: "Fuera de servicio" },
 ];
 import {
-  EQUIPO_FRIO_MARCAS,
   ROLE_LABELS,
   TIPO_TALLER_LABEL,
   canWriteMaster,
@@ -33,7 +32,6 @@ import {
   currentAsignaciones,
   formatDate,
   isInternalOps,
-  tiposFrioParaEquipo,
   type Camioneta,
   type Chofer,
   type Empresa,
@@ -46,7 +44,7 @@ import {
 import { FichaDrawer } from "./FichaDrawer";
 import { Field, FormModal, inputClass } from "./FormModal";
 import { NoticeDialog } from "../../components/NoticeDialog";
-import { EquiposFrioAbmPanel } from "./EquiposFrioAbmPanel";
+import { EquiposFrioAbmPanel, type EquipoFrio } from "./EquiposFrioAbmPanel";
 import {
   MarcasModelosAbmPanel,
   type MarcaCamionetaAbm,
@@ -99,7 +97,7 @@ const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
   chofer: "chofer",
   empresas: "empresa",
   usuarios: "usuario especial",
-  tiposServicio: "tipo de servicio",
+  tiposServicio: "tipo de frío",
   marcasModelos: "",
   equiposFrio: "equipo de frío",
   talleres: "taller",
@@ -135,6 +133,7 @@ export function M5FichaPage() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [usuarios, setUsuarios] = useState<User[]>([]);
   const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([]);
+  const [equiposFrio, setEquiposFrio] = useState<EquipoFrio[]>([]);
   const [marcasCamioneta, setMarcasCamioneta] = useState<MarcaCamionetaAbm[]>(
     []
   );
@@ -282,9 +281,26 @@ export function M5FichaPage() {
     return list;
   }, [marcasCamioneta, fMarca]);
 
+  const equiposFrioOpciones = useMemo(
+    () => equiposFrio.filter((e) => e.activo || e.nombre === fEquipoFrio),
+    [equiposFrio, fEquipoFrio]
+  );
+
+  const tiposFrioDeEquipo = useCallback(
+    (nombre: string): string[] | null => {
+      if (!nombre) return null;
+      const eq = equiposFrio.find(
+        (e) => e.nombre.trim().toLowerCase() === nombre.trim().toLowerCase()
+      );
+      if (!eq || eq.tipos.length === 0) return null;
+      return eq.tipos.map((t) => t.tipoServicio.nombre);
+    },
+    [equiposFrio]
+  );
+
   const tiposFrioPermitidos = useMemo(
-    () => tiposFrioParaEquipo(fEquipoFrio),
-    [fEquipoFrio]
+    () => tiposFrioDeEquipo(fEquipoFrio),
+    [tiposFrioDeEquipo, fEquipoFrio]
   );
 
   const tiposServicioParaEquipo = useMemo(() => {
@@ -314,7 +330,7 @@ export function M5FichaPage() {
     setLoading(true);
     setError(null);
     try {
-      const [cami, chof, emp, usu, tServ, marcas, tall, tallMeta] =
+      const [cami, chof, emp, usu, tServ, marcas, tall, tallMeta, eqFrio] =
         await Promise.all([
           apiFetch<Camioneta[]>(
             canEdit ? "/api/camionetas?incluirInactivas=1" : "/api/camionetas",
@@ -338,7 +354,11 @@ export function M5FichaPage() {
             {},
             token
           ).catch(() => ({ tipos: Object.keys(TIPO_TALLER_LABEL) as TipoTaller[] })),
+          apiFetch<EquipoFrio[]>("/api/equipos-frio", {}, token).catch(
+            () => [] as EquipoFrio[]
+          ),
         ]);
+      setEquiposFrio(Array.isArray(eqFrio) ? eqFrio : []);
       setCamionetas(Array.isArray(cami) ? cami : []);
       setChoferes(Array.isArray(chof) ? chof : []);
       setEmpresas(Array.isArray(emp) ? emp : []);
@@ -976,7 +996,7 @@ export function M5FichaPage() {
     { id: "camioneta", label: "Unidades" },
     { id: "chofer", label: "Choferes" },
     { id: "asignacion", label: "Asignación flota" },
-    { id: "tiposServicio", label: "Tipos de servicio" },
+    { id: "tiposServicio", label: "Tipos de frío" },
     { id: "marcasModelos", label: "Marcas y modelos" },
     { id: "equiposFrio", label: "Equipo de frío" },
   ];
@@ -1324,7 +1344,7 @@ export function M5FichaPage() {
                       : tab === "asignacion"
                         ? "Buscar patente, chofer o empresa…"
                         : tab === "tiposServicio"
-                          ? "Buscar tipo de servicio…"
+                          ? "Buscar tipo de frío…"
                           : tab === "marcasModelos"
                             ? "Buscar marca o modelo…"
                             : tab === "equiposFrio"
@@ -1955,10 +1975,10 @@ export function M5FichaPage() {
         <FormModal
           title={
             form.item
-              ? `Editar ${form.kind === "tipoServicio" ? "tipo de servicio" : form.kind}`
+              ? `Editar ${form.kind === "tipoServicio" ? "tipo de frío" : form.kind}`
               : form.kind === "camioneta"
                 ? "Nueva unidad"
-                : `Nuevo ${form.kind === "tipoServicio" ? "tipo de servicio" : form.kind}`
+                : `Nuevo ${form.kind === "tipoServicio" ? "tipo de frío" : form.kind}`
           }
           onClose={() => setForm(null)}
           onSubmit={submitForm}
@@ -2236,7 +2256,7 @@ export function M5FichaPage() {
                   onChange={(e) => {
                     const next = e.target.value;
                     setFEquipoFrio(next);
-                    const permitidos = tiposFrioParaEquipo(next);
+                    const permitidos = tiposFrioDeEquipo(next);
                     if (!permitidos) {
                       return;
                     }
@@ -2266,16 +2286,15 @@ export function M5FichaPage() {
                   }}
                 >
                   <option value="">—</option>
-                  {EQUIPO_FRIO_MARCAS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
+                  {equiposFrioOpciones.map((e) => (
+                    <option key={e.id} value={e.nombre}>
+                      {e.nombre}
+                      {!e.activo ? " (inactivo)" : ""}
                     </option>
                   ))}
                   {fEquipoFrio &&
-                    !(EQUIPO_FRIO_MARCAS as readonly string[]).includes(
-                      fEquipoFrio
-                    ) && (
-                      <option value={fEquipoFrio}>{fEquipoFrio}</option>
+                    !equiposFrioOpciones.some((e) => e.nombre === fEquipoFrio) && (
+                      <option value={fEquipoFrio}>{fEquipoFrio} (fuera del ABM)</option>
                     )}
                 </select>
               </Field>

@@ -3,7 +3,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { apiFetch, ApiError } from "../../lib/api";
 import type { TipoServicio } from "../../types";
 
-type EquipoFrio = {
+export type EquipoFrio = {
   id: string;
   nombre: string;
   activo: boolean;
@@ -135,8 +135,8 @@ export function EquiposFrioAbmPanel({ query = "" }: { query?: string }) {
           Equipo de frío
         </h2>
         <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-          ABM de marcas y correspondencias con tipos de servicio (congelado,
-          refrigerado, etc.).
+          Marcas de equipo y los tipos de frío que admite cada una. Al cargar
+          una unidad, el tipo de frío se limita a los marcados acá.
         </p>
       </div>
 
@@ -155,7 +155,7 @@ export function EquiposFrioAbmPanel({ query = "" }: { query?: string }) {
         />
         <div>
           <div className="mb-1 text-[11px] font-medium text-[var(--vl-text-muted)]">
-            Tipos de servicio correspondientes
+            Tipos de frío que admite
           </div>
           <div className="flex flex-wrap gap-2">
             {tipos.map((t) => (

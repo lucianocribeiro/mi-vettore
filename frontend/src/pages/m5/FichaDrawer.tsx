@@ -205,7 +205,7 @@ export function FichaDrawer({
                 <Row label="Equipo de frío" value={cam.equipoFrio || "—"} />
                 <Row label="Capacidad" value={capacidadLabel} />
                 <Row
-                  label="Tipo de servicio"
+                  label="Tipo de frío"
                   value={
                     cam.tipoServicio?.nombre ||
                     cam.tipoTransporte?.toLowerCase() ||

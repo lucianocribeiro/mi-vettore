@@ -104,7 +104,8 @@ const INSTRUCCIONES: Record<HojaFlota, string[]> = {
   unidades: [
     "Obligatorias: Patente y Empresa (nombre o CUIT de una empresa ya cargada).",
     "Chofer: nombre y apellido (o DNI) de choferes ya cargados de esa empresa; varios separados por coma.",
-    "Capacidad: número y unidad (ej. 350 kg). Tipo servicio: igual al catálogo (ej. Congelado, Seco).",
+    "Capacidad: número y unidad (ej. 350 kg). Tipo servicio (tipo de frío): igual al catálogo (ej. Congelado, Seco).",
+    "Equipo de frío: igual al ABM de equipos de frío; el tipo de frío tiene que ser uno de los que admite ese equipo.",
     "Estado: OPERATIVA, DE_VACACIONES, FUERA_SERVICIO o INACTIVA (EN_TALLER lo maneja Talleres).",
   ],
 };

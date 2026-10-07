@@ -24,6 +24,7 @@ import { reasignarChoferUnidad } from "../lib/asignacion-flota.js";
 import { uploadDocumento } from "../lib/supabase-storage.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
 import { estadoEntidadFrom, MOTIVOS_INHABILITAR_UNIDAD } from "../lib/estado-entidad.js";
+import { errorEquipoTipoFrio } from "../lib/equipo-frio.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -942,6 +943,11 @@ router.post("/", ...write, async (req, res) => {
       res.status(400).json({ error: "La unidad debe asignarse a una empresa activa" });
       return;
     }
+    const errorFrio = await errorEquipoTipoFrio(equipoFrio, strOrNull(req.body?.tipoServicioId));
+    if (errorFrio) {
+      res.status(400).json({ error: errorFrio });
+      return;
+    }
     const cedulaFoto = String(req.body?.cedulaFoto ?? "");
     if (!req.body?.omitirCedula && !cedulaFoto.startsWith("data:image/")) {
       res.status(400).json({ error: "La cédula requiere una foto" });
@@ -1113,6 +1119,16 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
     }
     if (req.body?.datosTecnicos !== undefined) {
       data.datosTecnicos = strOrNull(req.body.datosTecnicos);
+    }
+    if ("equipoFrio" in data || "tipoServicioId" in data) {
+      const errorFrio = await errorEquipoTipoFrio(
+        "equipoFrio" in data ? (data.equipoFrio as string | null) : existing.equipoFrio,
+        "tipoServicioId" in data ? (data.tipoServicioId as string | null) : existing.tipoServicioId
+      );
+      if (errorFrio) {
+        res.status(400).json({ error: errorFrio });
+        return;
+      }
     }
     let kmAnomalia = false;
     if (req.body?.km !== undefined) {

@@ -82,6 +82,9 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
     const tiposServicio = parsed.data.unidades.length
       ? await prisma.tipoServicio.findMany({ select: { id: true, nombre: true } })
       : [];
+    const equiposFrio = parsed.data.unidades.length
+      ? await prisma.equipoFrio.findMany({ include: { tipos: { select: { tipoServicioId: true } } } })
+      : [];
 
     await prisma.$transaction(
       async (tx) => {
@@ -178,12 +181,23 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
           const datos: Prisma.CamionetaUncheckedUpdateInput = {};
           if (u.marca) datos.marca = u.marca;
           if (u.modelo) datos.modelo = u.modelo;
-          if (u.equipoFrio) datos.equipoFrio = u.equipoFrio;
+          const equipo = u.equipoFrio
+            ? equiposFrio.find((e) => norm(e.nombre) === norm(u.equipoFrio))
+            : undefined;
+          if (u.equipoFrio) {
+            datos.equipoFrio = equipo?.nombre ?? u.equipoFrio;
+            if (!equipo) avisos.push(`Unidad ${u.patente}: equipo de frío "${u.equipoFrio}" no está en el ABM de equipos de frío`);
+          }
           if (u.capacidad) Object.assign(datos, parseCapacidadTexto(u.capacidad));
           if (u.tipoServicio) {
             const ts = tiposServicio.find((t) => norm(t.nombre) === norm(u.tipoServicio));
-            if (ts) datos.tipoServicioId = ts.id;
-            else avisos.push(`Unidad ${u.patente}: tipo de servicio "${u.tipoServicio}" no existe en el catálogo`);
+            if (!ts) {
+              avisos.push(`Unidad ${u.patente}: tipo de frío "${u.tipoServicio}" no existe en el catálogo`);
+            } else if (equipo?.tipos.length && !equipo.tipos.some((t) => t.tipoServicioId === ts.id)) {
+              avisos.push(`Unidad ${u.patente}: el tipo de frío ${ts.nombre} no corresponde al equipo ${equipo.nombre}; no se cargó`);
+            } else {
+              datos.tipoServicioId = ts.id;
+            }
           }
           if (u.estado && u.estado !== current?.estado) {
             if (u.estado === EstadoCamioneta.EN_TALLER || current?.estado === EstadoCamioneta.EN_TALLER) {

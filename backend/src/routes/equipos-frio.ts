@@ -97,6 +97,11 @@ router.post("/", ...write, async (req, res) => {
 router.put("/:id", ...write, async (req, res) => {
   try {
     const id = req.params.id;
+    const anterior = await prisma.equipoFrio.findUnique({ where: { id } });
+    if (!anterior) {
+      res.status(404).json({ error: "Equipo de frío no encontrado" });
+      return;
+    }
     const data: { nombre?: string; activo?: boolean; orden?: number } = {};
     if (req.body?.nombre !== undefined) {
       const nombre = String(req.body.nombre).trim();
@@ -128,6 +133,12 @@ router.put("/:id", ...write, async (req, res) => {
       ]);
     } else if (Object.keys(data).length > 0) {
       await prisma.equipoFrio.update({ where: { id }, data });
+    }
+    if (data.nombre && data.nombre !== anterior.nombre) {
+      await prisma.camioneta.updateMany({
+        where: { equipoFrio: { equals: anterior.nombre, mode: "insensitive" } },
+        data: { equipoFrio: data.nombre },
+      });
     }
 
     const item = await prisma.equipoFrio.findUnique({
