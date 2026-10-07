@@ -1029,6 +1029,17 @@ export function M5FichaPage() {
     });
   }, [camionetas, unitFilters, abmQuery]);
 
+  const patentesPorChofer = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const cam of camionetas) {
+      for (const a of cam.asignaciones ?? []) {
+        if (a.periodoHasta) continue;
+        map.set(a.choferId, [...(map.get(a.choferId) ?? []), cam.patente]);
+      }
+    }
+    return map;
+  }, [camionetas]);
+
   const empresasFiltradas = useMemo(() => {
     const q = abmQuery.trim().toLowerCase();
     const list = Array.isArray(empresas) ? empresas : [];
@@ -1770,11 +1781,24 @@ export function M5FichaPage() {
               e.nombre,
               e.cuit || "—",
               activa ? "Activa" : "Inactiva",
-              choferesEmp.length
-                ? choferesEmp
-                    .map((c) => `${c.apellido ? `${c.apellido}, ` : ""}${c.nombre} (${c.dni})`)
-                    .join(" · ")
-                : "Sin choferes",
+              choferesEmp.length ? (
+                <ul key={`ch-${e.id}`} className="space-y-0.5">
+                  {choferesEmp.map((c) => {
+                    const patentes = patentesPorChofer.get(c.id) ?? [];
+                    return (
+                      <li key={c.id}>
+                        {`${c.nombre} ${c.apellido ?? ""}`.trim()}
+                        <span className="text-[var(--vl-text-muted)]">
+                          {" · "}
+                          {patentes.length ? patentes.join(", ") : "sin patente"}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                "Sin choferes"
+              ),
               <div key={e.id} className="flex flex-wrap items-center justify-end gap-2 text-xs">
                 {wa && (
                   <a
