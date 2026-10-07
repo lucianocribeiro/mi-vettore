@@ -54,9 +54,29 @@ export async function ensureUsuarioForChofer(opts: {
     }
   }
 
+  const login = dni || email;
+  const huerfano = await prisma.usuario.findFirst({
+    where: {
+      choferId: null,
+      rol: "CHOFER",
+      OR: [{ loginIdentificador: login }, { email: `${login}@chofer.vettore.local` }],
+    },
+  });
+  if (huerfano) {
+    await prisma.usuario.update({
+      where: { id: huerfano.id },
+      data: {
+        choferId: opts.choferId,
+        nombre: opts.nombre || huerfano.nombre,
+        ...(dni ? { dni, loginIdentificador: dni } : {}),
+        ...(opts.empresaId ? { empresaId: opts.empresaId } : {}),
+      },
+    });
+    return {};
+  }
+
   const plain = opts.password || generateTempPassword();
   const passwordHash = await bcrypt.hash(plain, 10);
-  const login = dni || email;
   await prisma.usuario.create({
     data: {
       email: email || `${login}@chofer.vettore.local`,
