@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { AppLogo } from "../components/AppLogo";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { ApiError } from "../lib/api";
 import { homePathForUser } from "../lib/homePath";
@@ -45,9 +44,12 @@ export function LoginPage() {
       <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--vl-card-border)] bg-[var(--vl-login-card)] shadow-lg">
         <div className="bg-[var(--vl-sidebar)] px-5 py-5 text-white sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#0b182c]">
-              <AppLogo size={28} />
-            </div>
+            <img
+              src="/vettore-logo.png"
+              alt="Vettore Logística"
+              className="h-12 w-auto shrink-0 select-none"
+              draggable={false}
+            />
             <div className="min-w-0">
               <div className="truncate text-base font-bold leading-tight">
                 Mi Vettore
