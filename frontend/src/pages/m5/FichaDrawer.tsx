@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
-import {
-  Badge,
-  ESTADO_CAMIONETA_STYLE,
-  ESTADO_CHOFER_STYLE,
-} from "../../components/Badge";
+import { Badge } from "../../components/Badge";
+import { EstadoBadge, MOTIVO_UNIDAD_LABEL, estadoUnidad } from "./EstadoEntidad";
 import { DocumentUpload } from "../../components/DocumentUpload";
 import { Pencil, X, Download } from "../../components/icons";
 import { apiFetch, apiDownload, ApiError } from "../../lib/api";
@@ -218,9 +215,10 @@ export function FichaDrawer({
                 />
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[var(--vl-text-muted)]">Estado</span>
-                  <Badge className={ESTADO_CAMIONETA_STYLE[cam.estado]}>
-                    {cam.estado.replace("_", " ").toLowerCase()}
-                  </Badge>
+                  <EstadoBadge
+                    estado={estadoUnidad(cam)}
+                    motivo={MOTIVO_UNIDAD_LABEL[cam.estado]}
+                  />
                 </div>
                 {cam.estado !== "OPERATIVA" &&
                   (cam.estadoDesde || cam.estadoHasta) && (
@@ -337,9 +335,7 @@ export function FichaDrawer({
                 />
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[var(--vl-text-muted)]">Estado</span>
-                  <Badge className={ESTADO_CHOFER_STYLE[ch.estado]}>
-                    {ch.estado.toLowerCase()}
-                  </Badge>
+                  <EstadoBadge estado={ch.estado} />
                 </div>
               </section>
 

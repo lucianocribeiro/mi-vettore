@@ -8,15 +8,14 @@ export type FiltroEstado = EstadoEntidad | "TODOS";
 
 export const ESTADOS_ENTIDAD: EstadoEntidad[] = ["ACTIVO", "INHABILITADO", "INACTIVO"];
 
-const LABEL: Record<EstadoEntidad, [string, string]> = {
-  ACTIVO: ["Activo", "Activa"],
-  INHABILITADO: ["Inhabilitado", "Inhabilitada"],
-  INACTIVO: ["Inactivo", "Inactiva"],
+const LABEL: Record<EstadoEntidad, string> = {
+  ACTIVO: "Activo",
+  INHABILITADO: "Inhabilitado",
+  INACTIVO: "Inactivo",
 };
 
-export function estadoLabel(e: EstadoEntidad, femenino = false, plural = false): string {
-  const base = LABEL[e][femenino ? 1 : 0];
-  return plural ? `${base}s` : base;
+export function estadoLabel(e: EstadoEntidad, plural = false): string {
+  return plural ? `${LABEL[e]}s` : LABEL[e];
 }
 
 export function estadoEmpresa(e: Empresa): EstadoEntidad {
@@ -38,16 +37,14 @@ export const MOTIVO_UNIDAD_LABEL: Partial<Record<EstadoCamioneta, string>> = {
 
 export function EstadoBadge({
   estado,
-  femenino,
   motivo,
 }: {
   estado: EstadoEntidad;
-  femenino?: boolean;
   motivo?: string;
 }) {
   return (
     <Badge className={ESTADO_CHOFER_STYLE[estado]}>
-      {estadoLabel(estado, femenino)}
+      {estadoLabel(estado)}
       {motivo ? ` · ${motivo}` : ""}
     </Badge>
   );
@@ -71,12 +68,10 @@ export function EstadoChips({
   value,
   onChange,
   counts,
-  femenino,
 }: {
   value: FiltroEstado;
   onChange: (v: FiltroEstado) => void;
   counts: Record<FiltroEstado, number>;
-  femenino?: boolean;
 }) {
   const opciones: FiltroEstado[] = [...ESTADOS_ENTIDAD, "TODOS"];
   return (
@@ -90,7 +85,7 @@ export function EstadoChips({
             value === op ? CHIP_ON[op] : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
           }`}
         >
-          {op === "TODOS" ? (femenino ? "Todas" : "Todos") : estadoLabel(op, femenino, true)} ({counts[op]})
+          {op === "TODOS" ? "Todos" : estadoLabel(op, true)} ({counts[op]})
         </button>
       ))}
     </div>

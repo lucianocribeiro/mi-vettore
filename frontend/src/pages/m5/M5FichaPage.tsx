@@ -1342,7 +1342,6 @@ export function M5FichaPage() {
               value={estadoFiltro.camioneta}
               onChange={(v) => setEstadoFiltro((p) => ({ ...p, camioneta: v }))}
               counts={unidadCounts}
-              femenino
             />
             <p className="text-[11px] text-[var(--vl-text-muted)]">
               Mostrando {camionetasFiltradas.length} de {unidadCounts.TODOS}
@@ -1375,7 +1374,6 @@ export function M5FichaPage() {
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       <EstadoBadge
                         estado={estadoUnidad(c)}
-                        femenino
                         motivo={MOTIVO_UNIDAD_LABEL[c.estado]}
                       />
                       {c.estado !== "OPERATIVA" &&
@@ -1658,7 +1656,6 @@ export function M5FichaPage() {
             value={estadoFiltro.empresas}
             onChange={(v) => setEstadoFiltro((p) => ({ ...p, empresas: v }))}
             counts={empresaCounts}
-            femenino
           />
           <p className="text-[11px] text-[var(--vl-text-muted)]">
             Mostrando {empresasFiltradas.length} de {empresaCounts.TODOS}
@@ -1673,7 +1670,7 @@ export function M5FichaPage() {
             return [
               e.nombre,
               e.cuit || "—",
-              <EstadoBadge key={`est-${e.id}`} estado={estadoEmp} femenino />,
+              <EstadoBadge key={`est-${e.id}`} estado={estadoEmp} />,
               choferesEmp.length ? (
                 <ul key={`ch-${e.id}`} className="space-y-0.5">
                   {choferesEmp.map((c) => {
@@ -2328,11 +2325,11 @@ export function M5FichaPage() {
                     )
                   }
                 >
-                  <option value="OPERATIVA">Operativa</option>
-                  <option value="EN_TALLER">En taller</option>
-                  <option value="DE_VACACIONES">De vacaciones</option>
-                  <option value="FUERA_SERVICIO">Fuera de servicio</option>
-                  <option value="INACTIVA">Inactiva (baja definitiva)</option>
+                  <option value="OPERATIVA">Activo</option>
+                  <option value="EN_TALLER">Inhabilitado (en taller)</option>
+                  <option value="DE_VACACIONES">Inhabilitado (de vacaciones)</option>
+                  <option value="FUERA_SERVICIO">Inhabilitado (fuera de servicio)</option>
+                  <option value="INACTIVA">Inactivo</option>
                 </select>
               </Field>
               {fEstadoCam !== "OPERATIVA" && (
