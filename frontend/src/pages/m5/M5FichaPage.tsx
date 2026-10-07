@@ -3,9 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
   EMPTY_FLOTA_FILTERS,
-  FlotaUnitFilterBar,
   filterCamionetas,
-  type FlotaUnitFilters,
 } from "../../components/FlotaUnitFilterBar";
 import { Download, Plus } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
@@ -144,8 +142,6 @@ export function M5FichaPage() {
   const [tiposTallerMeta, setTiposTallerMeta] = useState<TipoTaller[]>([]);
 
   const [drawer, setDrawer] = useState<DrawerOpen>(null);
-  const [unitFilters, setUnitFilters] =
-    useState<FlotaUnitFilters>(EMPTY_FLOTA_FILTERS);
   /** Buscador único del ABM (todas las pestañas). */
   const [abmQuery, setAbmQuery] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState<
@@ -1000,12 +996,8 @@ export function M5FichaPage() {
       estadoFiltro.camioneta === "TODOS"
         ? list
         : list.filter((c) => estadoUnidad(c) === estadoFiltro.camioneta);
-    return filterCamionetas(visibles, {
-      ...unitFilters,
-      estado: [],
-      query: abmQuery || unitFilters.query,
-    });
-  }, [camionetas, unitFilters, abmQuery, estadoFiltro.camioneta]);
+    return filterCamionetas(visibles, { ...EMPTY_FLOTA_FILTERS, query: abmQuery });
+  }, [camionetas, abmQuery, estadoFiltro.camioneta]);
 
   const patentesPorChofer = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -1367,25 +1359,17 @@ export function M5FichaPage() {
 
       {!loading && !error && tab === "camioneta" && (
         <>
-          <div className="mb-3">
+          <div className="mb-4 space-y-3">
             <EstadoChips
               value={estadoFiltro.camioneta}
               onChange={(v) => setEstadoFiltro((p) => ({ ...p, camioneta: v }))}
               counts={unidadCounts}
               femenino
             />
+            <p className="text-[11px] text-[var(--vl-text-muted)]">
+              Mostrando {camionetasFiltradas.length} de {unidadCounts.TODOS}
+            </p>
           </div>
-          <FlotaUnitFilterBar
-            value={unitFilters}
-            onChange={setUnitFilters}
-            total={camionetas.length}
-            shown={camionetasFiltradas.length}
-            hideDetalleUnidad
-            hideQuery
-            hideEstado
-            empresas={empresas.map((e) => ({ id: e.id, nombre: e.nombre }))}
-            unidades={camionetas}
-          />
           {camionetasFiltradas.length === 0 ? (
             <p className="text-sm text-[var(--vl-text-muted)]">
               No hay unidades con esos filtros.
@@ -1691,13 +1675,16 @@ export function M5FichaPage() {
 
       {!loading && !error && tab === "empresas" && (
         <>
-        <div className="mb-4">
+        <div className="mb-4 space-y-3">
           <EstadoChips
             value={estadoFiltro.empresas}
             onChange={(v) => setEstadoFiltro((p) => ({ ...p, empresas: v }))}
             counts={empresaCounts}
             femenino
           />
+          <p className="text-[11px] text-[var(--vl-text-muted)]">
+            Mostrando {empresasFiltradas.length} de {empresaCounts.TODOS}
+          </p>
         </div>
         <EntityTable
           headers={["Nombre", "CUIT", "Estado", "Choferes", ""]}
