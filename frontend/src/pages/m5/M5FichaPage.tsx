@@ -971,7 +971,7 @@ export function M5FichaPage() {
     setExportando(true);
     try {
       const map: Record<Tab, { url: string; file: string } | null> = {
-        camioneta: { url: "/api/camionetas/export", file: "unidades.xlsx" },
+        camioneta: { url: "/api/camionetas/export?vista=ficha", file: "unidades.xlsx" },
         chofer: { url: "/api/choferes/export", file: "choferes.xlsx" },
         empresas: { url: "/api/empresas/export", file: "empresas.xlsx" },
         usuarios: { url: "/api/usuarios/export", file: "usuarios.xlsx" },

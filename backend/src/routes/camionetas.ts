@@ -158,6 +158,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       },
     });
 
+    const vistaFicha = req.query.vista === "ficha";
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Unidades");
     sheet.columns = [
@@ -168,11 +169,15 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       { header: "Equipo de frío", key: "equipoFrio", width: 18 },
       { header: "Tipo servicio", key: "tipoServicio", width: 16 },
       { header: "Estado", key: "estado", width: 16 },
-      { header: "Km", key: "km", width: 10 },
+      ...(vistaFicha ? [] : [{ header: "Km", key: "km", width: 10 }]),
       { header: "Chofer", key: "chofer", width: 22 },
       { header: "Empresa", key: "empresa", width: 24 },
-      { header: "OT abierta", key: "ot", width: 14 },
-      { header: "Paso OT", key: "paso", width: 10 },
+      ...(vistaFicha
+        ? []
+        : [
+            { header: "OT abierta", key: "ot", width: 14 },
+            { header: "Paso OT", key: "paso", width: 10 },
+          ]),
     ];
     sheet.getRow(1).font = { bold: true };
 
