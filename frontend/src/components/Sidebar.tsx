@@ -236,7 +236,7 @@ export function Sidebar({ open, onClose }: Props) {
                   ? user?.nombre
                     ? `Chofer · ${user.nombre}`
                     : "Perfil chofer"
-                  : "Vettore Logística"}
+                  : null}
           </div>
         </div>
         <button

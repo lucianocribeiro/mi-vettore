@@ -67,7 +67,7 @@ export function AppLayout() {
                   ? user.esDuenoFlota
                     ? `${user.nombre} · empresa de transporte`
                     : user.nombre
-                  : "Vettore Logística"}
+                  : null}
             </div>
           </div>
           <ThemeToggle variant="header" />

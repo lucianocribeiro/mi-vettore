@@ -54,9 +54,6 @@ export function LoginPage() {
               <div className="truncate text-base font-bold leading-tight">
                 Mi Vettore
               </div>
-              <div className="truncate text-xs text-[#6b88aa]">
-                Vettore Logística
-              </div>
             </div>
           </div>
         </div>
