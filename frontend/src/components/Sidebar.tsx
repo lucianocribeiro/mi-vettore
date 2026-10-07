@@ -33,6 +33,25 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   {
+    to: "/m5",
+    label: "Ficha integral (ABM)",
+    sub: "Flota",
+    icon: CreditCard,
+    // Solo ops internas Vettore — empresa/chofer usan Documentación.
+    roles: [
+      "ADMINISTRADOR",
+      "OPERACIONES",
+    ],
+    children: [
+      { to: "/m5", label: "Flota" },
+      {
+        to: "/m5/usuarios",
+        label: "Usuarios especiales",
+        roles: ["ADMINISTRADOR", "OPERACIONES"],
+      },
+    ],
+  },
+  {
     to: "/documentacion",
     label: "Documentación",
     sub: "Unidades y choferes",
@@ -92,25 +111,6 @@ const NAV: NavItem[] = [
     sub: "Ver feedback",
     icon: MessageSquare,
     roles: ["SUGERENCIAS"],
-  },
-  {
-    to: "/m5",
-    label: "Ficha integral (ABM)",
-    sub: "Flota",
-    icon: CreditCard,
-    // Solo ops internas Vettore — empresa/chofer usan Documentación.
-    roles: [
-      "ADMINISTRADOR",
-      "OPERACIONES",
-    ],
-    children: [
-      { to: "/m5", label: "Flota" },
-      {
-        to: "/m5/usuarios",
-        label: "Usuarios especiales",
-        roles: ["ADMINISTRADOR", "OPERACIONES"],
-      },
-    ],
   },
   {
     to: "/m3",
