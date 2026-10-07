@@ -98,7 +98,7 @@ const INSTRUCCIONES: Record<HojaFlota, string[]> = {
   ],
   choferes: [
     "Obligatorias: Nombre, Apellido, DNI y Empresa (nombre o CUIT de una empresa ya cargada).",
-    "Licencia vence: AAAA-MM-DD. Empresa transp.: Sí / No. Estado: ACTIVO / INACTIVO.",
+    "Licencia vence: AAAA-MM-DD. Empresa transp.: Sí / No. Estado: ACTIVO / INHABILITADO / INACTIVO.",
     "El chofer accede con el DNI.",
   ],
   unidades: [
@@ -170,7 +170,7 @@ export type FilaChofer = {
   telefono: string;
   licencia: Date | null;
   dueno: boolean | null;
-  estado: "ACTIVO" | "INACTIVO" | null;
+  estado: "ACTIVO" | "INHABILITADO" | "INACTIVO" | null;
   empresa: string;
 };
 
@@ -299,8 +299,8 @@ export async function parseFlotaWorkbook(
       }
       const duenoRaw = norm(txt(row, "dueno"));
       const estadoRaw = txt(row, "estado").toUpperCase();
-      if (estadoRaw && estadoRaw !== "ACTIVO" && estadoRaw !== "INACTIVO") {
-        error(n, "Estado debe ser ACTIVO o INACTIVO");
+      if (estadoRaw && !["ACTIVO", "INHABILITADO", "INACTIVO"].includes(estadoRaw)) {
+        error(n, "Estado debe ser ACTIVO, INHABILITADO o INACTIVO");
         return;
       }
       data.choferes.push({

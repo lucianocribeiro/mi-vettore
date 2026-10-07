@@ -23,6 +23,7 @@ import { applyKmUpdate } from "../lib/km.js";
 import { reasignarChoferUnidad } from "../lib/asignacion-flota.js";
 import { uploadDocumento } from "../lib/supabase-storage.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
+import { estadoEntidadFrom, MOTIVOS_INHABILITAR_UNIDAD } from "../lib/estado-entidad.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -1444,6 +1445,67 @@ router.post("/:id/asignacion", authenticate, async (req: AuthedRequest, res) => 
   } catch (err) {
     const status = err && typeof err === "object" && "status" in err ? Number((err as { status: number }).status) : 500;
     res.status(status).json({ error: err instanceof Error ? err.message : "Error al reasignar flota" });
+  }
+});
+
+/** Activa = OPERATIVA, Inhabilitada = vacaciones / fuera de servicio (motivo), Inactiva = INACTIVA. */
+router.post("/:id/estado", ...write, async (req, res) => {
+  try {
+    const estado = estadoEntidadFrom(req.body?.estado);
+    if (!estado) {
+      res.status(400).json({ error: "Estado inválido" });
+      return;
+    }
+    let destino: EstadoCamioneta = EstadoCamioneta.OPERATIVA;
+    if (estado === "INACTIVO") destino = EstadoCamioneta.INACTIVA;
+    if (estado === "INHABILITADO") {
+      const motivo = String(req.body?.motivo ?? EstadoCamioneta.FUERA_SERVICIO).toUpperCase();
+      if (!MOTIVOS_INHABILITAR_UNIDAD.includes(motivo as EstadoCamioneta)) {
+        res.status(400).json({ error: "Motivo inválido (De vacaciones o Fuera de servicio)" });
+        return;
+      }
+      destino = motivo as EstadoCamioneta;
+    }
+    const item = await prisma.camioneta.update({
+      where: { id: req.params.id },
+      data: {
+        estado: destino,
+        ...(destino === EstadoCamioneta.DE_VACACIONES ? {} : { estadoDesde: null, estadoHasta: null }),
+      },
+      include: includeAsignaciones,
+    });
+    res.json(item);
+  } catch {
+    res.status(404).json({ error: "Camioneta no encontrada" });
+  }
+});
+
+/** Borrado definitivo. Si tiene pedidos u órdenes de taller, se bloquea (usar Inactivar). */
+router.post("/:id/eliminar", ...write, async (req, res) => {
+  try {
+    const cam = await prisma.camioneta.findUnique({
+      where: { id: req.params.id },
+      include: { _count: { select: { pedidos: true, solicitudes: true } } },
+    });
+    if (!cam) {
+      res.status(404).json({ error: "Camioneta no encontrada" });
+      return;
+    }
+    if (cam._count.pedidos > 0 || cam._count.solicitudes > 0) {
+      res.status(409).json({
+        error:
+          "No se puede eliminar: la unidad tiene pedidos u órdenes de taller. Usá Inactivar para darla de baja sin perder historial.",
+      });
+      return;
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.asignacionFlota.deleteMany({ where: { camionetaId: cam.id } });
+      await tx.camioneta.delete({ where: { id: cam.id } });
+    });
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "No se pudo eliminar la unidad" });
   }
 });
 

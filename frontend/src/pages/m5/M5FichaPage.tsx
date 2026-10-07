@@ -2,13 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
-  Badge,
-  ESTADO_CAMIONETA_STYLE,
-  ESTADO_CHOFER_STYLE,
-} from "../../components/Badge";
-import {
   EMPTY_FLOTA_FILTERS,
-  ESTADO_CAMIONETA_LABEL,
   FlotaUnitFilterBar,
   filterCamionetas,
   type FlotaUnitFilters,
@@ -16,6 +10,22 @@ import {
 import { Download, Plus } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
 import { FlotaImportPanel, type HojaFlota } from "./FlotaImportPanel";
+import {
+  EstadoAcciones,
+  EstadoBadge,
+  EstadoChips,
+  MOTIVO_UNIDAD_LABEL,
+  contarEstados,
+  estadoEmpresa,
+  estadoUnidad,
+  type EstadoEntidad,
+  type FiltroEstado,
+} from "./EstadoEntidad";
+
+const MOTIVOS_INHABILITAR_UNIDAD = [
+  { value: "DE_VACACIONES", label: "De vacaciones" },
+  { value: "FUERA_SERVICIO", label: "Fuera de servicio" },
+];
 import {
   EQUIPO_FRIO_MARCAS,
   ROLE_LABELS,
@@ -138,9 +148,9 @@ export function M5FichaPage() {
     useState<FlotaUnitFilters>(EMPTY_FLOTA_FILTERS);
   /** Buscador único del ABM (todas las pestañas). */
   const [abmQuery, setAbmQuery] = useState("");
-  const [choferEstadoFiltro, setChoferEstadoFiltro] = useState<
-    "ACTIVO" | "INACTIVO" | "TODOS"
-  >("ACTIVO");
+  const [estadoFiltro, setEstadoFiltro] = useState<
+    Record<"empresas" | "chofer" | "camioneta", FiltroEstado>
+  >({ empresas: "TODOS", chofer: "TODOS", camioneta: "TODOS" });
   const [exportando, setExportando] = useState(false);
   const [form, setForm] = useState<
     | null
@@ -163,9 +173,7 @@ export function M5FichaPage() {
   const [fEsDueno, setFEsDueno] = useState(false);
   const [fVerMant, setFVerMant] = useState(true);
   const [fVerTaller, setFVerTaller] = useState(true);
-  const [fEstadoChofer, setFEstadoChofer] = useState<"ACTIVO" | "INACTIVO">(
-    "ACTIVO"
-  );
+  const [fEstadoChofer, setFEstadoChofer] = useState<EstadoEntidad>("ACTIVO");
   const [fApellido, setFApellido] = useState("");
   const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
@@ -836,121 +844,85 @@ export function M5FichaPage() {
     }
   }
 
-  async function inactivarEmpresa(id: string) {
+  const CONFIRM_ESTADO: Record<"empresa" | "chofer" | "camioneta", Partial<Record<EstadoEntidad, string>>> = {
+    empresa: {
+      INHABILITADO:
+        "¿Inhabilitar esta empresa? Sigue visible, pero no se le asignan choferes/unidades ni puede pedir taller.",
+      INACTIVO:
+        "¿Inactivar esta empresa? Se conservan historial, choferes y unidades (quedan inactivos).",
+    },
+    chofer: {
+      INHABILITADO:
+        "¿Inhabilitar este chofer? Sigue viendo la app, pero no se le asignan unidades ni puede pedir taller.",
+      INACTIVO: "¿Inactivar este chofer? Queda de baja pero conserva su historial.",
+    },
+    camioneta: {
+      INACTIVO: "¿Inactivar esta unidad? Queda de baja pero conserva su historial.",
+    },
+  };
+
+  async function cambiarEstado(
+    tipo: "empresa" | "chofer" | "camioneta",
+    id: string,
+    estado: EstadoEntidad,
+    motivo?: string
+  ) {
     if (!token || !canEdit) return;
-    if (
-      !confirm(
-        "¿Inactivar esta empresa? Se conservan historial, choferes y unidades (quedan inactivos)."
-      )
-    ) {
-      return;
+    let msg = CONFIRM_ESTADO[tipo][estado];
+    if (tipo === "empresa" && estado !== "INACTIVO") {
+      const emp = empresas.find((x) => x.id === id);
+      if (emp?.activo === false) {
+        msg = "¿Reactivar esta empresa? Se reactivan también sus choferes, unidades y usuarios de empresa.";
+      }
     }
+    if (msg && !confirm(msg)) return;
+    const base = { empresa: "empresas", chofer: "choferes", camioneta: "camionetas" }[tipo];
     try {
-      const updated = await apiFetch<Empresa>(
-        `/api/empresas/${id}`,
-        { method: "DELETE" },
+      const updated = await apiFetch<Empresa | Chofer | Camioneta>(
+        `/api/${base}/${id}/estado`,
+        { method: "POST", body: JSON.stringify({ estado, motivo }) },
         token
       );
-      setEmpresas((p) =>
-        p.map((x) => (x.id === id ? { ...x, ...updated, activo: false } : x))
-      );
-      await load();
+      if (tipo === "empresa") {
+        await load();
+      } else if (tipo === "chofer") {
+        const ch = updated as Chofer;
+        setChoferes((prev) => prev.map((x) => (x.id === id ? ch : x)));
+        if (drawer?.tipo === "chofer" && drawer.item.id === id) setDrawer({ tipo: "chofer", item: ch });
+      } else {
+        const cam = updated as Camioneta;
+        setCamionetas((prev) => prev.map((x) => (x.id === id ? cam : x)));
+        if (drawer?.tipo === "camioneta" && drawer.item.id === id) setDrawer({ tipo: "camioneta", item: cam });
+      }
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo inactivar");
+      alert(err instanceof ApiError ? err.message : "No se pudo cambiar el estado");
     }
   }
 
-  async function reactivarEmpresa(id: string) {
+  async function eliminarEntidad(tipo: "empresa" | "chofer" | "camioneta", id: string) {
     if (!token || !canEdit) return;
+    const que = { empresa: "esta empresa", chofer: "este chofer", camioneta: "esta unidad" }[tipo];
+    const extra =
+      tipo === "empresa" ? " Se borran también sus choferes y unidades." : "";
     if (
       !confirm(
-        "¿Activar esta empresa? Se reactivan también sus choferes, unidades y usuarios de empresa."
+        `¿Eliminar definitivamente ${que}?${extra} Solo se puede si no tiene pedidos ni órdenes de taller. No se puede deshacer.`
       )
     ) {
       return;
     }
+    const base = { empresa: "empresas", chofer: "choferes", camioneta: "camionetas" }[tipo];
     try {
-      const updated = await apiFetch<Empresa>(
-        `/api/empresas/${id}/reactivar`,
-        { method: "POST" },
-        token
-      );
-      setEmpresas((p) =>
-        p.map((x) => (x.id === id ? { ...x, ...updated, activo: true } : x))
-      );
-      await load();
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo activar");
-    }
-  }
-
-  async function eliminarEmpresa(id: string) {
-    if (!token || !canEdit) return;
-    if (
-      !confirm(
-        "¿Eliminar definitivamente esta empresa? Se borran también sus choferes y unidades sin historial de pedidos/taller. Esta acción no se puede deshacer."
-      )
-    ) {
-      return;
-    }
-    try {
-      await apiFetch(`/api/empresas/${id}/eliminar`, { method: "POST" }, token);
-      setEmpresas((p) => p.filter((x) => x.id !== id));
+      await apiFetch(`/api/${base}/${id}/eliminar`, { method: "POST" }, token);
+      if (drawer && drawer.item.id === id) setDrawer(null);
       await load();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo eliminar");
     }
   }
 
-  /** Baja lógica: chofer → INACTIVO (DELETE /choferes/:id), camioneta → FUERA_SERVICIO (POST /baja). */
-  async function reactivarUnidad(id: string) {
-    if (!token || !canEdit) return;
-    try {
-      const updated = await apiFetch<Camioneta>(
-        `/api/camionetas/${id}/reactivar`,
-        { method: "POST" },
-        token
-      );
-      setCamionetas((prev) => prev.map((c) => (c.id === id ? updated : c)));
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo reactivar");
-    }
-  }
-
   async function darDeBaja(tipo: "camioneta" | "chofer", id: string) {
-    if (!token || !canEdit) return;
-    if (
-      !confirm(
-        "¿Dar de baja este registro? Queda inactivo pero conserva su historial."
-      )
-    ) {
-      return;
-    }
-    try {
-      if (tipo === "chofer") {
-        const updated = await apiFetch<Chofer>(
-          `/api/choferes/${id}`,
-          { method: "DELETE" },
-          token
-        );
-        setChoferes((prev) => prev.map((x) => (x.id === id ? updated : x)));
-        if (drawer?.tipo === "chofer" && drawer.item.id === id) {
-          setDrawer({ tipo: "chofer", item: updated });
-        }
-      } else {
-        const updated = await apiFetch<Camioneta>(
-          `/api/camionetas/${id}/baja`,
-          { method: "POST" },
-          token
-        );
-        setCamionetas((prev) => prev.map((x) => (x.id === id ? updated : x)));
-        if (drawer?.tipo === "camioneta" && drawer.item.id === id) {
-          setDrawer({ tipo: "camioneta", item: updated });
-        }
-      }
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo dar de baja");
-    }
+    await cambiarEstado(tipo, id, "INACTIVO");
   }
 
   async function toggleTipoServicio(item: TipoServicio) {
@@ -1017,17 +989,23 @@ export function M5FichaPage() {
     { id: "equiposFrio", label: "Equipo de frío" },
   ];
 
+  const unidadCounts = useMemo(
+    () => contarEstados(Array.isArray(camionetas) ? camionetas : [], estadoUnidad),
+    [camionetas]
+  );
+
   const camionetasFiltradas = useMemo(() => {
     const list = Array.isArray(camionetas) ? camionetas : [];
     const visibles =
-      unitFilters.estado.length === 0
-        ? list.filter((c) => c.estado !== "INACTIVA")
-        : list;
+      estadoFiltro.camioneta === "TODOS"
+        ? list
+        : list.filter((c) => estadoUnidad(c) === estadoFiltro.camioneta);
     return filterCamionetas(visibles, {
       ...unitFilters,
+      estado: [],
       query: abmQuery || unitFilters.query,
     });
-  }, [camionetas, unitFilters, abmQuery]);
+  }, [camionetas, unitFilters, abmQuery, estadoFiltro.camioneta]);
 
   const patentesPorChofer = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -1040,9 +1018,18 @@ export function M5FichaPage() {
     return map;
   }, [camionetas]);
 
+  const empresaCounts = useMemo(
+    () => contarEstados(Array.isArray(empresas) ? empresas : [], estadoEmpresa),
+    [empresas]
+  );
+
   const empresasFiltradas = useMemo(() => {
     const q = abmQuery.trim().toLowerCase();
-    const list = Array.isArray(empresas) ? empresas : [];
+    const todas = Array.isArray(empresas) ? empresas : [];
+    const list =
+      estadoFiltro.empresas === "TODOS"
+        ? todas
+        : todas.filter((e) => estadoEmpresa(e) === estadoFiltro.empresas);
     if (!q) return list;
     return list.filter((e) => {
       const choferesTxt = (e.choferes ?? [])
@@ -1054,7 +1041,7 @@ export function M5FichaPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [empresas, abmQuery]);
+  }, [empresas, abmQuery, estadoFiltro.empresas]);
 
   const tiposServicioFiltrados = useMemo(() => {
     const q = abmQuery.trim().toLowerCase();
@@ -1208,21 +1195,15 @@ export function M5FichaPage() {
   }
 
   const choferCounts = useMemo(
-    () => ({
-      activos: choferes.filter((c) => c.estado === "ACTIVO").length,
-      inactivos: choferes.filter((c) => c.estado === "INACTIVO").length,
-      todos: choferes.length,
-    }),
+    () => contarEstados(choferes, (c) => c.estado),
     [choferes]
   );
 
   const choferesFiltrados = useMemo(() => {
-    let list = choferes;
-    if (choferEstadoFiltro === "ACTIVO") {
-      list = list.filter((c) => c.estado === "ACTIVO");
-    } else if (choferEstadoFiltro === "INACTIVO") {
-      list = list.filter((c) => c.estado === "INACTIVO");
-    }
+    const list =
+      estadoFiltro.chofer === "TODOS"
+        ? choferes
+        : choferes.filter((c) => c.estado === estadoFiltro.chofer);
     const q = abmQuery.trim().toLowerCase();
     if (!q) return list;
     return list.filter((c) => {
@@ -1240,7 +1221,7 @@ export function M5FichaPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [choferes, abmQuery, choferEstadoFiltro]);
+  }, [choferes, abmQuery, estadoFiltro.chofer]);
 
   const usuariosFiltrados = useMemo(() => {
     const internos: Role[] = ["ADMINISTRADOR", "OPERACIONES", "SUGERENCIAS"];
@@ -1386,6 +1367,14 @@ export function M5FichaPage() {
 
       {!loading && !error && tab === "camioneta" && (
         <>
+          <div className="mb-3">
+            <EstadoChips
+              value={estadoFiltro.camioneta}
+              onChange={(v) => setEstadoFiltro((p) => ({ ...p, camioneta: v }))}
+              counts={unidadCounts}
+              femenino
+            />
+          </div>
           <FlotaUnitFilterBar
             value={unitFilters}
             onChange={setUnitFilters}
@@ -1393,6 +1382,7 @@ export function M5FichaPage() {
             shown={camionetasFiltradas.length}
             hideDetalleUnidad
             hideQuery
+            hideEstado
             empresas={empresas.map((e) => ({ id: e.id, nombre: e.nombre }))}
             unidades={camionetas}
           />
@@ -1421,9 +1411,11 @@ export function M5FichaPage() {
                       {c.patente}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                      <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
-                        {ESTADO_CAMIONETA_LABEL[c.estado]}
-                      </Badge>
+                      <EstadoBadge
+                        estado={estadoUnidad(c)}
+                        femenino
+                        motivo={MOTIVO_UNIDAD_LABEL[c.estado]}
+                      />
                       {c.estado !== "OPERATIVA" &&
                         (c.estadoDesde || c.estadoHasta) && (
                           <span className="text-[var(--vl-text-muted)]">
@@ -1466,37 +1458,15 @@ export function M5FichaPage() {
                           Editar
                         </span>
                       )}
-                      {canEdit && c.estado === "INACTIVA" && (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void reactivarUnidad(c.id);
-                          }}
-                          className="text-emerald-700 underline-offset-2 hover:underline"
-                        >
-                          Reactivar
-                        </span>
-                      )}
-                      {canEdit && c.estado !== "FUERA_SERVICIO" && c.estado !== "INACTIVA" && (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void darDeBaja("camioneta", c.id);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.stopPropagation();
-                              void darDeBaja("camioneta", c.id);
-                            }
-                          }}
-                          className="text-red-400 underline-offset-2 hover:text-red-700 hover:underline"
-                        >
-                          Dar de baja
-                        </span>
+                      {canEdit && (
+                        <EstadoAcciones
+                          estado={estadoUnidad(c)}
+                          motivos={MOTIVOS_INHABILITAR_UNIDAD}
+                          onCambiar={(estado, motivo) =>
+                            void cambiarEstado("camioneta", c.id, estado, motivo)
+                          }
+                          onEliminar={() => void eliminarEntidad("camioneta", c.id)}
+                        />
                       )}
                     </div>
                   </button>
@@ -1510,50 +1480,13 @@ export function M5FichaPage() {
       {!loading && !error && tab === "chofer" && (
         <>
           <div className="mb-4 space-y-3">
-            {canEdit && (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setChoferEstadoFiltro("ACTIVO")}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                    choferEstadoFiltro === "ACTIVO"
-                      ? "border-emerald-600 bg-emerald-500/20 text-emerald-900 dark:border-emerald-400 dark:text-emerald-100"
-                      : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-                  }`}
-                >
-                  Activos ({choferCounts.activos})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChoferEstadoFiltro("INACTIVO")}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                    choferEstadoFiltro === "INACTIVO"
-                      ? "border-slate-600 bg-slate-500/20 text-slate-900 dark:border-slate-400 dark:text-slate-100"
-                      : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-                  }`}
-                >
-                  Baja / inactivos ({choferCounts.inactivos})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChoferEstadoFiltro("TODOS")}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                    choferEstadoFiltro === "TODOS"
-                      ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
-                      : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
-                  }`}
-                >
-                  Todos ({choferCounts.todos})
-                </button>
-              </div>
-            )}
+            <EstadoChips
+              value={estadoFiltro.chofer}
+              onChange={(v) => setEstadoFiltro((p) => ({ ...p, chofer: v }))}
+              counts={choferCounts}
+            />
             <p className="text-[11px] text-[var(--vl-text-muted)]">
-              Mostrando {choferesFiltrados.length}
-              {choferEstadoFiltro === "TODOS"
-                ? ` de ${choferCounts.todos}`
-                : choferEstadoFiltro === "ACTIVO"
-                  ? ` activo${choferesFiltrados.length === 1 ? "" : "s"}`
-                  : ` en baja / inactivo${choferesFiltrados.length === 1 ? "" : "s"}`}
+              Mostrando {choferesFiltrados.length} de {choferCounts.TODOS}
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1573,9 +1506,7 @@ export function M5FichaPage() {
                   {c.esDuenoFlota ? " · empresa de transporte" : ""}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>
-                    {c.estado === "INACTIVO" ? "Baja" : "Activo"}
-                  </Badge>
+                  <EstadoBadge estado={c.estado} />
                   {whatsappDigits(c.telefono) && (
                     <a
                       href={`https://wa.me/${whatsappDigits(c.telefono)}`}
@@ -1606,24 +1537,12 @@ export function M5FichaPage() {
                       Editar
                     </span>
                   )}
-                  {canEdit && c.estado === "ACTIVO" && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void darDeBaja("chofer", c.id);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.stopPropagation();
-                          void darDeBaja("chofer", c.id);
-                        }
-                      }}
-                      className="text-red-400 underline-offset-2 hover:text-red-700 hover:underline"
-                    >
-                      Dar de baja
-                    </span>
+                  {canEdit && (
+                    <EstadoAcciones
+                      estado={c.estado}
+                      onCambiar={(estado) => void cambiarEstado("chofer", c.id, estado)}
+                      onEliminar={() => void eliminarEntidad("chofer", c.id)}
+                    />
                   )}
                 </div>
               </button>
@@ -1771,16 +1690,25 @@ export function M5FichaPage() {
       )}
 
       {!loading && !error && tab === "empresas" && (
+        <>
+        <div className="mb-4">
+          <EstadoChips
+            value={estadoFiltro.empresas}
+            onChange={(v) => setEstadoFiltro((p) => ({ ...p, empresas: v }))}
+            counts={empresaCounts}
+            femenino
+          />
+        </div>
         <EntityTable
           headers={["Nombre", "CUIT", "Estado", "Choferes", ""]}
           rows={empresasFiltradas.map((e) => {
             const wa = whatsappDigits(e.contacto);
             const choferesEmp = e.choferes ?? [];
-            const activa = e.activo !== false;
+            const estadoEmp = estadoEmpresa(e);
             return [
               e.nombre,
               e.cuit || "—",
-              activa ? "Activa" : "Inactiva",
+              <EstadoBadge key={`est-${e.id}`} estado={estadoEmp} femenino />,
               choferesEmp.length ? (
                 <ul key={`ch-${e.id}`} className="space-y-0.5">
                   {choferesEmp.map((c) => {
@@ -1819,36 +1747,18 @@ export function M5FichaPage() {
                     >
                       Editar
                     </button>
-                    {activa ? (
-                      <button
-                        type="button"
-                        onClick={() => void inactivarEmpresa(e.id)}
-                        className="text-amber-700 hover:text-amber-900"
-                      >
-                        Inactivar
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => void reactivarEmpresa(e.id)}
-                        className="text-emerald-700 hover:text-emerald-900"
-                      >
-                        Activar
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => void eliminarEmpresa(e.id)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      Eliminar
-                    </button>
+                    <EstadoAcciones
+                      estado={estadoEmp}
+                      onCambiar={(estado) => void cambiarEstado("empresa", e.id, estado)}
+                      onEliminar={() => void eliminarEntidad("empresa", e.id)}
+                    />
                   </div>
                 ) : null}
               </div>,
             ];
           })}
         />
+        </>
       )}
 
       {!loading && !error && tab === "usuarios" && (
@@ -2163,10 +2073,11 @@ export function M5FichaPage() {
                   className={inputClass}
                   value={fEstadoChofer}
                   onChange={(e) =>
-                    setFEstadoChofer(e.target.value as "ACTIVO" | "INACTIVO")
+                    setFEstadoChofer(e.target.value as EstadoEntidad)
                   }
                 >
                   <option value="ACTIVO">Activo</option>
+                  <option value="INHABILITADO">Inhabilitado</option>
                   <option value="INACTIVO">Inactivo</option>
                 </select>
               </Field>

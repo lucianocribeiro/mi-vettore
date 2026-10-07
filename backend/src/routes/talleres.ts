@@ -1487,6 +1487,25 @@ router.get("/externos", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
+/** Chofer o empresa inhabilitados/inactivos no piden taller (ops sí, para cualquier unidad). */
+async function solicitanteInhabilitado(userId: string, rol: string): Promise<string | null> {
+  if (rol !== "CHOFER" && rol !== "EMPRESA") return null;
+  const me = await prisma.usuario.findUnique({
+    where: { id: userId },
+    select: {
+      chofer: { select: { estado: true } },
+      empresa: { select: { activo: true, inhabilitada: true } },
+    },
+  });
+  if (rol === "CHOFER" && me?.chofer && me.chofer.estado !== "ACTIVO") {
+    return "Tu usuario está inhabilitado: no podés pedir taller. Consultá con Vettore.";
+  }
+  if (rol === "EMPRESA" && me?.empresa && (!me.empresa.activo || me.empresa.inhabilitada)) {
+    return "La empresa está inhabilitada: no puede pedir taller. Consultá con Vettore.";
+  }
+  return null;
+}
+
 router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
   try {
     const rol = req.user!.rol as Role;
@@ -1494,6 +1513,8 @@ router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
       res.status(403).json({ error: "Sin permiso" });
       return;
     }
+    const bloqueo = await solicitanteInhabilitado(req.user!.id, rol);
+    if (bloqueo) return void res.status(403).json({ error: bloqueo });
     const body = req.body ?? {};
     const empresaId = String(body.empresaId ?? "").trim();
     const camionetaId = String(body.camionetaId ?? "").trim();
@@ -1712,6 +1733,11 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
     const rol = req.user!.rol;
     if (!canCreateSolicitud(rol)) {
       res.status(403).json({ error: "Sin permiso para crear solicitudes" });
+      return;
+    }
+    const bloqueo = await solicitanteInhabilitado(req.user!.id, rol);
+    if (bloqueo) {
+      res.status(403).json({ error: bloqueo });
       return;
     }
 

@@ -77,7 +77,7 @@ export function canAdminCorregir(rol?: Role | null): boolean {
 }
 
 export type SegmentoCliente = "ESTATICO" | "CONSULTA" | "CONFIRMACION";
-export type EstadoChofer = "ACTIVO" | "INACTIVO";
+export type EstadoChofer = "ACTIVO" | "INHABILITADO" | "INACTIVO";
 export type EstadoCamioneta =
   | "OPERATIVA"
   | "EN_TALLER"
@@ -281,6 +281,7 @@ export type Empresa = {
   /** Si true, un mismo chofer puede tener varias camionetas activas de esta empresa. */
   permiteMultiCamioneta?: boolean;
   activo?: boolean;
+  inhabilitada?: boolean;
   choferes?: Array<{ id: string; nombre: string; apellido?: string; dni: string; estado: string }>;
   unidades?: Array<{ id: string; patente: string; estado: string }>;
 };

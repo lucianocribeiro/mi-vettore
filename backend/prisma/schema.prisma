@@ -41,6 +41,8 @@ enum SegmentoCliente {
 
 enum EstadoChofer {
   ACTIVO
+  /// Temporal (ej. baja médica): visible, pero no se le asignan unidades ni pide taller.
+  INHABILITADO
   INACTIVO
 }
 
@@ -306,6 +308,8 @@ model EmpresaTransporte {
   /// Si true, un mismo chofer puede tener varias camionetas activas de esta empresa.
   permiteMultiCamioneta  Boolean          @default(true)
   activo                 Boolean          @default(true)
+  /// Temporal: visible, pero no se le asignan unidades/choferes ni pide taller. Inactiva = activo false.
+  inhabilitada           Boolean          @default(false)
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   asignaciones           AsignacionFlota[]

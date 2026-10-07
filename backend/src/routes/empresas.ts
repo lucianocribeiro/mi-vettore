@@ -5,6 +5,7 @@ import { generateTempPassword } from "../lib/temp-password.js";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
+import { estadoEntidadFrom } from "../lib/estado-entidad.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
@@ -287,6 +288,64 @@ router.post("/:id/reactivar", ...write, async (req, res) => {
     res.json(item);
   } catch {
     res.status(404).json({ error: "Empresa no encontrada" });
+  }
+});
+
+/** Activo / Inhabilitado / Inactivo. Inactivar hace cascade; volver desde inactiva lo revierte. */
+router.post("/:id/estado", ...write, async (req, res) => {
+  try {
+    const estado = estadoEntidadFrom(req.body?.estado);
+    if (!estado) {
+      res.status(400).json({ error: "Estado inválido" });
+      return;
+    }
+    const actual = await prisma.empresaTransporte.findUnique({ where: { id: req.params.id } });
+    if (!actual) {
+      res.status(404).json({ error: "Empresa no encontrada" });
+      return;
+    }
+    const item = await prisma.$transaction(async (tx) => {
+      if (estado === "INACTIVO") {
+        await tx.usuario.updateMany({
+          where: { empresaId: actual.id, rol: Role.EMPRESA },
+          data: { estado: "INACTIVO" },
+        });
+        await tx.chofer.updateMany({
+          where: { empresaId: actual.id },
+          data: { estado: "INACTIVO" },
+        });
+        await tx.camioneta.updateMany({
+          where: { empresaId: actual.id },
+          data: { estado: "INACTIVA" },
+        });
+        return tx.empresaTransporte.update({
+          where: { id: actual.id },
+          data: { activo: false, inhabilitada: false },
+        });
+      }
+      if (!actual.activo) {
+        await tx.usuario.updateMany({
+          where: { empresaId: actual.id, rol: Role.EMPRESA },
+          data: { estado: "ACTIVO" },
+        });
+        await tx.chofer.updateMany({
+          where: { empresaId: actual.id, estado: "INACTIVO" },
+          data: { estado: "ACTIVO" },
+        });
+        await tx.camioneta.updateMany({
+          where: { empresaId: actual.id, estado: "INACTIVA" },
+          data: { estado: "OPERATIVA", estadoDesde: null, estadoHasta: null },
+        });
+      }
+      return tx.empresaTransporte.update({
+        where: { id: actual.id },
+        data: { activo: true, inhabilitada: estado === "INHABILITADO" },
+      });
+    });
+    res.json(item);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "No se pudo cambiar el estado" });
   }
 });
 

@@ -4,6 +4,7 @@ import { EstadoChofer } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
+import { estadoEntidadFrom } from "../lib/estado-entidad.js";
 import { ensureUsuarioForChofer } from "../lib/usuario-chofer.js";
 import { generateTempPassword } from "../lib/temp-password.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
@@ -35,7 +36,7 @@ function parseDate(value: unknown): Date | null {
 router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
     const incluirBajas = String(req.query.incluirBajas ?? "") === "1";
-    const whereBase = incluirBajas ? undefined : { estado: "ACTIVO" as const };
+    const whereBase = incluirBajas ? undefined : { estado: { not: EstadoChofer.INACTIVO } };
     if (req.user!.rol === "CHOFER") {
       const me = await prisma.usuario.findUnique({
         where: { id: req.user!.id },
@@ -369,6 +370,58 @@ router.delete("/:id", ...write, async (req, res) => {
     res.json(item);
   } catch {
     res.status(404).json({ error: "Chofer no encontrado" });
+  }
+});
+
+router.post("/:id/estado", ...write, async (req, res) => {
+  try {
+    const estado = estadoEntidadFrom(req.body?.estado);
+    if (!estado) {
+      res.status(400).json({ error: "Estado inválido" });
+      return;
+    }
+    const item = await prisma.chofer.update({
+      where: { id: req.params.id },
+      data: { estado: EstadoChofer[estado] },
+      include: includeAsignaciones,
+    });
+    res.json(item);
+  } catch {
+    res.status(404).json({ error: "Chofer no encontrado" });
+  }
+});
+
+/** Borrado definitivo. Si tiene pedidos u órdenes de taller, se bloquea (usar Inactivar). */
+router.post("/:id/eliminar", ...write, async (req, res) => {
+  try {
+    const chofer = await prisma.chofer.findUnique({
+      where: { id: req.params.id },
+      include: { _count: { select: { pedidos: true, solicitudes: true } } },
+    });
+    if (!chofer) {
+      res.status(404).json({ error: "Chofer no encontrado" });
+      return;
+    }
+    if (chofer._count.pedidos > 0 || chofer._count.solicitudes > 0) {
+      res.status(409).json({
+        error:
+          "No se puede eliminar: el chofer tiene pedidos u órdenes de taller. Usá Inactivar para darlo de baja sin perder historial.",
+      });
+      return;
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.asignacionFlota.deleteMany({ where: { choferId: chofer.id } });
+      await tx.documentoEntidad.deleteMany({ where: { choferId: chofer.id } });
+      await tx.usuario.updateMany({
+        where: { choferId: chofer.id },
+        data: { choferId: null, estado: "INACTIVO" },
+      });
+      await tx.chofer.delete({ where: { id: chofer.id } });
+    });
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "No se pudo eliminar el chofer" });
   }
 });
 

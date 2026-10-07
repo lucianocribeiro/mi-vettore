@@ -71,6 +71,34 @@ export async function reasignarChoferUnidad(
   const actuales = new Set(abiertas.map((a) => a.choferId));
   const deseados = new Set(requested);
 
+  const nuevos = choferes.filter((ch) => !actuales.has(ch.id));
+  if (nuevos.length) {
+    if (
+      camioneta.estado === EstadoCamioneta.DE_VACACIONES ||
+      camioneta.estado === EstadoCamioneta.FUERA_SERVICIO
+    ) {
+      throw Object.assign(
+        new Error("La unidad está inhabilitada: activala para asignarle choferes"),
+        { status: 400 }
+      );
+    }
+    if (empresa && (!empresa.activo || empresa.inhabilitada)) {
+      throw Object.assign(
+        new Error("La empresa está inhabilitada o inactiva: no se pueden asignar choferes"),
+        { status: 400 }
+      );
+    }
+    const noActivo = nuevos.find((ch) => ch.estado !== "ACTIVO");
+    if (noActivo) {
+      throw Object.assign(
+        new Error(
+          `${noActivo.nombre} ${noActivo.apellido} está ${noActivo.estado === "INHABILITADO" ? "inhabilitado" : "inactivo"}: no se le pueden asignar unidades`
+        ),
+        { status: 400 }
+      );
+    }
+  }
+
   // Cerrar asignaciones que ya no aplican
   const aCerrar = abiertas.filter((a) => !deseados.has(a.choferId));
   if (aCerrar.length) {
