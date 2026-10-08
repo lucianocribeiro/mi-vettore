@@ -31,8 +31,7 @@ export const FLOTA_COLUMNAS: Record<HojaFlota, Columna[]> = {
     { header: "Tipo", key: "tipo", width: 12 },
   ],
   choferes: [
-    { header: "Nombre", key: "nombre", width: 20 },
-    { header: "Apellido", key: "apellido", width: 20 },
+    { header: "Nombre completo", key: "nombre", width: 30 },
     { header: "DNI", key: "dni", width: 14 },
     { header: "Email", key: "email", width: 28 },
     { header: "Teléfono", key: "telefono", width: 16 },
@@ -68,8 +67,7 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
     tipo: "ALIADA",
   },
   choferes: {
-    nombre: "Ana",
-    apellido: "Perez",
+    nombre: "Ana Perez",
     dni: "30111222",
     email: "ana@empresa.com",
     telefono: "2644000000",
@@ -97,13 +95,13 @@ const INSTRUCCIONES: Record<HojaFlota, string[]> = {
     "Tipo: ALIADA o PROPIA (si se deja vacío queda ALIADA).",
   ],
   choferes: [
-    "Obligatorias: Nombre, Apellido, DNI y Empresa (nombre o CUIT de una empresa ya cargada).",
+    "Obligatorias: Nombre completo, DNI y Empresa (nombre o CUIT de una empresa ya cargada).",
     "Licencia vence: AAAA-MM-DD. Empresa transp.: Sí / No. Estado: ACTIVO / INHABILITADO / INACTIVO.",
     "El chofer accede con el DNI.",
   ],
   unidades: [
     "Obligatorias: Patente y Empresa (nombre o CUIT de una empresa ya cargada).",
-    "Chofer: nombre y apellido (o DNI) de choferes ya cargados de esa empresa; varios separados por coma.",
+    "Chofer: nombre completo (o DNI) de choferes ya cargados de esa empresa; varios separados por coma.",
     "Capacidad: número y unidad (ej. 350 kg). Tipo servicio (tipo de frío): igual al catálogo (ej. Congelado, Seco).",
     "Equipo de frío: igual al ABM de equipos de frío; el tipo de frío tiene que ser uno de los que admite ese equipo.",
     "Estado: OPERATIVA, DE_VACACIONES, FUERA_SERVICIO o INACTIVA (EN_TALLER lo maneja Talleres).",
@@ -165,7 +163,6 @@ export type FilaEmpresa = {
 export type FilaChofer = {
   fila: number;
   nombre: string;
-  apellido: string;
   dni: string;
   email: string;
   telefono: string;
@@ -230,10 +227,13 @@ export async function parseFlotaWorkbook(
   const colPorTitulo = new Map<string, number>();
   ws.getRow(1).eachCell((c, n) => colPorTitulo.set(norm(String(c.text ?? "")), n));
   const header = (key: string) => FLOTA_COLUMNAS[hoja].find((c) => c.key === key)!.header;
-  const col = (key: string) => colPorTitulo.get(norm(header(key))) ?? 0;
+  // Excel viejos de choferes traen "Nombre" + "Apellido" por separado.
+  const legado = (titulo: string) => (hoja === "choferes" ? colPorTitulo.get(norm(titulo)) ?? 0 : 0);
+  const col = (key: string) =>
+    colPorTitulo.get(norm(header(key))) ?? (key === "nombre" ? legado("Nombre") : 0);
   const obligatorias: Record<HojaFlota, string[]> = {
     empresas: ["nombre", "cuit"],
-    choferes: ["nombre", "apellido", "dni", "empresa"],
+    choferes: ["nombre", "dni", "empresa"],
     unidades: ["patente", "empresa"],
   };
   const faltan = obligatorias[hoja].filter((k) => !col(k)).map(header);
@@ -284,12 +284,14 @@ export async function parseFlotaWorkbook(
     if (hoja === "choferes") {
       const dniRaw = txt(row, "dni");
       if (/^EMP-/i.test(dniRaw)) return;
-      const nombre = txt(row, "nombre");
-      const apellido = txt(row, "apellido");
+      const cApellido = legado("Apellido");
+      const nombre = [txt(row, "nombre"), cApellido ? String(row.getCell(cApellido).text ?? "").trim() : ""]
+        .filter(Boolean)
+        .join(" ");
       const dni = digits(dniRaw);
-      if (!dni && !nombre && !apellido) return;
-      if (dni.length < 7 || !nombre || !apellido || !empresa) {
-        error(n, "Nombre, Apellido, DNI y Empresa son obligatorios");
+      if (!dni && !nombre) return;
+      if (dni.length < 7 || !nombre || !empresa) {
+        error(n, "Nombre completo, DNI y Empresa son obligatorios");
         return;
       }
       const cLic = col("licencia");
@@ -307,7 +309,6 @@ export async function parseFlotaWorkbook(
       data.choferes.push({
         fila: n,
         nombre,
-        apellido,
         dni,
         email: txt(row, "email").toLowerCase(),
         telefono: txt(row, "telefono"),

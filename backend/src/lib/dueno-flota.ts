@@ -63,7 +63,7 @@ export async function ensureDuenoFromEmpresaContact(opts: {
       titular = await prisma.chofer.create({
         data: {
           nombre: empresa.nombre,
-          apellido: "Titular",
+          apellido: "",
           empresaId: empresa.id,
           dni: dniSynthetic,
           email,

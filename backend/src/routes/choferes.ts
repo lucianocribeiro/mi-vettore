@@ -107,15 +107,14 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
     const items = await prisma.chofer.findMany({
-      orderBy: [{ apellido: "asc" }, { nombre: "asc" }],
+      orderBy: { nombre: "asc" },
       include: { empresa: { select: { cuit: true, nombre: true } } },
     });
     await sendFlotaExcel(
       res,
       "choferes",
       items.map((c) => ({
-        nombre: c.nombre,
-        apellido: c.apellido,
+        nombre: `${c.nombre} ${c.apellido}`.trim(),
         dni: c.dni,
         email: c.email ?? "",
         telefono: c.telefono ?? "",
@@ -199,12 +198,15 @@ router.patch("/:id/dni", authenticate, async (req: AuthedRequest, res) => {
 
 router.post("/", ...write, async (req, res) => {
   try {
-    const nombre = String(req.body?.nombre ?? "").trim();
-    const apellido = String(req.body?.apellido ?? "").trim();
+    const nombre = [req.body?.nombre, req.body?.apellido]
+      .map((v) => String(v ?? "").trim())
+      .filter(Boolean)
+      .join(" ");
+    const apellido = "";
     const dni = String(req.body?.dni ?? "").replace(/\D/g, "");
     const empresaId = String(req.body?.empresaId ?? "").trim();
-    if (!nombre || !apellido || !dni || !empresaId) {
-      res.status(400).json({ error: "Nombre, apellido, DNI y empresa son obligatorios" });
+    if (!nombre || !dni || !empresaId) {
+      res.status(400).json({ error: "Nombre completo, DNI y empresa son obligatorios" });
       return;
     }
     const empresa = await prisma.empresaTransporte.findUnique({ where: { id: empresaId } });

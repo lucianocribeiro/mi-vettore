@@ -170,7 +170,6 @@ export function M5FichaPage() {
   const [fVerMant, setFVerMant] = useState(true);
   const [fVerTaller, setFVerTaller] = useState(true);
   const [fEstadoChofer, setFEstadoChofer] = useState<EstadoEntidad>("ACTIVO");
-  const [fApellido, setFApellido] = useState("");
   const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
   const [fCedulaFoto, setFCedulaFoto] = useState("");
@@ -416,7 +415,6 @@ export function M5FichaPage() {
     setFEmail("");
     setFPassword("");
     setFRol("OPERACIONES");
-    setFApellido("");
     setFChoferEmpresaId("");
     setFEstadoUser("ACTIVO");
     setFTsNombre("");
@@ -434,8 +432,7 @@ export function M5FichaPage() {
 
   function openEditChofer(item: Chofer) {
     setFormError(null);
-    setFNombre(item.nombre);
-    setFApellido(item.apellido ?? "");
+    setFNombre(`${item.nombre} ${item.apellido ?? ""}`.trim());
     setFChoferEmpresaId(item.empresaId ?? "");
     setFDni(item.dni);
     setFCuil(item.cuil ?? "");
@@ -488,7 +485,6 @@ export function M5FichaPage() {
   function openEditUsuario(item: User) {
     setFormError(null);
     setFNombre(item.nombre ?? "");
-    setFApellido(item.apellido ?? "");
     setFDni(item.dni ?? "");
     setFChoferEmpresaId(item.empresaId ?? "");
     setFEmail(item.email);
@@ -554,8 +550,8 @@ export function M5FichaPage() {
           return;
         }
         const body = {
-          nombre: fNombre,
-          apellido: fApellido,
+          nombre: fNombre.trim().replace(/\s+/g, " "),
+          apellido: "",
           empresaId: fChoferEmpresaId,
           dni: fDni,
           cuil: fCuil || null,
@@ -759,7 +755,6 @@ export function M5FichaPage() {
           email: fEmail,
           rol: fRol,
           nombre: fNombre || null,
-          apellido: fApellido || null,
           dni: fDni || null,
           empresaId: fChoferEmpresaId || null,
           estado: fEstadoUser,
@@ -1976,7 +1971,7 @@ export function M5FichaPage() {
           {(form.kind === "chofer" ||
             form.kind === "empresa" ||
             form.kind === "usuario") && (
-            <Field label="Nombre">
+            <Field label={form.kind === "empresa" ? "Nombre" : "Nombre completo"}>
               <input
                 className={inputClass}
                 value={fNombre}
@@ -1988,14 +1983,6 @@ export function M5FichaPage() {
 
           {form.kind === "chofer" && (
             <>
-              <Field label="Apellido">
-                <input
-                  className={inputClass}
-                  value={fApellido}
-                  onChange={(e) => setFApellido(e.target.value)}
-                  required
-                />
-              </Field>
               <Field label="DNI">
                 <input
                   className={inputClass}
@@ -2548,13 +2535,6 @@ export function M5FichaPage() {
 
           {form.kind === "usuario" && (
             <>
-              <Field label="Apellido">
-                <input
-                  className={inputClass}
-                  value={fApellido}
-                  onChange={(e) => setFApellido(e.target.value)}
-                />
-              </Field>
               <Field label="DNI">
                 <input
                   className={inputClass}

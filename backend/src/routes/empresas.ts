@@ -30,7 +30,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       where: scope,
       orderBy: { nombre: "asc" },
       include: {
-        choferes: { orderBy: { apellido: "asc" }, select: { id: true, nombre: true, apellido: true, dni: true, estado: true } },
+        choferes: { orderBy: { nombre: "asc" }, select: { id: true, nombre: true, apellido: true, dni: true, estado: true } },
         unidades: { orderBy: { patente: "asc" }, select: { id: true, patente: true, estado: true } },
       },
     });
@@ -72,7 +72,7 @@ router.get("/:id", authenticate, async (req, res) => {
     const item = await prisma.empresaTransporte.findUnique({
       where: { id: req.params.id },
       include: {
-        choferes: { orderBy: { apellido: "asc" } },
+        choferes: { orderBy: { nombre: "asc" } },
         unidades: { orderBy: { patente: "asc" } },
       },
     });

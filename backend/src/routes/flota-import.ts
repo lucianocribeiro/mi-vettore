@@ -150,12 +150,12 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
             continue;
           }
           if (current && !actualizar) {
-            omitidos.push(`Chofer ${c.nombre} ${c.apellido} (${c.dni}) ya existe`);
+            omitidos.push(`Chofer ${c.nombre} (${c.dni}) ya existe`);
             continue;
           }
           const data = {
             nombre: c.nombre,
-            apellido: c.apellido,
+            apellido: "",
             telefono: c.telefono || null,
             email: c.email || null,
             ...(c.licencia ? { licenciaVencimiento: c.licencia } : {}),
