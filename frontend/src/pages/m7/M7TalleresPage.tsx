@@ -1730,11 +1730,11 @@ function SeleccionChecklist({
       )}
       <table className="w-full text-left text-xs">
         <thead>
-          <tr className="text-[10px] text-[var(--vl-text-muted)]">
-            <th className="w-8 py-1 font-normal" />
-            <th className="py-1 font-normal">Descripción</th>
-            <th className="py-1 font-normal">Concepto</th>
-            {!ocultarMontos && <th className="py-1 text-right font-normal">Importe $</th>}
+          <tr className="text-xs text-[var(--vl-text-muted)]">
+            <th className="w-8 py-1 font-semibold" />
+            <th className="py-1 font-semibold">Descripción</th>
+            <th className="py-1 font-semibold">Concepto</th>
+            {!ocultarMontos && <th className="py-1 text-right font-semibold">Importe $</th>}
           </tr>
         </thead>
       {groupByTaller(items).map((g) => (
@@ -2187,9 +2187,9 @@ function AjusteImportesChecklist({
       {itemsBase.length > 0 && (
       <table className="mb-3 w-full text-left text-xs">
         <thead>
-          <tr className="text-[10px] text-[var(--vl-text-muted)]">
-            <th className="py-1 font-normal">Descripción</th>
-            {!ocultarMontos && <th className="py-1 text-right font-normal">Importe $</th>}
+          <tr className="text-xs text-[var(--vl-text-muted)]">
+            <th className="py-1 font-semibold">Descripción</th>
+            {!ocultarMontos && <th className="py-1 text-right font-semibold">Importe $</th>}
           </tr>
         </thead>
       {groupByTaller(itemsBase).map((g) => {
@@ -2507,10 +2507,10 @@ function ItemsEditor({
       {items.length > 0 && (
       <table className="mb-2 w-full text-left text-xs">
         <thead>
-          <tr className="text-[10px] text-[var(--vl-text-muted)]">
-            <th className="py-1 font-normal">Descripción</th>
-            <th className="py-1 font-normal">Mano obra / Materiales</th>
-            {!showSubtotales && <th className="py-1 font-normal">Importe</th>}
+          <tr className="text-xs text-[var(--vl-text-muted)]">
+            <th className="py-1 font-semibold">Descripción</th>
+            <th className="py-1 font-semibold">Mano obra / Materiales</th>
+            {!showSubtotales && <th className="py-1 font-semibold">Importe</th>}
             {!readOnly && <th className="py-1" />}
           </tr>
         </thead>
