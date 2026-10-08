@@ -24,7 +24,6 @@ type Props = {
   choferes: Chofer[];
   empresas: Empresa[];
   canEdit: boolean;
-  onBaja?: (tipo: "camioneta" | "chofer", id: string) => void;
 };
 
 export function FichaDrawer({
@@ -34,7 +33,6 @@ export function FichaDrawer({
   choferes,
   empresas,
   canEdit,
-  onBaja,
 }: Props) {
   const { token } = useAuth();
   const [tab, setTab] = useState<"datos" | "historial">("datos");
@@ -307,16 +305,6 @@ export function FichaDrawer({
                   </div>
                 )}
               </div>
-
-              {canEdit && cam.estado !== "INACTIVA" && onBaja && (
-                <button
-                  type="button"
-                  onClick={() => onBaja("camioneta", cam.id)}
-                  className="w-full rounded-md border border-red-300 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
-                >
-                  Inactivar unidad
-                </button>
-              )}
             </div>
           )}
 
@@ -340,16 +328,6 @@ export function FichaDrawer({
                   <DocumentUpload choferId={ch.id} />
                 </div>
               </section>
-
-              {canEdit && ch.estado !== "INACTIVO" && onBaja && (
-                <button
-                  type="button"
-                  onClick={() => onBaja("chofer", ch.id)}
-                  className="w-full rounded-md border border-red-300 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
-                >
-                  Inactivar chofer
-                </button>
-              )}
             </div>
           )}
 

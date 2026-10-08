@@ -68,12 +68,18 @@ export function EstadoChips({
   value,
   onChange,
   counts,
+  sinInactivar,
 }: {
   value: FiltroEstado;
   onChange: (v: FiltroEstado) => void;
   counts: Record<FiltroEstado, number>;
+  /** Choferes y unidades no se inactivan: el chip solo aparece si quedan inactivos viejos. */
+  sinInactivar?: boolean;
 }) {
-  const opciones: FiltroEstado[] = [...ESTADOS_ENTIDAD, "TODOS"];
+  const opciones: FiltroEstado[] = [
+    ...ESTADOS_ENTIDAD.filter((e) => !(sinInactivar && e === "INACTIVO" && counts.INACTIVO === 0)),
+    "TODOS",
+  ];
   return (
     <div className="flex flex-wrap gap-2">
       {opciones.map((op) => (
@@ -107,11 +113,13 @@ export function EstadoAcciones({
   onCambiar,
   onEliminar,
   motivos,
+  sinInactivar,
 }: {
   estado: EstadoEntidad;
   onCambiar: (estado: EstadoEntidad, motivo?: string) => void;
   onEliminar: () => void;
   motivos?: { value: string; label: string }[];
+  sinInactivar?: boolean;
 }) {
   const [eligiendoMotivo, setEligiendoMotivo] = useState(false);
   const accion = (fn: () => void) => ({
@@ -157,7 +165,7 @@ export function EstadoAcciones({
 
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      {ESTADOS_ENTIDAD.filter((e) => e !== estado).map((e) => (
+      {ESTADOS_ENTIDAD.filter((e) => e !== estado && !(sinInactivar && e === "INACTIVO")).map((e) => (
         <span
           key={e}
           {...accion(() =>

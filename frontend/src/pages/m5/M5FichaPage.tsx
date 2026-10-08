@@ -834,11 +834,8 @@ export function M5FichaPage() {
     chofer: {
       INHABILITADO:
         "¿Inhabilitar este chofer? Sigue viendo la app, pero no se le asignan unidades ni puede pedir taller.",
-      INACTIVO: "¿Inactivar este chofer? Queda de baja pero conserva su historial.",
     },
-    camioneta: {
-      INACTIVO: "¿Inactivar esta unidad? Queda de baja pero conserva su historial.",
-    },
+    camioneta: {},
   };
 
   async function cambiarEstado(
@@ -905,10 +902,6 @@ export function M5FichaPage() {
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo eliminar");
     }
-  }
-
-  async function darDeBaja(tipo: "camioneta" | "chofer", id: string) {
-    await cambiarEstado(tipo, id, "INACTIVO");
   }
 
   async function toggleTipoServicio(item: TipoServicio) {
@@ -1382,6 +1375,7 @@ export function M5FichaPage() {
               value={estadoFiltro.camioneta}
               onChange={(v) => setEstadoFiltro((p) => ({ ...p, camioneta: v }))}
               counts={unidadCounts}
+              sinInactivar
             />
             <p className="text-[11px] text-[var(--vl-text-muted)]">
               Mostrando {camionetasFiltradas.length} de {unidadCounts.TODOS}
@@ -1463,6 +1457,7 @@ export function M5FichaPage() {
                           estado={estadoUnidad(c)}
                           onCambiar={(estado) => void cambiarEstado("camioneta", c.id, estado)}
                           onEliminar={() => void eliminarEntidad("camioneta", c.id)}
+                          sinInactivar
                         />
                       )}
                     </div>
@@ -1481,6 +1476,7 @@ export function M5FichaPage() {
               value={estadoFiltro.chofer}
               onChange={(v) => setEstadoFiltro((p) => ({ ...p, chofer: v }))}
               counts={choferCounts}
+              sinInactivar
             />
             <p className="text-[11px] text-[var(--vl-text-muted)]">
               Mostrando {choferesFiltrados.length} de {choferCounts.TODOS}
@@ -1541,6 +1537,7 @@ export function M5FichaPage() {
                       estado={c.estado}
                       onCambiar={(estado) => void cambiarEstado("chofer", c.id, estado)}
                       onEliminar={() => void eliminarEntidad("chofer", c.id)}
+                      sinInactivar
                     />
                   )}
                 </div>
@@ -1974,7 +1971,6 @@ export function M5FichaPage() {
           choferes={choferes}
           empresas={empresas}
           canEdit={canEdit}
-          onBaja={(tipo, id) => void darDeBaja(tipo, id)}
           onUpdated={(tipo, item) => {
             if (tipo === "camioneta") {
               const c = item as Camioneta;
@@ -2069,7 +2065,7 @@ export function M5FichaPage() {
                 >
                   <option value="ACTIVO">Activo</option>
                   <option value="INHABILITADO">Inhabilitado</option>
-                  <option value="INACTIVO">Inactivo</option>
+                  {fEstadoChofer === "INACTIVO" && <option value="INACTIVO">Inactivo</option>}
                 </select>
               </Field>
               <Field label="Empresa">
@@ -2390,7 +2386,7 @@ export function M5FichaPage() {
                   <option value="EN_TALLER">Inhabilitado (en taller)</option>
                   <option value="DE_VACACIONES">Inhabilitado (de vacaciones)</option>
                   <option value="FUERA_SERVICIO">Inhabilitado (fuera de servicio)</option>
-                  <option value="INACTIVA">Inactivo</option>
+                  {fEstadoCam === "INACTIVA" && <option value="INACTIVA">Inactivo</option>}
                 </select>
               </Field>
               {fEstadoCam !== "OPERATIVA" && (
