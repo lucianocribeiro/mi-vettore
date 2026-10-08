@@ -1002,6 +1002,7 @@ export function M5FichaPage() {
   const patentesPorChofer = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const cam of camionetas) {
+      if (cam.estado === "INACTIVA") continue;
       for (const a of cam.asignaciones ?? []) {
         if (a.periodoHasta) continue;
         map.set(a.choferId, [...(map.get(a.choferId) ?? []), cam.patente]);
@@ -1025,6 +1026,7 @@ export function M5FichaPage() {
     if (!q) return list;
     return list.filter((e) => {
       const choferesTxt = (e.choferes ?? [])
+        .filter((c) => c.estado !== "INACTIVO")
         .map((c) => `${c.nombre} ${c.apellido ?? ""} ${c.dni}`)
         .join(" ");
       const hay = [e.nombre, e.cuit, e.contacto, choferesTxt]
@@ -1698,7 +1700,7 @@ export function M5FichaPage() {
           headers={["Nombre", "CUIT", "Estado", "Choferes", ""]}
           rows={empresasFiltradas.map((e) => {
             const wa = whatsappDigits(e.contacto);
-            const choferesEmp = e.choferes ?? [];
+            const choferesEmp = (e.choferes ?? []).filter((c) => c.estado !== "INACTIVO");
             const estadoEmp = estadoEmpresa(e);
             return [
               e.nombre,
