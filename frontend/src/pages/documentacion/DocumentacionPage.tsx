@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
+import {
+  Badge,
+  ESTADO_CAMIONETA_STYLE,
+  ESTADO_CHOFER_STYLE,
+} from "../../components/Badge";
 import { DocumentUpload } from "../../components/DocumentUpload";
 import {
   ESTADOS_CAMIONETA,
@@ -12,8 +17,10 @@ import { apiFetch, ApiError } from "../../lib/api";
 import {
   currentAsignacion,
   currentChoferAsignacion,
+  formatDate,
   isInternalOps,
-  TIPO_DOCUMENTO_LABEL,
+  unidadPropietario,
+  unidadTitulo,
   type Camioneta,
   type Chofer,
   type EstadoCamioneta,
@@ -22,12 +29,21 @@ import {
 
 type NivelDocs = "ok" | "warn" | "danger";
 
+type EstadoItemDoc = "ok" | "falta" | "vencido" | "por_vencer" | "opcional";
+
+type ResumenDocItem = {
+  tipo: TipoDocumento;
+  estado: EstadoItemDoc;
+  vencimiento: string | null;
+};
+
 type ResumenDocs = {
   faltantes: TipoDocumento[];
   vencidos: TipoDocumento[];
   porVencer: TipoDocumento[];
   sinValidar: number;
   nivel: NivelDocs;
+  items?: ResumenDocItem[];
 };
 
 type FiltroDocs = "all" | "pendiente" | "vencida" | "por_vencer" | "completa";
@@ -61,46 +77,107 @@ const CARD_TINT: Record<NivelDocs, string> = {
   danger: "bg-red-50/80 dark:bg-red-950/30",
 };
 
-const NIVEL_DOT: Record<NivelDocs, string> = {
-  ok: "bg-emerald-500",
-  warn: "bg-amber-400",
-  danger: "bg-red-500",
+/** Renglones de la tarjeta: frente/dorso y las 5 fotos se agrupan en uno solo. */
+const GRUPOS_UNIDAD: Array<{ label: string; tipos: TipoDocumento[] }> = [
+  { label: "Cédula", tipos: ["CEDULA", "CEDULA_DORSO"] },
+  { label: "Seguro", tipos: ["SEGURO"] },
+  { label: "RTO / VTV", tipos: ["VTV"] },
+  { label: "SENASA", tipos: ["SENASA"] },
+  { label: "Homologación", tipos: ["HOMOLOGACION"] },
+  {
+    label: "Fotos",
+    tipos: ["FOTO_VEHICULO", "FOTO_ATRAS", "FOTO_LATERAL_IZQ", "FOTO_LATERAL_DER", "FOTO_CARGA"],
+  },
+];
+
+const GRUPOS_CHOFER: Array<{ label: string; tipos: TipoDocumento[] }> = [
+  { label: "DNI", tipos: ["DNI_FRENTE", "DNI_DORSO"] },
+  { label: "Licencia", tipos: ["LICENCIA_FRENTE", "LICENCIA_DORSO"] },
+  { label: "Manipulación", tipos: ["HABILITACION_MANIPULACION"] },
+  { label: "Seguro accidentes", tipos: ["SEGURO_ACCIDENTES"] },
+];
+
+const PESO_ESTADO: Record<EstadoItemDoc, number> = {
+  falta: 4,
+  vencido: 3,
+  por_vencer: 2,
+  ok: 1,
+  opcional: 0,
 };
 
-function etiquetas(tipos: TipoDocumento[]): string {
-  return tipos.map((t) => TIPO_DOCUMENTO_LABEL[t] ?? t).join(", ");
-}
-
-function ResumenDocsLineas({ r }: { r: ResumenDocs | undefined }) {
-  if (!r) return null;
-  if (r.nivel === "ok") {
+function DocChecklist({
+  r,
+  grupos,
+}: {
+  r: ResumenDocs | undefined;
+  grupos: Array<{ label: string; tipos: TipoDocumento[] }>;
+}) {
+  if (!r?.items) {
     return (
-      <div className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-        Documentación completa
-        {r.sinValidar > 0 ? ` · ${r.sinValidar} sin validar` : ""}
-      </div>
+      <div className="mt-3 text-[11px] text-[var(--vl-text-muted)]">Cargando documentación…</div>
     );
   }
+  const porTipo = new Map(r.items.map((i) => [i.tipo, i]));
   return (
-    <div className="mt-1 space-y-0.5 text-[11px]">
-      {r.faltantes.length > 0 && (
-        <div className="font-semibold text-red-600 dark:text-red-400">
-          Falta: {etiquetas(r.faltantes)}
-        </div>
-      )}
-      {r.vencidos.length > 0 && (
-        <div className="font-semibold text-red-600 dark:text-red-400">
-          Vencido: {etiquetas(r.vencidos)}
-        </div>
-      )}
-      {r.porVencer.length > 0 && (
-        <div className="font-medium text-amber-700 dark:text-amber-400">
-          Por vencer: {etiquetas(r.porVencer)}
-        </div>
-      )}
+    <div className="mt-3 grid grid-cols-[auto_auto_1fr] items-center gap-x-2 gap-y-0.5 text-[11px]">
+      {grupos.map((g) => {
+        const items = g.tipos
+          .map((t) => porTipo.get(t))
+          .filter((i): i is ResumenDocItem => !!i);
+        if (items.length === 0) return null;
+        const peor = items.reduce((a, b) => (PESO_ESTADO[b.estado] > PESO_ESTADO[a.estado] ? b : a));
+        const cargados = items.filter((i) => i.estado !== "falta" && i.estado !== "opcional").length;
+        const venc = items.find((i) => i.vencimiento)?.vencimiento ?? null;
+        let detalle = "";
+        if (peor.estado === "falta") {
+          detalle = items.length > 1 && cargados > 0 ? `Falta (${cargados}/${items.length})` : "Falta";
+        } else if (peor.estado === "opcional") {
+          detalle = "Opcional";
+        } else if (peor.estado === "vencido") {
+          detalle = `Vencido ${formatDate(venc)}`;
+        } else if (venc) {
+          detalle = `Vence ${formatDate(venc)}`;
+        } else {
+          detalle = "Cargado";
+        }
+        const icono =
+          peor.estado === "falta" || peor.estado === "vencido" ? (
+            <span className="font-bold text-red-600 dark:text-red-400" aria-label="Falta">
+              ✗
+            </span>
+          ) : peor.estado === "opcional" ? (
+            <span className="text-[var(--vl-text-muted)]">—</span>
+          ) : (
+            <span
+              className={`font-bold ${
+                peor.estado === "por_vencer"
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-emerald-600 dark:text-emerald-400"
+              }`}
+              aria-label="Ok"
+            >
+              ✓
+            </span>
+          );
+        return (
+          <div key={g.label} className="contents">
+            <span className="w-4 text-center">{icono}</span>
+            <span className="text-[var(--vl-text-muted)]">{g.label}:</span>
+            <span className={ITEM_LINE[peor.estado]}>{detalle}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
+
+const ITEM_LINE: Record<EstadoItemDoc, string> = {
+  ok: "text-[var(--vl-text-muted)]",
+  opcional: "text-[var(--vl-text-muted)]",
+  por_vencer: "font-medium text-amber-700 dark:text-amber-400",
+  vencido: "font-semibold text-red-600 dark:text-red-400",
+  falta: "font-semibold text-red-600 dark:text-red-400",
+};
 
 function compact(s: string): string {
   return s.toLowerCase().replace(/[\s.\-_/]/g, "");
@@ -236,14 +313,12 @@ export function DocumentacionPage() {
     try {
       const cams = await apiFetch<Camioneta[]>("/api/camionetas", {}, token);
       setCamionetas(cams);
-      if (!keepSelection && cams.length === 1) setSelectedCam(cams[0].id);
       let chIds: string[] = [];
       if (ops || user?.esDuenoFlota || user?.rol === "EMPRESA") {
         const ch = await apiFetch<Chofer[]>("/api/choferes", {}, token);
         setChoferes(ch);
         chIds = ch.map((c) => c.id);
       } else if (user?.choferId) {
-        setSelectedChofer(user.choferId);
         setChoferes([{ id: user.choferId, nombre: user.nombre || "Mi ficha" } as Chofer]);
         chIds = [user.choferId];
       }
@@ -265,6 +340,22 @@ export function DocumentacionPage() {
       camionetas.find((c) => currentAsignacion(c)?.choferId === choferId) ?? null
     );
   }
+
+  function nombreCompleto(ch: Chofer): string {
+    return [ch.nombre, ch.apellido && ch.apellido !== "-" ? ch.apellido : ""]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  /** Ops, el propio chofer o la empresa de transporte sobre su flota. */
+  function puedeAbrirChofer(choferId: string): boolean {
+    return ops || !!user?.esDuenoFlota || esPerfilEmpresa || choferId === user?.choferId;
+  }
+
+  const panelCam = selectedCam ? camionetas.find((c) => c.id === selectedCam) ?? null : null;
+  const panelChofer = selectedChofer
+    ? choferes.find((c) => c.id === selectedChofer) ?? null
+    : null;
 
   function nombreChofer(choferId: string): string {
     const ch = choferes.find((c) => c.id === choferId);
@@ -667,103 +758,79 @@ export function DocumentacionPage() {
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
-      {tab === "unidades" && (
-        <div className="mt-4 space-y-2">
-            {filteredCams.length === 0 ? (
-              <p className="rounded-xl border border-[var(--vl-card-border)] p-3 text-sm text-[var(--vl-text-muted)]">
-                No hay unidades con ese filtro
-              </p>
-            ) : (
-              filteredCams.map((c) => {
-                const active = selectedCam === c.id;
-                const actual = currentAsignacion(c);
-                const elegido = draftChofer[c.id] ?? actual?.choferId ?? "";
-                const otra = elegido ? unidadDeChofer(elegido) : null;
-                const accion =
-                  otra && otra.id !== c.id
-                    ? "Pasar a esta unidad"
-                    : actual?.choferId && actual.choferId !== elegido
-                      ? "Reemplazar"
-                      : "Asignar";
-                const resumen = resumenCam[c.id];
-                const nivel: NivelDocs = resumen?.nivel ?? "ok";
-                return (
-                  <div
-                    key={c.id}
-                    className={`grid gap-2 ${active ? "lg:grid-cols-2" : ""}`}
-                  >
-                    <div
-                      className={`self-start rounded-xl border-2 p-3 text-sm ${
-                        CARD_RING[nivel]
-                      } ${CARD_TINT[nivel]} ${
-                        active ? "ring-2 ring-slate-900 dark:ring-slate-100" : ""
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelectedCam((prev) => (prev === c.id ? null : c.id))
-                        }
-                        className="w-full text-left"
-                      >
-                        <div className="flex items-center gap-2 font-semibold text-[var(--vl-heading)]">
-                          {resumen && (
-                            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${NIVEL_DOT[nivel]}`} />
-                          )}
-                          {c.patente}
-                        </div>
-                        {!ops && (
-                          <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                            {actual?.chofer
-                              ? `Chofer: ${actual.chofer.nombre}`
-                              : "Sin chofer"}
-                          </div>
-                        )}
-                        <ResumenDocsLineas r={resumen} />
-                      </button>
-                      {esPerfilEmpresa && (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <select
-                            className="min-w-0 flex-1 rounded-md border border-[var(--vl-card-border)] bg-transparent px-2 py-1.5 text-xs"
-                            value={elegido}
-                            onChange={(e) =>
-                              setDraftChofer((prev) => ({
-                                ...prev,
-                                [c.id]: e.target.value,
-                              }))
-                            }
-                          >
-                            <option value="">Elegí chofer…</option>
-                            {choferes
-                              .filter((ch) => ch.estado !== "INACTIVO")
-                              .map((ch) => {
-                                const patente = unidadDeChofer(ch.id)?.patente;
-                                return (
-                                  <option key={ch.id} value={ch.id}>
-                                    {ch.apellido ? `${ch.apellido}, ` : ""}
-                                    {ch.nombre}
-                                    {patente ? ` · ${patente}` : " · sin unidad"}
-                                  </option>
-                                );
-                              })}
-                          </select>
-                          <button
-                            type="button"
-                            disabled={
-                              !elegido ||
-                              elegido === actual?.choferId ||
-                              savingId === c.id
-                            }
-                            onClick={() => void asignarChofer(c.id, elegido)}
-                            className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
-                          >
-                            {savingId === c.id ? "Guardando…" : accion}
-                          </button>
-                        </div>
-                      )}
+      {tab === "unidades" &&
+        (filteredCams.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-[var(--vl-card-border)] p-3 text-sm text-[var(--vl-text-muted)]">
+            No hay unidades con ese filtro
+          </p>
+        ) : (
+          <div className="mt-4 grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {filteredCams.map((c) => {
+              const active = selectedCam === c.id;
+              const actual = currentAsignacion(c);
+              const resumen = resumenCam[c.id];
+              const nivel: NivelDocs = resumen?.nivel ?? "ok";
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelectedCam((prev) => (prev === c.id ? null : c.id))}
+                  className={`flex h-full flex-col rounded-2xl border-2 p-4 text-left transition ${
+                    CARD_RING[nivel]
+                  } ${CARD_TINT[nivel]} ${
+                    active
+                      ? "ring-2 ring-slate-900 ring-offset-2 dark:ring-slate-100 dark:ring-offset-[var(--vl-main)]"
+                      : "hover:shadow-md"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-lg font-bold leading-tight text-[var(--vl-heading)]">
+                        {c.patente}
+                      </div>
+                      <div className="mt-0.5 text-xs font-medium text-[var(--vl-text)]">
+                        {unidadTitulo(c)}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                        {unidadPropietario(c)}
+                      </div>
                     </div>
-                    {active && (
-                      <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
+                    <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
+                      {c.estado.replace(/_/g, " ").toLowerCase()}
+                    </Badge>
+                  </div>
+                  <DocChecklist r={resumen} grupos={GRUPOS_UNIDAD} />
+                  <div className="mt-auto pt-2 text-[11px] leading-snug text-[var(--vl-text-muted)]">
+                    {actual?.chofer ? `Chofer: ${actual.chofer.nombre}` : "Sin chofer"}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+
+      {tab === "unidades" && panelCam && (() => {
+        const c = panelCam;
+        const actual = currentAsignacion(c);
+        const elegido = draftChofer[c.id] ?? actual?.choferId ?? "";
+        const otra = elegido ? unidadDeChofer(elegido) : null;
+        const accion =
+          otra && otra.id !== c.id
+            ? "Pasar a esta unidad"
+            : actual?.choferId && actual.choferId !== elegido
+              ? "Reemplazar"
+              : "Asignar";
+        return (
+          <PanelLateral
+            titulo={c.patente}
+            badge={
+              <Badge className={ESTADO_CAMIONETA_STYLE[c.estado]}>
+                {c.estado.replace(/_/g, " ").toLowerCase()}
+              </Badge>
+            }
+            subtitulo={`${unidadTitulo(c)} · ${unidadPropietario(c)}`}
+            onClose={() => setSelectedCam(null)}
+          >
                         {esPerfilEmpresa && (
                           <div className="mb-4 rounded-lg border border-[var(--vl-card-border)] p-3">
                             <div className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
@@ -812,73 +879,96 @@ export function DocumentacionPage() {
                             </div>
                           </div>
                         )}
-                        <DocumentUpload
-                          camionetaId={c.id}
-                          onChange={() => void loadResumen([c.id], [])}
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-        </div>
-      )}
+            <DocumentUpload
+              camionetaId={c.id}
+              onChange={() => void loadResumen([c.id], [])}
+            />
+          </PanelLateral>
+        );
+      })()}
 
-      {tab === "choferes" && (
-        <div className="mt-4 space-y-2">
-            {filteredChoferes.length === 0 ? (
-              <p className="rounded-xl border border-[var(--vl-card-border)] p-3 text-sm text-[var(--vl-text-muted)]">
-                No hay choferes con ese filtro
-              </p>
-            ) : (
-              filteredChoferes.map((c) => {
-                const active = selectedChofer === c.id;
-                // Ops, el propio chofer, o empresa de transporte sobre su flota
-                const canVerPanel =
-                  ops || !!user?.esDuenoFlota || c.id === user?.choferId;
-                const resumen = resumenCh[c.id];
-                const nivel: NivelDocs = resumen?.nivel ?? "ok";
-                return (
-                  <div
-                    key={c.id}
-                    className={`grid gap-2 ${active && canVerPanel ? "lg:grid-cols-2" : ""}`}
-                  >
-                    <div
-                      className={`self-start rounded-xl border-2 p-3 text-sm ${
-                        CARD_RING[nivel]
-                      } ${CARD_TINT[nivel]} ${
-                        active ? "ring-2 ring-slate-900 dark:ring-slate-100" : ""
-                      }`}
-                    >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedChofer((prev) => (prev === c.id ? null : c.id))
-                      }
-                      className="w-full text-left"
-                    >
-                      <div className="flex items-center gap-2 font-semibold text-[var(--vl-heading)]">
-                        {resumen && (
-                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${NIVEL_DOT[nivel]}`} />
-                        )}
-                        {ops
-                          ? [c.nombre, c.apellido && c.apellido !== "-" ? c.apellido : ""]
-                              .filter(Boolean)
-                              .join(" ")
-                          : c.nombre}
+      {tab === "choferes" &&
+        (filteredChoferes.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-[var(--vl-card-border)] p-3 text-sm text-[var(--vl-text-muted)]">
+            No hay choferes con ese filtro
+          </p>
+        ) : (
+          <div className="mt-4 grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {filteredChoferes.map((c) => {
+              const active = selectedChofer === c.id;
+              const resumen = resumenCh[c.id];
+              const nivel: NivelDocs = resumen?.nivel ?? "ok";
+              const unidad = unidadDeChofer(c.id);
+              const empresa = currentChoferAsignacion(c)?.empresa?.nombre;
+              const abrible = puedeAbrirChofer(c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  disabled={!abrible}
+                  onClick={() => setSelectedChofer((prev) => (prev === c.id ? null : c.id))}
+                  className={`flex h-full flex-col rounded-2xl border-2 p-4 text-left transition disabled:cursor-default ${
+                    CARD_RING[nivel]
+                  } ${CARD_TINT[nivel]} ${
+                    active
+                      ? "ring-2 ring-slate-900 ring-offset-2 dark:ring-slate-100 dark:ring-offset-[var(--vl-main)]"
+                      : abrible
+                        ? "hover:shadow-md"
+                        : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-lg font-bold leading-tight text-[var(--vl-heading)]">
+                        {nombreCompleto(c)}
                       </div>
-                      {!ops && (
+                      <div className="mt-0.5 text-xs font-medium text-[var(--vl-text)]">
+                        {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
+                      </div>
+                      {empresa && (
                         <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                          {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
-                          {" · "}
-                          {unidadDeChofer(c.id)?.patente ?? "Sin unidad"}
+                          {empresa}
                         </div>
                       )}
-                      <ResumenDocsLineas r={resumen} />
-                    </button>
+                    </div>
+                    {c.estado && (
+                      <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>
+                        {c.estado.toLowerCase()}
+                      </Badge>
+                    )}
+                  </div>
+                  <DocChecklist r={resumen} grupos={GRUPOS_CHOFER} />
+                  <div className="mt-auto pt-2 text-[11px] leading-snug text-[var(--vl-text-muted)]">
+                    {unidad ? `Unidad: ${unidad.patente}` : "Sin unidad"}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+
+      {tab === "choferes" && panelChofer && (() => {
+        const c = panelChofer;
+        const canVerDocs = ops || !!user?.esDuenoFlota || c.id === user?.choferId;
+        return (
+          <PanelLateral
+            titulo={nombreCompleto(c)}
+            badge={
+              c.estado ? (
+                <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>{c.estado.toLowerCase()}</Badge>
+              ) : null
+            }
+            subtitulo={`${c.dni ? `DNI ${c.dni}` : "Sin DNI"} · ${
+              unidadDeChofer(c.id)?.patente ?? "Sin unidad"
+            }`}
+            onClose={() => setSelectedChofer(null)}
+          >
                     {esPerfilEmpresa && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <div className="mb-4 rounded-lg border border-[var(--vl-card-border)] p-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+                          Unidad de este chofer
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
                         <select
                           className="min-w-0 flex-1 rounded-md border border-[var(--vl-card-border)] bg-transparent px-2 py-1.5 text-xs"
                           value={draftUnidad[c.id] ?? unidadDeChofer(c.id)?.id ?? ""}
@@ -917,23 +1007,70 @@ export function DocumentacionPage() {
                               ? "Cambiar de unidad"
                               : "Asignar unidad"}
                         </button>
+                        </div>
                       </div>
                     )}
-                    </div>
-                    {active && canVerPanel && (
-                      <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
-                        <DocumentUpload
-                          choferId={c.id}
-                          onChange={() => void loadResumen([], [c.id])}
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+            {canVerDocs && (
+              <DocumentUpload
+                choferId={c.id}
+                onChange={() => void loadResumen([], [c.id])}
+              />
             )}
+          </PanelLateral>
+        );
+      })()}
+    </div>
+  );
+}
+
+function PanelLateral({
+  titulo,
+  subtitulo,
+  badge,
+  onClose,
+  children,
+}: {
+  titulo: string;
+  subtitulo?: string;
+  badge?: React.ReactNode;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose}>
+      <div
+        className="flex h-full w-full max-w-xl flex-col bg-[var(--vl-card)] text-[var(--vl-text)] shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--vl-card-border)] p-5">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="truncate text-lg font-bold text-[var(--vl-heading)]">{titulo}</h2>
+              {badge}
+            </div>
+            {subtitulo && (
+              <p className="mt-0.5 text-xs text-[var(--vl-text-muted)]">{subtitulo}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--vl-text-muted)] hover:bg-slate-100 hover:text-[var(--vl-heading)] dark:hover:bg-slate-800"
+            aria-label="Cerrar"
+          >
+            <X size={18} />
+          </button>
         </div>
-      )}
+        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+      </div>
     </div>
   );
 }

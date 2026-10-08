@@ -190,12 +190,15 @@ function diasHasta(vencimiento: Date): number {
   return Math.round((Date.parse(venc) - Date.parse(hoy)) / DIA_MS);
 }
 
+type EstadoItemDoc = "ok" | "falta" | "vencido" | "por_vencer" | "opcional";
+
 type ResumenDocs = {
   faltantes: TipoDocumento[];
   vencidos: TipoDocumento[];
   porVencer: TipoDocumento[];
   sinValidar: number;
   nivel: "ok" | "warn" | "danger";
+  items: Array<{ tipo: TipoDocumento; estado: EstadoItemDoc; vencimiento: Date | null }>;
 };
 
 /**
@@ -275,21 +278,31 @@ router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
         porVencer: [],
         sinValidar: 0,
         nivel: "ok",
+        items: [],
       };
       for (const tipo of tipos) {
         if (ocultos.includes(tipo)) continue;
         const doc = ultimo.get(`${ownerId}:${tipo}`);
         const rechazado = doc?.estadoValidacion === EstadoValidacionDoc.RECHAZADO;
         if (!doc || rechazado) {
-          if (TIPOS_OBLIGATORIOS.has(tipo)) r.faltantes.push(tipo);
+          const obligatorio = TIPOS_OBLIGATORIOS.has(tipo);
+          if (obligatorio) r.faltantes.push(tipo);
+          r.items.push({ tipo, estado: obligatorio ? "falta" : "opcional", vencimiento: null });
           continue;
         }
         if (doc.estadoValidacion === EstadoValidacionDoc.PENDIENTE) r.sinValidar += 1;
+        let estado: EstadoItemDoc = "ok";
         if (doc.vencimiento) {
           const dias = diasHasta(doc.vencimiento);
-          if (dias < 0) r.vencidos.push(tipo);
-          else if (dias <= DIAS_POR_VENCER) r.porVencer.push(tipo);
+          if (dias < 0) {
+            r.vencidos.push(tipo);
+            estado = "vencido";
+          } else if (dias <= DIAS_POR_VENCER) {
+            r.porVencer.push(tipo);
+            estado = "por_vencer";
+          }
         }
+        r.items.push({ tipo, estado, vencimiento: doc.vencimiento });
       }
       r.nivel =
         r.faltantes.length || r.vencidos.length
