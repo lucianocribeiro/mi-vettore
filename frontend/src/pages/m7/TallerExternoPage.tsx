@@ -51,8 +51,7 @@ export function TallerExternoPage() {
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [confirmBorrar, setConfirmBorrar] = useState(false);
   const [borrando, setBorrando] = useState(false);
-  const [editKm, setEditKm] = useState<string | null>(null);
-  const [guardandoKm, setGuardandoKm] = useState(false);
+  const [editando, setEditando] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -86,32 +85,8 @@ export function TallerExternoPage() {
 
   useEffect(() => {
     setConfirmBorrar(false);
-    setEditKm(null);
+    setEditando(false);
   }, [ot?.id]);
-
-  async function guardarKm() {
-    if (!token || !ot || editKm === null) return;
-    const km = Number(editKm.replace(/\D/g, ""));
-    if (!editKm.trim() || !Number.isInteger(km) || km < 0) {
-      setError("Indicá un kilometraje válido");
-      return;
-    }
-    setGuardandoKm(true);
-    try {
-      const updated = await apiFetch<OtExterna>(
-        `/api/talleres/externos/${ot.id}`,
-        { method: "PATCH", body: JSON.stringify({ km }) },
-        token
-      );
-      setOts((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
-      setEditKm(null);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo guardar el km");
-    } finally {
-      setGuardandoKm(false);
-    }
-  }
 
   async function borrar() {
     if (!token || !ot) return;
@@ -222,53 +197,9 @@ export function TallerExternoPage() {
                 </div>
                 <div>
                   <dt className="text-[11px] text-[var(--vl-text-muted)]">Km</dt>
-                  {editKm !== null ? (
-                    <dd className="mt-0.5 flex flex-wrap items-center gap-2">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        autoFocus
-                        value={editKm}
-                        onChange={(e) => setEditKm(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") void guardarKm();
-                          if (e.key === "Escape") setEditKm(null);
-                        }}
-                        aria-label="Kilometraje"
-                        className="min-h-9 w-36 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1 text-sm"
-                      />
-                      <button
-                        type="button"
-                        disabled={guardandoKm}
-                        onClick={() => void guardarKm()}
-                        className="rounded-md bg-violet-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                      >
-                        {guardandoKm ? "Guardando…" : "Guardar"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={guardandoKm}
-                        onClick={() => setEditKm(null)}
-                        className="rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs"
-                      >
-                        Cancelar
-                      </button>
-                    </dd>
-                  ) : (
-                    <dd className="flex flex-wrap items-baseline gap-2 font-medium">
-                      {ot.kmAlMomento != null ? `${ot.kmAlMomento.toLocaleString("es-AR")} km` : "—"}
-                      {puedeCargar && (
-                        <button
-                          type="button"
-                          onClick={() => setEditKm(ot.kmAlMomento != null ? String(ot.kmAlMomento) : "")}
-                          className="text-xs font-normal text-violet-700 underline-offset-2 hover:underline dark:text-violet-300"
-                        >
-                          Editar
-                        </button>
-                      )}
-                    </dd>
-                  )}
+                  <dd className="font-medium">
+                    {ot.kmAlMomento != null ? `${ot.kmAlMomento.toLocaleString("es-AR")} km` : "—"}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-[11px] text-[var(--vl-text-muted)]">Nivel 1</dt>
@@ -309,19 +240,40 @@ export function TallerExternoPage() {
                     </button>
                   </>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmBorrar(true)}
-                    className="rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-700 dark:border-red-800 dark:text-red-300"
-                  >
-                    Borrar (carga errónea)
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setEditando(true)}
+                      className="rounded-md bg-violet-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-800"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmBorrar(true)}
+                      className="rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-700 dark:border-red-800 dark:text-red-300"
+                    >
+                      Borrar (carga errónea)
+                    </button>
+                  </>
                 )}
               </div>
               )}
             </div>
           )}
         </div>
+      )}
+
+      {editando && ot && puedeCargar && (
+        <NuevaSolicitudExternaForm
+          key={ot.id}
+          editar={ot}
+          onClose={() => setEditando(false)}
+          onCreated={(actualizada) => {
+            setOts((prev) => prev.map((o) => (o.id === actualizada.id ? actualizada : o)));
+            setEditando(false);
+          }}
+        />
       )}
 
       {showForm && puedeSolicitar && (
@@ -341,33 +293,54 @@ export function TallerExternoPage() {
 function NuevaSolicitudExternaForm({
   onClose,
   onCreated,
+  editar,
 }: {
   onClose: () => void;
   onCreated: (ot: OtExterna) => void;
+  /** Si viene, el formulario edita esa reparación (empresa y patente quedan fijas). */
+  editar?: OtExterna;
 }) {
   const { token } = useAuth();
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);
   const [cats, setCats] = useState<CatDiag[]>([]);
   const [empresaId, setEmpresaId] = useState("");
   const [camionetaId, setCamionetaId] = useState("");
-  const [km, setKm] = useState("");
-  const [fecha, setFecha] = useState(todayInputDate());
+  const [km, setKm] = useState(editar?.kmAlMomento != null ? String(editar.kmAlMomento) : "");
+  const [fecha, setFecha] = useState(
+    editar ? editar.fechaReparacion.slice(0, 10) : todayInputDate()
+  );
   const [n1, setN1] = useState("");
   const [n2, setN2] = useState("");
   const [n3, setN3] = useState("");
-  const [comentario, setComentario] = useState("");
+  const [comentario, setComentario] = useState(editar?.comentario ?? "");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
-    void apiFetch<Camioneta[]>("/api/camionetas", {}, token)
-      .then(setCamionetas)
-      .catch(() => setCamionetas([]));
+    if (!editar) {
+      void apiFetch<Camioneta[]>("/api/camionetas", {}, token)
+        .then(setCamionetas)
+        .catch(() => setCamionetas([]));
+    }
     void apiFetch<CatDiag[]>("/api/diagnostico/categorias", {}, token)
       .then(setCats)
       .catch(() => setCats([]));
-  }, [token]);
+  }, [token, editar]);
+
+  useEffect(() => {
+    if (!editar?.categoriaId || cats.length === 0) return;
+    const camino: CatDiag[] = [];
+    let actual = cats.find((c) => c.id === editar.categoriaId);
+    while (actual) {
+      camino.unshift(actual);
+      const padreId = actual.padreId;
+      actual = padreId ? cats.find((c) => c.id === padreId) : undefined;
+    }
+    setN1(camino[0]?.id ?? "");
+    setN2(camino[1]?.id ?? "");
+    setN3(camino[2]?.id ?? "");
+  }, [editar?.categoriaId, cats]);
 
   const empresaDe = (c: Camioneta) => {
     const a = currentAsignacion(c);
@@ -416,29 +389,32 @@ function NuevaSolicitudExternaForm({
   const kmNum = Number(km);
   const kmOk = km.trim() !== "" && Number.isInteger(kmNum) && kmNum >= 0;
   const puedeEnviar =
-    !!empresaId && !!camionetaId && kmOk && !!fecha && !!hojaId && comentario.trim().length >= 3;
+    (!!editar || (!!empresaId && !!camionetaId)) &&
+    kmOk &&
+    !!fecha &&
+    !!hojaId &&
+    comentario.trim().length >= 3;
 
   async function submit() {
     if (!token || !puedeEnviar) return;
     setSaving(true);
     setErr(null);
     try {
-      const created = await apiFetch<OtExterna>(
-        "/api/talleres/externos",
+      const datos = {
+        km: kmNum,
+        fechaReparacion: fecha,
+        categoriaDiagnosticoId: hojaId,
+        comentario: comentario.trim(),
+      };
+      const saved = await apiFetch<OtExterna>(
+        editar ? `/api/talleres/externos/${editar.id}` : "/api/talleres/externos",
         {
-          method: "POST",
-          body: JSON.stringify({
-            empresaId,
-            camionetaId,
-            km: kmNum,
-            fechaReparacion: fecha,
-            categoriaDiagnosticoId: hojaId,
-            comentario: comentario.trim(),
-          }),
+          method: editar ? "PATCH" : "POST",
+          body: JSON.stringify(editar ? datos : { empresaId, camionetaId, ...datos }),
         },
         token
       );
-      onCreated(created);
+      onCreated(saved);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Error");
     } finally {
@@ -456,12 +432,29 @@ function NuevaSolicitudExternaForm({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="font-bold text-violet-800 dark:text-violet-200">Nueva solicitud · taller externo</h3>
+          <h3 className="font-bold text-violet-800 dark:text-violet-200">
+            {editar ? `Editar ${editar.numeroOT} · taller externo` : "Nueva solicitud · taller externo"}
+          </h3>
           <button type="button" onClick={onClose} aria-label="Cerrar">
             <X size={18} />
           </button>
         </div>
 
+        {editar ? (
+          <div className="mb-3 grid grid-cols-2 gap-3 text-xs text-[var(--vl-text-muted)]">
+            <div>
+              Empresa
+              <div className="mt-1 text-sm font-medium text-[var(--vl-text)]">
+                {editar.empresa?.nombre ?? "—"}
+              </div>
+            </div>
+            <div>
+              Patente
+              <div className="mt-1 text-sm font-medium text-[var(--vl-text)]">{editar.patente}</div>
+            </div>
+          </div>
+        ) : (
+        <>
         <label className="text-xs text-[var(--vl-text-muted)]">
           Empresa
           <select
@@ -497,6 +490,8 @@ function NuevaSolicitudExternaForm({
             ))}
           </select>
         </label>
+        </>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <label className="text-xs text-[var(--vl-text-muted)]">
@@ -592,7 +587,7 @@ function NuevaSolicitudExternaForm({
           onClick={() => void submit()}
           className="min-h-11 w-full rounded-md bg-violet-700 text-sm font-medium text-white hover:bg-violet-800 disabled:opacity-40"
         >
-          {saving ? "Guardando…" : "Cargar reparación externa"}
+          {saving ? "Guardando…" : editar ? "Guardar cambios" : "Cargar reparación externa"}
         </button>
       </div>
     </div>

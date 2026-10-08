@@ -1653,29 +1653,79 @@ router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
-/** Corrige el kilometraje de una reparación externa (y de su registro de mantenimiento). */
+/** Edita una reparación externa: fecha, km, concepto (3 niveles) y comentario. */
 router.patch("/externos/:id", authenticate, async (req: AuthedRequest, res) => {
   try {
     if (!isInternalOpsRole(req.user!.rol)) {
       res.status(403).json({ error: "Sin permiso" });
       return;
     }
-    const km = Number(req.body?.km);
+    const body = req.body ?? {};
+    const km = Number(body.km);
+    const fecha = new Date(String(body.fechaReparacion ?? ""));
+    const categoriaId = String(body.categoriaDiagnosticoId ?? "").trim();
+    const comentario = String(body.comentario ?? "").trim();
     if (!Number.isInteger(km) || km < 0) {
       return void res.status(400).json({ error: "Indicá el kilometraje" });
     }
+    if (Number.isNaN(fecha.getTime())) {
+      return void res.status(400).json({ error: "Indicá la fecha de reparación" });
+    }
+    if (!categoriaId) {
+      return void res.status(400).json({ error: "Elegí el concepto (3 niveles)" });
+    }
+    if (comentario.length < 3) {
+      return void res.status(400).json({ error: "El comentario es obligatorio" });
+    }
     const ot = await prisma.ordenTrabajo.findUnique({
       where: { id: req.params.id },
-      include: { solicitud: { select: { camionetaId: true } } },
+      include: { solicitud: { select: { camionetaId: true } }, items: { select: { id: true } } },
     });
     if (!ot || !ot.externo) {
       return void res.status(404).json({ error: "Reparación externa no encontrada" });
     }
+    const [categoria, hijos] = await Promise.all([
+      prisma.categoriaDiagnostico.findUnique({ where: { id: categoriaId } }),
+      prisma.categoriaDiagnostico.count({ where: { padreId: categoriaId, activo: true } }),
+    ]);
+    if (!categoria || !categoria.activo) {
+      return void res.status(400).json({ error: "Concepto inválido" });
+    }
+    if (hijos > 0) {
+      return void res.status(400).json({ error: "Completá los 3 niveles del concepto" });
+    }
+    const cats = await prisma.categoriaDiagnostico.findMany({
+      select: { id: true, nombre: true, padreId: true, nivel: true },
+    });
+    const diag = diagnosticoPathFromId(cats, categoriaId);
     const camionetaId = ot.solicitud.camionetaId;
 
     const updated = await prisma.$transaction(async (tx) => {
-      await tx.ordenTrabajo.update({ where: { id: ot.id }, data: { kmAlMomento: km } });
-      await tx.registroMantenimiento.updateMany({ where: { otId: ot.id }, data: { km } });
+      await tx.ordenTrabajo.update({
+        where: { id: ot.id },
+        data: { kmAlMomento: km, cerradaAt: fecha },
+      });
+      await tx.solicitudTaller.update({
+        where: { id: ot.solicitudTallerId },
+        data: { falla: diag.path ?? categoria.nombre, detalle: comentario },
+      });
+      const itemId = ot.items[0]?.id;
+      if (itemId) {
+        await tx.otItem.update({
+          where: { id: itemId },
+          data: { descripcion: comentario, fecha, categoriaDiagnosticoId: categoriaId },
+        });
+      }
+      await tx.registroMantenimiento.deleteMany({ where: { otId: ot.id } });
+      await syncMantenimientoDesdeOt(tx, {
+        camionetaId,
+        otId: ot.id,
+        numeroOT: ot.numeroOT,
+        tallerNombre: "Taller externo",
+        kmActual: km,
+        itemCategoriaIds: [categoriaId],
+        fecha,
+      });
       const camioneta = await tx.camioneta.findUnique({
         where: { id: camionetaId },
         select: { km: true },
@@ -1699,9 +1749,6 @@ router.patch("/externos/:id", authenticate, async (req: AuthedRequest, res) => {
       });
     });
 
-    const cats = await prisma.categoriaDiagnostico.findMany({
-      select: { id: true, nombre: true, padreId: true, nivel: true },
-    });
     res.json(serializeOtExterna(updated, cats));
   } catch (err) {
     console.error(err);
