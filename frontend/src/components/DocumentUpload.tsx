@@ -18,6 +18,8 @@ import {
 type Props = {
   choferId?: string;
   camionetaId?: string;
+  /** Se llama después de subir, validar o eliminar un documento. */
+  onChange?: () => void;
 };
 
 const FOTO_HINT: Partial<Record<TipoDocumento, string>> = {
@@ -53,7 +55,7 @@ export async function compressImageIfNeeded(file: File): Promise<File | Blob> {
   return new File([blob], name, { type: "image/jpeg" });
 }
 
-export function DocumentUpload({ choferId, camionetaId }: Props) {
+export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
   const { token, user } = useAuth();
   const [docs, setDocs] = useState<DocumentoEntidad[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,6 +166,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
         token
       );
       setDocs((prev) => [created, ...prev]);
+      onChange?.();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al subir");
     } finally {
@@ -214,6 +217,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
         token
       );
       setDocs((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+      onChange?.();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo validar");
     }
@@ -232,6 +236,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
         token
       );
       setDocs((prev) => prev.filter((d) => d.id !== doc.id));
+      onChange?.();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo eliminar");
     }

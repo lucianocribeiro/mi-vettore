@@ -13,10 +13,94 @@ import {
   currentAsignacion,
   currentChoferAsignacion,
   isInternalOps,
+  TIPO_DOCUMENTO_LABEL,
   type Camioneta,
   type Chofer,
   type EstadoCamioneta,
+  type TipoDocumento,
 } from "../../types";
+
+type NivelDocs = "ok" | "warn" | "danger";
+
+type ResumenDocs = {
+  faltantes: TipoDocumento[];
+  vencidos: TipoDocumento[];
+  porVencer: TipoDocumento[];
+  sinValidar: number;
+  nivel: NivelDocs;
+};
+
+type FiltroDocs = "all" | "pendiente" | "vencida" | "por_vencer" | "completa";
+
+const FILTROS_DOCS: Array<{ value: FiltroDocs; label: string; dot?: string }> = [
+  { value: "all", label: "Todas" },
+  { value: "pendiente", label: "Doc. pendiente", dot: "bg-red-500" },
+  { value: "vencida", label: "Vencida", dot: "bg-red-500" },
+  { value: "por_vencer", label: "Por vencer", dot: "bg-amber-400" },
+  { value: "completa", label: "Completa", dot: "bg-emerald-500" },
+];
+
+function matchesFiltroDocs(r: ResumenDocs | undefined, filtro: FiltroDocs): boolean {
+  if (filtro === "all") return true;
+  if (!r) return false;
+  if (filtro === "pendiente") return r.faltantes.length > 0;
+  if (filtro === "vencida") return r.vencidos.length > 0;
+  if (filtro === "por_vencer") return r.porVencer.length > 0;
+  return r.nivel === "ok";
+}
+
+const CARD_RING: Record<NivelDocs, string> = {
+  ok: "border-[var(--vl-card-border)]",
+  warn: "border-amber-400 dark:border-amber-500",
+  danger: "border-red-500 dark:border-red-400",
+};
+
+const CARD_TINT: Record<NivelDocs, string> = {
+  ok: "bg-[var(--vl-card)]",
+  warn: "bg-amber-50/80 dark:bg-amber-950/30",
+  danger: "bg-red-50/80 dark:bg-red-950/30",
+};
+
+const NIVEL_DOT: Record<NivelDocs, string> = {
+  ok: "bg-emerald-500",
+  warn: "bg-amber-400",
+  danger: "bg-red-500",
+};
+
+function etiquetas(tipos: TipoDocumento[]): string {
+  return tipos.map((t) => TIPO_DOCUMENTO_LABEL[t] ?? t).join(", ");
+}
+
+function ResumenDocsLineas({ r }: { r: ResumenDocs | undefined }) {
+  if (!r) return null;
+  if (r.nivel === "ok") {
+    return (
+      <div className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+        Documentación completa
+        {r.sinValidar > 0 ? ` · ${r.sinValidar} sin validar` : ""}
+      </div>
+    );
+  }
+  return (
+    <div className="mt-1 space-y-0.5 text-[11px]">
+      {r.faltantes.length > 0 && (
+        <div className="font-semibold text-red-600 dark:text-red-400">
+          Falta: {etiquetas(r.faltantes)}
+        </div>
+      )}
+      {r.vencidos.length > 0 && (
+        <div className="font-semibold text-red-600 dark:text-red-400">
+          Vencido: {etiquetas(r.vencidos)}
+        </div>
+      )}
+      {r.porVencer.length > 0 && (
+        <div className="font-medium text-amber-700 dark:text-amber-400">
+          Por vencer: {etiquetas(r.porVencer)}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function compact(s: string): string {
   return s.toLowerCase().replace(/[\s.\-_/]/g, "");
@@ -48,6 +132,7 @@ type AdvFilters = {
   sinChofer: boolean;
   sinUnidad: boolean;
   vencimiento: "all" | "por_vencer" | "vencido";
+  docs: FiltroDocs;
 };
 
 const EMPTY_ADV: AdvFilters = {
@@ -59,6 +144,7 @@ const EMPTY_ADV: AdvFilters = {
   sinChofer: false,
   sinUnidad: false,
   vencimiento: "all",
+  docs: "all",
 };
 
 function daysUntil(iso: string | null | undefined): number | null {
@@ -77,9 +163,12 @@ function daysUntil(iso: string | null | undefined): number | null {
 /** Match if any date is expired / within 30 days (inclusive of today). */
 function matchesVencimiento(
   dates: Array<string | null | undefined>,
-  filtro: AdvFilters["vencimiento"]
+  filtro: AdvFilters["vencimiento"],
+  resumen?: ResumenDocs
 ): boolean {
   if (filtro === "all") return true;
+  if (filtro === "vencido" && resumen?.vencidos.length) return true;
+  if (filtro === "por_vencer" && resumen?.porVencer.length) return true;
   const days = dates
     .map((d) => daysUntil(d))
     .filter((d): d is number => d !== null);
@@ -103,6 +192,8 @@ export function DocumentacionPage() {
   const [draftUnidad, setDraftUnidad] = useState<Record<string, string>>({});
   const [advanced, setAdvanced] = useState(false);
   const [adv, setAdv] = useState<AdvFilters>(EMPTY_ADV);
+  const [resumenCam, setResumenCam] = useState<Record<string, ResumenDocs>>({});
+  const [resumenCh, setResumenCh] = useState<Record<string, ResumenDocs>>({});
   const ops = isInternalOps(user?.rol);
   const esPerfilEmpresa =
     user?.rol === "EMPRESA" ||
@@ -115,6 +206,27 @@ export function DocumentacionPage() {
     setSearchParams(params, { replace: true });
   };
 
+  const loadResumen = useCallback(
+    async (camionetaIds: string[], choferIds: string[]) => {
+      if (!token || (camionetaIds.length === 0 && choferIds.length === 0)) return;
+      try {
+        const data = await apiFetch<{
+          unidades: Record<string, ResumenDocs>;
+          choferes: Record<string, ResumenDocs>;
+        }>(
+          "/api/documentos/resumen",
+          { method: "POST", body: JSON.stringify({ camionetaIds, choferIds }) },
+          token
+        );
+        setResumenCam((prev) => ({ ...prev, ...data.unidades }));
+        setResumenCh((prev) => ({ ...prev, ...data.choferes }));
+      } catch {
+        // Sin resumen las tarjetas se muestran sin semáforo.
+      }
+    },
+    [token]
+  );
+
   const load = useCallback(async (keepSelection = false) => {
     if (!token) return;
     if (!keepSelection) {
@@ -125,17 +237,24 @@ export function DocumentacionPage() {
       const cams = await apiFetch<Camioneta[]>("/api/camionetas", {}, token);
       setCamionetas(cams);
       if (!keepSelection && cams.length === 1) setSelectedCam(cams[0].id);
+      let chIds: string[] = [];
       if (ops || user?.esDuenoFlota || user?.rol === "EMPRESA") {
         const ch = await apiFetch<Chofer[]>("/api/choferes", {}, token);
         setChoferes(ch);
+        chIds = ch.map((c) => c.id);
       } else if (user?.choferId) {
         setSelectedChofer(user.choferId);
         setChoferes([{ id: user.choferId, nombre: user.nombre || "Mi ficha" } as Chofer]);
+        chIds = [user.choferId];
       }
+      void loadResumen(
+        cams.map((c) => c.id),
+        chIds
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar");
     }
-  }, [token, ops, user?.choferId, user?.nombre, user?.esDuenoFlota, user?.rol, contextoAcceso]);
+  }, [token, ops, user?.choferId, user?.nombre, user?.esDuenoFlota, user?.rol, contextoAcceso, loadResumen]);
 
   useEffect(() => {
     void load();
@@ -209,9 +328,16 @@ export function DocumentacionPage() {
       ) {
         return false;
       }
-      if (!matchesVencimiento([c.seguroVencimiento, c.vtbVencimiento], adv.vencimiento)) {
+      if (
+        !matchesVencimiento(
+          [c.seguroVencimiento, c.vtbVencimiento],
+          adv.vencimiento,
+          resumenCam[c.id]
+        )
+      ) {
         return false;
       }
+      if (!matchesFiltroDocs(resumenCam[c.id], adv.docs)) return false;
       return matchesText(
         [
           c.patente,
@@ -224,7 +350,7 @@ export function DocumentacionPage() {
         query
       );
     });
-  }, [camionetas, query, adv]);
+  }, [camionetas, query, adv, resumenCam]);
 
   const filteredChoferes = useMemo(() => {
     const empresaQ = adv.empresa.trim().toLowerCase();
@@ -244,11 +370,13 @@ export function DocumentacionPage() {
             asg?.camioneta?.seguroVencimiento,
             asg?.camioneta?.vtbVencimiento,
           ],
-          adv.vencimiento
+          adv.vencimiento,
+          resumenCh[ch.id]
         )
       ) {
         return false;
       }
+      if (!matchesFiltroDocs(resumenCh[ch.id], adv.docs)) return false;
       return matchesText(
         [
           ch.nombre,
@@ -263,7 +391,17 @@ export function DocumentacionPage() {
         query
       );
     });
-  }, [choferes, query, adv]);
+  }, [choferes, query, adv, resumenCh]);
+
+  const conteoDocs = useMemo(() => {
+    const ids = tab === "unidades" ? camionetas.map((c) => c.id) : choferes.map((c) => c.id);
+    const resumen = tab === "unidades" ? resumenCam : resumenCh;
+    const out = {} as Record<FiltroDocs, number>;
+    for (const f of FILTROS_DOCS) {
+      out[f.value] = ids.filter((id) => matchesFiltroDocs(resumen[id], f.value)).length;
+    }
+    return out;
+  }, [tab, camionetas, choferes, resumenCam, resumenCh]);
 
   const advActive =
     adv.estados.length > 0 ||
@@ -271,7 +409,8 @@ export function DocumentacionPage() {
     !!adv.empresa.trim() ||
     adv.sinChofer ||
     adv.sinUnidad ||
-    adv.vencimiento !== "all";
+    adv.vencimiento !== "all" ||
+    adv.docs !== "all";
   const searchActive = !!query.trim() || advActive;
 
   const shown = tab === "unidades" ? filteredCams.length : filteredChoferes.length;
@@ -345,6 +484,39 @@ export function DocumentacionPage() {
               <X size={14} />
             </button>
           )}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Estado de documentación">
+          {FILTROS_DOCS.map((f) => {
+            const activo = adv.docs === f.value;
+            const label =
+              f.value === "all" && tab === "choferes"
+                ? "Todos"
+                : f.value === "completa" && tab === "choferes"
+                  ? "Completos"
+                  : f.label;
+            return (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() =>
+                  setAdv((prev) => ({
+                    ...prev,
+                    docs: prev.docs === f.value ? "all" : f.value,
+                  }))
+                }
+                className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium ${
+                  activo
+                    ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                    : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
+                }`}
+              >
+                {f.dot && <span className={`h-2 w-2 rounded-full ${f.dot}`} />}
+                {label}
+                <span className="opacity-70">({conteoDocs[f.value] ?? 0})</span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -513,16 +685,18 @@ export function DocumentacionPage() {
                     : actual?.choferId && actual.choferId !== elegido
                       ? "Reemplazar"
                       : "Asignar";
+                const resumen = resumenCam[c.id];
+                const nivel: NivelDocs = resumen?.nivel ?? "ok";
                 return (
                   <div
                     key={c.id}
                     className={`grid gap-2 ${active ? "lg:grid-cols-2" : ""}`}
                   >
                     <div
-                      className={`self-start rounded-xl border p-3 text-sm ${
-                        active
-                          ? "border-slate-900 dark:border-slate-100"
-                          : "border-[var(--vl-card-border)]"
+                      className={`self-start rounded-xl border-2 p-3 text-sm ${
+                        CARD_RING[nivel]
+                      } ${CARD_TINT[nivel]} ${
+                        active ? "ring-2 ring-slate-900 dark:ring-slate-100" : ""
                       }`}
                     >
                       <button
@@ -532,7 +706,10 @@ export function DocumentacionPage() {
                         }
                         className="w-full text-left"
                       >
-                        <div className="font-semibold text-[var(--vl-heading)]">
+                        <div className="flex items-center gap-2 font-semibold text-[var(--vl-heading)]">
+                          {resumen && (
+                            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${NIVEL_DOT[nivel]}`} />
+                          )}
                           {c.patente}
                         </div>
                         {!ops && (
@@ -542,6 +719,7 @@ export function DocumentacionPage() {
                               : "Sin chofer"}
                           </div>
                         )}
+                        <ResumenDocsLineas r={resumen} />
                       </button>
                       {esPerfilEmpresa && (
                         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -634,7 +812,10 @@ export function DocumentacionPage() {
                             </div>
                           </div>
                         )}
-                        <DocumentUpload camionetaId={c.id} />
+                        <DocumentUpload
+                          camionetaId={c.id}
+                          onChange={() => void loadResumen([c.id], [])}
+                        />
                       </div>
                     )}
                   </div>
@@ -656,16 +837,18 @@ export function DocumentacionPage() {
                 // Ops, el propio chofer, o empresa de transporte sobre su flota
                 const canVerPanel =
                   ops || !!user?.esDuenoFlota || c.id === user?.choferId;
+                const resumen = resumenCh[c.id];
+                const nivel: NivelDocs = resumen?.nivel ?? "ok";
                 return (
                   <div
                     key={c.id}
                     className={`grid gap-2 ${active && canVerPanel ? "lg:grid-cols-2" : ""}`}
                   >
                     <div
-                      className={`self-start rounded-xl border p-3 text-sm ${
-                        active
-                          ? "border-slate-900 dark:border-slate-100"
-                          : "border-[var(--vl-card-border)]"
+                      className={`self-start rounded-xl border-2 p-3 text-sm ${
+                        CARD_RING[nivel]
+                      } ${CARD_TINT[nivel]} ${
+                        active ? "ring-2 ring-slate-900 dark:ring-slate-100" : ""
                       }`}
                     >
                     <button
@@ -675,7 +858,10 @@ export function DocumentacionPage() {
                       }
                       className="w-full text-left"
                     >
-                      <div className="font-semibold text-[var(--vl-heading)]">
+                      <div className="flex items-center gap-2 font-semibold text-[var(--vl-heading)]">
+                        {resumen && (
+                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${NIVEL_DOT[nivel]}`} />
+                        )}
                         {ops
                           ? [c.nombre, c.apellido && c.apellido !== "-" ? c.apellido : ""]
                               .filter(Boolean)
@@ -689,6 +875,7 @@ export function DocumentacionPage() {
                           {unidadDeChofer(c.id)?.patente ?? "Sin unidad"}
                         </div>
                       )}
+                      <ResumenDocsLineas r={resumen} />
                     </button>
                     {esPerfilEmpresa && (
                       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -735,7 +922,10 @@ export function DocumentacionPage() {
                     </div>
                     {active && canVerPanel && (
                       <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
-                        <DocumentUpload choferId={c.id} />
+                        <DocumentUpload
+                          choferId={c.id}
+                          onChange={() => void loadResumen([], [c.id])}
+                        />
                       </div>
                     )}
                   </div>

@@ -180,6 +180,149 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
+const DIAS_POR_VENCER = 30;
+const DIA_MS = 86_400_000;
+
+/** Días entre hoy (Argentina, UTC-3) y la fecha de vencimiento (solo fecha). */
+function diasHasta(vencimiento: Date): number {
+  const hoy = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
+  const venc = vencimiento.toISOString().slice(0, 10);
+  return Math.round((Date.parse(venc) - Date.parse(hoy)) / DIA_MS);
+}
+
+type ResumenDocs = {
+  faltantes: TipoDocumento[];
+  vencidos: TipoDocumento[];
+  porVencer: TipoDocumento[];
+  sinValidar: number;
+  nivel: "ok" | "warn" | "danger";
+};
+
+/**
+ * Estado de documentación por unidad o chofer: obligatorios faltantes (o rechazados),
+ * vencidos y por vencer (30 días). Toma el último documento cargado de cada tipo.
+ */
+router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const parseIds = (raw: unknown) =>
+      Array.isArray(raw)
+        ? [...new Set(raw.map((x) => String(x)).filter(Boolean))].slice(0, 2000)
+        : [];
+    let camionetaIds = parseIds(req.body?.camionetaIds);
+    let choferIds = parseIds(req.body?.choferIds);
+
+    if (req.user!.rol === Role.CHOFER) {
+      const ctx = contextoAccesoFromReq(req);
+      const camOk = await Promise.all(
+        camionetaIds.map((id) => choferPuedeEditarCamioneta(req.user!.id, id, ctx))
+      );
+      camionetaIds = camionetaIds.filter((_, i) => camOk[i]);
+      const chOk = await Promise.all(
+        choferIds.map((id) => choferPuedeVerChofer(req.user!.id, id, ctx))
+      );
+      choferIds = choferIds.filter((_, i) => chOk[i]);
+    }
+
+    const [cams, chs, docs] = await Promise.all([
+      camionetaIds.length
+        ? prisma.camioneta.findMany({
+            where: { id: { in: camionetaIds } },
+            select: { id: true, empresa: { select: { pideSenasa: true } } },
+          })
+        : Promise.resolve([]),
+      choferIds.length
+        ? prisma.chofer.findMany({
+            where: { id: { in: choferIds } },
+            select: { id: true, pideManipulacion: true },
+          })
+        : Promise.resolve([]),
+      camionetaIds.length || choferIds.length
+        ? prisma.documentoEntidad.findMany({
+            where: {
+              OR: [
+                ...(camionetaIds.length ? [{ camionetaId: { in: camionetaIds } }] : []),
+                ...(choferIds.length ? [{ choferId: { in: choferIds } }] : []),
+              ],
+            },
+            select: {
+              tipo: true,
+              choferId: true,
+              camionetaId: true,
+              vencimiento: true,
+              estadoValidacion: true,
+            },
+            orderBy: { createdAt: "desc" },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const ultimo = new Map<string, (typeof docs)[number]>();
+    for (const d of docs) {
+      const owner = d.camionetaId ?? d.choferId;
+      if (!owner) continue;
+      const key = `${owner}:${d.tipo}`;
+      if (!ultimo.has(key)) ultimo.set(key, d);
+    }
+
+    const resumir = (
+      ownerId: string,
+      tipos: TipoDocumento[],
+      ocultos: TipoDocumento[]
+    ): ResumenDocs => {
+      const r: ResumenDocs = {
+        faltantes: [],
+        vencidos: [],
+        porVencer: [],
+        sinValidar: 0,
+        nivel: "ok",
+      };
+      for (const tipo of tipos) {
+        if (ocultos.includes(tipo)) continue;
+        const doc = ultimo.get(`${ownerId}:${tipo}`);
+        const rechazado = doc?.estadoValidacion === EstadoValidacionDoc.RECHAZADO;
+        if (!doc || rechazado) {
+          if (TIPOS_OBLIGATORIOS.has(tipo)) r.faltantes.push(tipo);
+          continue;
+        }
+        if (doc.estadoValidacion === EstadoValidacionDoc.PENDIENTE) r.sinValidar += 1;
+        if (doc.vencimiento) {
+          const dias = diasHasta(doc.vencimiento);
+          if (dias < 0) r.vencidos.push(tipo);
+          else if (dias <= DIAS_POR_VENCER) r.porVencer.push(tipo);
+        }
+      }
+      r.nivel =
+        r.faltantes.length || r.vencidos.length
+          ? "danger"
+          : r.porVencer.length
+            ? "warn"
+            : "ok";
+      return r;
+    };
+
+    const unidades: Record<string, ResumenDocs> = {};
+    for (const c of cams) {
+      unidades[c.id] = resumir(
+        c.id,
+        [...TIPOS_UNIDAD],
+        c.empresa.pideSenasa ? [] : [TipoDocumento.SENASA]
+      );
+    }
+    const choferes: Record<string, ResumenDocs> = {};
+    for (const ch of chs) {
+      choferes[ch.id] = resumir(
+        ch.id,
+        [...TIPOS_CHOFER],
+        ch.pideManipulacion ? [] : [TipoDocumento.HABILITACION_MANIPULACION]
+      );
+    }
+    res.json({ unidades, choferes });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al resumir documentación" });
+  }
+});
+
 router.get("/:id/url", authenticate, async (req: AuthedRequest, res) => {
   try {
     const doc = await prisma.documentoEntidad.findUnique({
