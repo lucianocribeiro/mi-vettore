@@ -158,7 +158,6 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
             apellido: "",
             telefono: c.telefono || null,
             email: c.email || null,
-            ...(c.licencia ? { licenciaVencimiento: c.licencia } : {}),
             ...(c.dueno != null ? { esDuenoFlota: c.dueno } : {}),
             ...(c.estado ? { estado: c.estado } : {}),
           };

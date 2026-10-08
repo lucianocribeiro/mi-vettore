@@ -35,7 +35,6 @@ export const FLOTA_COLUMNAS: Record<HojaFlota, Columna[]> = {
     { header: "DNI", key: "dni", width: 14 },
     { header: "Email", key: "email", width: 28 },
     { header: "Teléfono", key: "telefono", width: 16 },
-    { header: "Licencia vence", key: "licencia", width: 14 },
     { header: "Empresa transp.", key: "dueno", width: 14 },
     { header: "Estado", key: "estado", width: 12 },
     { header: "Empresa", key: "empresa", width: 26 },
@@ -71,7 +70,6 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
     dni: "30111222",
     email: "ana@empresa.com",
     telefono: "2644000000",
-    licencia: "2027-06-30",
     dueno: "No",
     estado: "ACTIVO",
     empresa: EMPRESA_EJEMPLO,
@@ -96,7 +94,7 @@ const INSTRUCCIONES: Record<HojaFlota, string[]> = {
   ],
   choferes: [
     "Obligatorias: Nombre completo, DNI y Empresa (nombre o CUIT de una empresa ya cargada).",
-    "Licencia vence: AAAA-MM-DD. Empresa transp.: Sí / No. Estado: ACTIVO / INHABILITADO / INACTIVO.",
+    "Empresa transp.: Sí / No. Estado: ACTIVO / INHABILITADO / INACTIVO.",
     "El chofer accede con el DNI.",
   ],
   unidades: [
@@ -166,7 +164,6 @@ export type FilaChofer = {
   dni: string;
   email: string;
   telefono: string;
-  licencia: Date | null;
   dueno: boolean | null;
   estado: "ACTIVO" | "INHABILITADO" | "INACTIVO" | null;
   empresa: string;
@@ -197,13 +194,6 @@ export function norm(s: string): string {
 
 function digits(v: string): string {
   return v.replace(/\D/g, "");
-}
-
-function fechaCelda(v: ExcelJS.CellValue): Date | null | "invalida" {
-  if (v == null || v === "") return null;
-  if (v instanceof Date) return v;
-  const d = new Date(String(v).trim());
-  return Number.isNaN(d.getTime()) ? "invalida" : d;
 }
 
 const ESTADOS_UNIDAD = ["OPERATIVA", "EN_TALLER", "DE_VACACIONES", "FUERA_SERVICIO", "INACTIVA"];
@@ -294,12 +284,6 @@ export async function parseFlotaWorkbook(
         error(n, "Nombre completo, DNI y Empresa son obligatorios");
         return;
       }
-      const cLic = col("licencia");
-      const licencia = cLic ? fechaCelda(row.getCell(cLic).value) : null;
-      if (licencia === "invalida") {
-        error(n, "Licencia vence: fecha inválida (AAAA-MM-DD)");
-        return;
-      }
       const duenoRaw = norm(txt(row, "dueno"));
       const estadoRaw = txt(row, "estado").toUpperCase();
       if (estadoRaw && !["ACTIVO", "INHABILITADO", "INACTIVO"].includes(estadoRaw)) {
@@ -312,7 +296,6 @@ export async function parseFlotaWorkbook(
         dni,
         email: txt(row, "email").toLowerCase(),
         telefono: txt(row, "telefono"),
-        licencia,
         dueno: duenoRaw === "si" ? true : duenoRaw === "no" ? false : null,
         estado: (estadoRaw || null) as FilaChofer["estado"],
         empresa,

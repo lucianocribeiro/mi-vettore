@@ -326,7 +326,6 @@ export function FichaDrawer({
                 <SectionTitle>Datos del chofer</SectionTitle>
                 <Row label="DNI" value={ch.dni} />
                 <Row label="CUIL" value={ch.cuil || "—"} />
-                <Row label="Licencia" value={ch.licencia || "—"} />
                 <Row label="Teléfono" value={ch.telefono || "—"} />
                 <Row label="Email" value={ch.email || "—"} />
                 <Row
@@ -340,11 +339,7 @@ export function FichaDrawer({
               </section>
 
               <section className="space-y-3 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">
-                <SectionTitle>Vencimientos documentación</SectionTitle>
-                <Row
-                  label="Licencia vence"
-                  value={formatDate(ch.licenciaVencimiento)}
-                />
+                <SectionTitle>Documentación</SectionTitle>
                 <div className="pt-1">
                   <DocumentUpload choferId={ch.id} />
                 </div>

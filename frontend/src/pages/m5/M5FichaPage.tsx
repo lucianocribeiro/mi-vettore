@@ -165,7 +165,6 @@ export function M5FichaPage() {
   const [fNombre, setFNombre] = useState("");
   const [fDni, setFDni] = useState("");
   const [fCuil, setFCuil] = useState("");
-  const [fLicenciaVenc, setFLicenciaVenc] = useState("");
   const [fTelefono, setFTelefono] = useState("");
   const [fEmailChofer, setFEmailChofer] = useState("");
   const [fEsDueno, setFEsDueno] = useState(false);
@@ -391,7 +390,6 @@ export function M5FichaPage() {
     setFNombre("");
     setFDni("");
     setFCuil("");
-    setFLicenciaVenc("");
     setFTelefono("");
     setFEmailChofer("");
     setFEsDueno(false);
@@ -438,11 +436,6 @@ export function M5FichaPage() {
     setFChoferEmpresaId(item.empresaId ?? "");
     setFDni(item.dni);
     setFCuil(item.cuil ?? "");
-    setFLicenciaVenc(
-      item.licenciaVencimiento
-        ? item.licenciaVencimiento.slice(0, 10)
-        : ""
-    );
     setFTelefono(item.telefono ?? "");
     setFEmailChofer(item.email ?? "");
     setFEsDueno(!!item.esDuenoFlota);
@@ -557,8 +550,6 @@ export function M5FichaPage() {
           empresaId: fChoferEmpresaId,
           dni: fDni,
           cuil: fCuil || null,
-          licencia: null,
-          licenciaVencimiento: fLicenciaVenc || null,
           telefono: fTelefono || null,
           email: fEmailChofer || null,
           esDuenoFlota: fEsDueno,
@@ -2048,14 +2039,6 @@ export function M5FichaPage() {
                   className={inputClass}
                   value={fCuil}
                   onChange={(e) => setFCuil(e.target.value)}
-                />
-              </Field>
-              <Field label="Vencimiento licencia">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={fLicenciaVenc}
-                  onChange={(e) => setFLicenciaVenc(e.target.value)}
                 />
               </Field>
               <Field label="Perfil flota">

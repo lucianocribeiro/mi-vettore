@@ -118,9 +118,6 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
         dni: c.dni,
         email: c.email ?? "",
         telefono: c.telefono ?? "",
-        licencia: c.licenciaVencimiento
-          ? c.licenciaVencimiento.toISOString().slice(0, 10)
-          : "",
         dueno: c.esDuenoFlota ? "Sí" : "No",
         estado: c.estado,
         empresa: c.empresa.nombre,
