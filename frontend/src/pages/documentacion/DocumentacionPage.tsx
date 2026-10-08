@@ -912,9 +912,6 @@ export function DocumentacionPage() {
                       <div className="truncate text-lg font-bold leading-tight text-[var(--vl-heading)]">
                         {nombreCompleto(c)}
                       </div>
-                      <div className="mt-0.5 text-xs font-medium text-[var(--vl-text)]">
-                        {c.dni ? `DNI ${c.dni}` : "Sin DNI"}
-                      </div>
                       {empresa && (
                         <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
                           {empresa}
@@ -948,9 +945,7 @@ export function DocumentacionPage() {
                 <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>{c.estado.toLowerCase()}</Badge>
               ) : null
             }
-            subtitulo={`${c.dni ? `DNI ${c.dni}` : "Sin DNI"} · ${
-              unidadDeChofer(c.id)?.patente ?? "Sin unidad"
-            }`}
+            subtitulo={unidadDeChofer(c.id)?.patente ?? "Sin unidad"}
             onClose={() => setSelectedChofer(null)}
           >
                     {esPerfilEmpresa && (
