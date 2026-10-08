@@ -94,7 +94,7 @@ function parseTipo(raw: unknown): TipoDocumento | null {
   return s as TipoDocumento;
 }
 
-/** Documentos que Vettore desactivó: SENASA por empresa, Manipulación de alimentos por chofer. */
+/** Documentos que Vettore desactivó: SENASA por empresa, carnet de manipulación de alimentos por chofer. */
 async function tiposOcultos(
   choferId: string | null | undefined,
   camionetaId: string | null | undefined
@@ -388,7 +388,7 @@ router.post(
       if (choferId && !TIPOS_CHOFER.has(tipo)) {
         res.status(400).json({
           error:
-            "En chofer solo: DNI frente/dorso, licencia frente/dorso, manipulación de alimentos o seguro de accidentes",
+            "En chofer solo: DNI frente/dorso, licencia frente/dorso, carnet de manipulación de alimentos o seguro de accidentes",
         });
         return;
       }

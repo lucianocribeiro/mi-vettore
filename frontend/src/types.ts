@@ -180,7 +180,7 @@ export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
   LICENCIA: "Licencia",
   LICENCIA_FRENTE: "Licencia (frente)",
   LICENCIA_DORSO: "Licencia (dorso)",
-  HABILITACION_MANIPULACION: "Manipulación de alimentos",
+  HABILITACION_MANIPULACION: "Carnet de manipulación de alimentos",
   SEGURO_ACCIDENTES: "Seguro de accidentes personales",
   VTV: "RTO / VTV",
   SENASA: "SENASA",
@@ -300,7 +300,7 @@ export type Chofer = {
   telefono: string | null;
   email: string | null;
   esDuenoFlota: boolean;
-  /** Si false, Manipulación de alimentos no se muestra. */
+  /** Si false, el carnet de manipulación de alimentos no se pide ni se muestra. */
   pideManipulacion?: boolean;
   estado: EstadoChofer;
   asignaciones?: AsignacionFlota[];

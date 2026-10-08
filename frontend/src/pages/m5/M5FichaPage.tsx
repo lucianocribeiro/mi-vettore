@@ -2054,7 +2054,7 @@ export function M5FichaPage() {
                     checked={fPideManipulacion}
                     onChange={(e) => setFPideManipulacion(e.target.checked)}
                   />
-                  Manipulación de alimentos
+                  Carnet de manipulación de alimentos (obligatorio)
                 </label>
               </Field>
               <Field label="Estado">

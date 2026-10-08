@@ -93,7 +93,7 @@ const GRUPOS_UNIDAD: Array<{ label: string; tipos: TipoDocumento[] }> = [
 const GRUPOS_CHOFER: Array<{ label: string; tipos: TipoDocumento[] }> = [
   { label: "DNI", tipos: ["DNI_FRENTE", "DNI_DORSO"] },
   { label: "Licencia", tipos: ["LICENCIA_FRENTE", "LICENCIA_DORSO"] },
-  { label: "Manipulación", tipos: ["HABILITACION_MANIPULACION"] },
+  { label: "Carnet manipulación", tipos: ["HABILITACION_MANIPULACION"] },
   { label: "Seguro accidentes", tipos: ["SEGURO_ACCIDENTES"] },
 ];
 

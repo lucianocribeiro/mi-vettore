@@ -9,6 +9,16 @@ import { sendMail } from "./mailer.js";
 
 const DIAS_ALERTA = 30;
 
+const NOMBRE_DOC: Partial<Record<string, string>> = {
+  LICENCIA: "Licencia",
+  LICENCIA_FRENTE: "Licencia (frente)",
+  LICENCIA_DORSO: "Licencia (dorso)",
+  HABILITACION_MANIPULACION: "Carnet de manipulación de alimentos",
+  SEGURO_ACCIDENTES: "Seguro de accidentes personales",
+  VTV: "RTO / VTV",
+  SEGURO: "Seguro",
+};
+
 /** Recordatorio semanal (lunes) a choferes activos para cargar km. */
 export async function runRecordatorioKm() {
   const loteId = randomUUID();
@@ -227,8 +237,9 @@ export async function runAlertasDocumentos() {
     if (!target) continue;
     const label = doc.camioneta?.patente ?? target.nombre;
     const venc = doc.vencimiento!.toISOString().slice(0, 10);
-    const asunto = `[Vettore] Documento por vencer — ${doc.tipo} (${label})`;
-    const cuerpo = `El documento ${doc.tipo} de ${label} vence el ${venc}. Gestioná el turno desde la empresa de transporte.`;
+    const nombreDoc = NOMBRE_DOC[doc.tipo] ?? doc.tipo;
+    const asunto = `[Vettore] Documento por vencer — ${nombreDoc} (${label})`;
+    const cuerpo = `El documento ${nombreDoc} de ${label} vence el ${venc}. Gestioná el turno desde la empresa de transporte.`;
 
     if (target.email) {
       const mail = await sendMail({
@@ -248,7 +259,7 @@ export async function runAlertasDocumentos() {
           cuerpoTexto: cuerpo,
           coberturaDesde: now,
           coberturaHasta: lim,
-          coberturaLabel: `${doc.tipo} ${label}`,
+          coberturaLabel: `${nombreDoc} ${label}`,
           estado:
             mail.ok && mail.simulated
               ? EstadoComunicacion.SIMULADO
