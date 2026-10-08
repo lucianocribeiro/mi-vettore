@@ -1378,7 +1378,7 @@ export function M7TalleresPage() {
           onClick={() => !busy && setConfirmAvanzarSinGuardar(false)}
         >
           <div
-            className="w-full max-w-md rounded-t-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 shadow-2xl sm:rounded-2xl"
+            className="w-full max-w-lg rounded-t-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 shadow-2xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3
@@ -1394,7 +1394,7 @@ export function M7TalleresPage() {
               </strong>{" "}
               tiene cambios sin guardar. ¿Qué querés hacer?
             </p>
-            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:grid sm:grid-cols-3">
               <button
                 type="button"
                 disabled={busy}
@@ -1425,7 +1425,7 @@ export function M7TalleresPage() {
                     setBrowseStep(null);
                   })();
                 }}
-                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-amber-600 bg-amber-600 px-4 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border-2 border-amber-600 bg-amber-600 px-3 py-2 text-center text-sm font-semibold text-white disabled:opacity-50"
               >
                 Avanzar sin guardar
               </button>
@@ -1453,7 +1453,7 @@ export function M7TalleresPage() {
                     setBrowseStep(null);
                   })();
                 }}
-                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] px-4 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] px-3 py-2 text-center text-sm font-semibold text-white disabled:opacity-50"
               >
                 {busy ? "Guardando…" : "Guardar y avanzar"}
               </button>
