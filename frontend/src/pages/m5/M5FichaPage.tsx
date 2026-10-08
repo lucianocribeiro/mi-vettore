@@ -1971,7 +1971,7 @@ export function M5FichaPage() {
           {(form.kind === "chofer" ||
             form.kind === "empresa" ||
             form.kind === "usuario") && (
-            <Field label={form.kind === "empresa" ? "Nombre" : "Nombre completo"}>
+            <Field label={form.kind === "empresa" ? "Nombre" : "Nombre y apellido"}>
               <input
                 className={inputClass}
                 value={fNombre}
