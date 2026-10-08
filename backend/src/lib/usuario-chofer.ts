@@ -24,12 +24,21 @@ export async function ensureUsuarioForChofer(opts: {
     where: { choferId: opts.choferId },
   });
   if (existingByChofer) {
+    // El email/DNI de contacto puede ser de otro usuario (ej. alguien de Vettore): no pisarlo.
+    const libre = async (campo: "email" | "dni" | "loginIdentificador", valor: string) =>
+      !(await prisma.usuario.findFirst({
+        where: { [campo]: valor, NOT: { id: existingByChofer.id } },
+        select: { id: true },
+      }));
+    const emailLibre = !!email && (await libre("email", email));
+    const dniLibre =
+      !!dni && (await libre("dni", dni)) && (await libre("loginIdentificador", dni));
     await prisma.usuario.update({
       where: { id: existingByChofer.id },
       data: {
-        ...(email ? { email } : {}),
+        ...(emailLibre ? { email } : {}),
         nombre: opts.nombre,
-        ...(dni ? { dni, loginIdentificador: dni } : {}),
+        ...(dniLibre ? { dni, loginIdentificador: dni } : {}),
         ...(opts.empresaId ? { empresaId: opts.empresaId } : {}),
       },
     });
