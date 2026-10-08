@@ -1728,31 +1728,34 @@ function SeleccionChecklist({
           <strong>Sugerencia del chofer:</strong> {ot.sugerenciaChofer}
         </p>
       )}
+      <table className="w-full text-left text-xs">
+        <thead>
+          <tr className="text-[10px] text-[var(--vl-text-muted)]">
+            <th className="w-8 py-1 font-normal" />
+            <th className="py-1 font-normal">Descripción</th>
+            <th className="py-1 font-normal">Concepto</th>
+            {!ocultarMontos && <th className="py-1 text-right font-normal">Importe $</th>}
+          </tr>
+        </thead>
       {groupByTaller(items).map((g) => (
-        <div key={g.nombre} className="mb-3">
-          <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
-            <span>{g.nombre}</span>
-            {!ocultarMontos && (
-              <span>
-                Presupuesto original{" "}
-                {money(
-                  g.items
-                    .filter(isMarcado)
-                    .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0)
-                )}
-              </span>
-            )}
-          </div>
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                <th className="w-8 py-1" />
-                <th className="py-1">Descripción</th>
-                <th className="py-1">Concepto</th>
-                {!ocultarMontos && <th className="py-1 text-right">Importe $</th>}
+            <tbody key={g.nombre}>
+              <tr>
+                <td colSpan={ocultarMontos ? 3 : 4} className="pb-1 pt-3">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
+                    <span>{g.nombre}</span>
+                    {!ocultarMontos && (
+                      <span>
+                        Presupuesto original{" "}
+                        {money(
+                          g.items
+                            .filter(isMarcado)
+                            .reduce((a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0), 0)
+                        )}
+                      </span>
+                    )}
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
                   <td className="w-8 py-1">
@@ -1780,9 +1783,8 @@ function SeleccionChecklist({
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
       ))}
+      </table>
     </div>
   );
 }
@@ -2182,6 +2184,14 @@ function AjusteImportesChecklist({
           />
         </div>
       )}
+      {itemsBase.length > 0 && (
+      <table className="mb-3 w-full text-left text-xs">
+        <thead>
+          <tr className="text-[10px] text-[var(--vl-text-muted)]">
+            <th className="py-1 font-normal">Descripción</th>
+            {!ocultarMontos && <th className="py-1 text-right font-normal">Importe $</th>}
+          </tr>
+        </thead>
       {groupByTaller(itemsBase).map((g) => {
         const subtotal = g.items.reduce((a, i) => {
           const draft = importeDrafts[i.id];
@@ -2190,19 +2200,15 @@ function AjusteImportesChecklist({
           return a + val;
         }, 0);
         return (
-        <div key={g.nombre} className="mb-3">
-          <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
-            <span>{g.nombre}</span>
-            {!ocultarMontos && <span>Subtotal {money(subtotal)}</span>}
-          </div>
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                <th className="py-1">Descripción</th>
-                {!ocultarMontos && <th className="py-1 text-right">Importe $</th>}
+            <tbody key={g.nombre}>
+              <tr>
+                <td colSpan={ocultarMontos ? 1 : 2} className="pb-1 pt-3">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--vl-heading)]">
+                    <span>{g.nombre}</span>
+                    {!ocultarMontos && <span>Subtotal {money(subtotal)}</span>}
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
                   <td className="py-1">{i.descripcion}</td>
@@ -2244,10 +2250,10 @@ function AjusteImportesChecklist({
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
         );
       })}
+      </table>
+      )}
 
       {itemsAdic.length > 0 && (
         <div className="mb-3 rounded-lg border border-dashed border-amber-400/50 p-3">
@@ -2498,22 +2504,29 @@ function ItemsEditor({
       {items.length === 0 && readOnly && (
         <p className="mb-2 text-xs text-[var(--vl-text-muted)]">Sin ítems cargados todavía.</p>
       )}
+      {items.length > 0 && (
+      <table className="mb-2 w-full text-left text-xs">
+        <thead>
+          <tr className="text-[10px] text-[var(--vl-text-muted)]">
+            <th className="py-1 font-normal">Descripción</th>
+            <th className="py-1 font-normal">Mano obra / Materiales</th>
+            {!showSubtotales && <th className="py-1 font-normal">Importe</th>}
+            {!readOnly && <th className="py-1" />}
+          </tr>
+        </thead>
       {groupByTaller(items).map((g) => (
-        <div key={g.nombre} className="mb-2">
-          <div className="flex items-center justify-between text-[11px] font-semibold">
-            <span>{g.nombre}</span>
-            {verSubtotal && <span>Subtotal {money(g.subtotal)}</span>}
-          </div>
-          <table className="mb-1 w-full text-left text-xs">
-            <thead>
-              <tr className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                <th className="py-1">Descripción</th>
-                <th className="py-1">Mano obra / Materiales</th>
-                {!showSubtotales && <th className="py-1">Importe</th>}
-                {!readOnly && <th className="py-1" />}
+            <tbody key={g.nombre}>
+              <tr>
+                <td
+                  colSpan={2 + (showSubtotales ? 0 : 1) + (readOnly ? 0 : 1)}
+                  className="pb-1 pt-2"
+                >
+                  <div className="flex items-center justify-between text-[11px] font-semibold">
+                    <span>{g.nombre}</span>
+                    {verSubtotal && <span>Subtotal {money(g.subtotal)}</span>}
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
                   <td className="py-1">{i.descripcion}</td>
@@ -2525,9 +2538,9 @@ function ItemsEditor({
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
       ))}
+      </table>
+      )}
       {!readOnly && (
       <>
       <div className="grid gap-2 sm:grid-cols-2">
