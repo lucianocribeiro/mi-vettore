@@ -991,26 +991,32 @@ router.post("/", ...write, async (req, res) => {
     });
     await sincronizarInhabilitacionUnidad(prisma, item, req.body, (req as AuthedRequest).user?.id);
 
-    if (cedulaFoto.startsWith("data:image/")) {
-      const mime = cedulaFoto.slice(5, cedulaFoto.indexOf(";"));
-      const b64 = cedulaFoto.slice(cedulaFoto.indexOf(",") + 1);
+    const cedulaDorso = String(req.body?.cedulaDorsoFoto ?? "");
+    const fotosCedula = [
+      { tipo: TipoDocumento.CEDULA, foto: cedulaFoto, nombre: "cedula-frente.jpg" },
+      { tipo: TipoDocumento.CEDULA_DORSO, foto: cedulaDorso, nombre: "cedula-dorso.jpg" },
+    ].filter((f) => f.foto.startsWith("data:image/"));
+    for (const f of fotosCedula) {
+      const mime = f.foto.slice(5, f.foto.indexOf(";"));
+      const b64 = f.foto.slice(f.foto.indexOf(",") + 1);
       const up = await uploadDocumento({
-        path: `unidad/${item.id}/CEDULA_${Date.now()}.jpg`,
+        path: `unidad/${item.id}/${f.tipo}_${Date.now()}.jpg`,
         body: Buffer.from(b64, "base64"),
         contentType: mime || "image/jpeg",
       });
       if (!up.ok) {
+        await prisma.documentoEntidad.deleteMany({ where: { camionetaId: item.id } });
         await prisma.camioneta.delete({ where: { id: item.id } });
         res.status(503).json({ error: up.error });
         return;
       }
       await prisma.documentoEntidad.create({
         data: {
-          tipo: TipoDocumento.CEDULA,
+          tipo: f.tipo,
           camionetaId: item.id,
           storagePath: up.path,
           mimeType: mime || "image/jpeg",
-          nombreOriginal: "cedula.jpg",
+          nombreOriginal: f.nombre,
         },
       });
     }

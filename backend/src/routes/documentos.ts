@@ -60,6 +60,7 @@ const TIPOS_UNIDAD = new Set<TipoDocumento>([
   TipoDocumento.SENASA,
   TipoDocumento.SEGURO,
   TipoDocumento.CEDULA,
+  TipoDocumento.CEDULA_DORSO,
   TipoDocumento.HOMOLOGACION,
   TipoDocumento.OTRA_DOCUMENTACION,
   TipoDocumento.FOTO_VEHICULO,
@@ -75,6 +76,7 @@ const TIPOS_OBLIGATORIOS = new Set<TipoDocumento>([
   TipoDocumento.VTV,
   TipoDocumento.SEGURO,
   TipoDocumento.CEDULA,
+  TipoDocumento.CEDULA_DORSO,
   TipoDocumento.FOTO_VEHICULO,
 ]);
 
@@ -229,7 +231,7 @@ router.post(
       if (camionetaId && !TIPOS_UNIDAD.has(tipo)) {
         res.status(400).json({
           error:
-            "En unidad solo: RTO/VTV, SENASA, seguro, cédula, homologación, otra documentación o foto del vehículo",
+            "En unidad solo: RTO/VTV, SENASA, seguro, cédula frente/dorso, homologación, otra documentación o foto del vehículo",
         });
         return;
       }

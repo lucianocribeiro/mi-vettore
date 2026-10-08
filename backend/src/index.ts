@@ -51,7 +51,7 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "4mb" }));
 app.use("/uploads", express.static(getUploadsRoot()));
 
 app.get("/api/health", (_req: any, res: any) => {

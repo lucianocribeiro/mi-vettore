@@ -15,7 +15,16 @@ export const DOCS_UNIDAD: DocUnidadMeta[] = [
   {
     tipo: TipoDocumento.CEDULA,
     orden: 1,
-    label: "Cédula",
+    label: "Cédula (frente)",
+    obligatorio: true,
+    vencimiento: false,
+    soloImagen: true,
+    alerta: false,
+  },
+  {
+    tipo: TipoDocumento.CEDULA_DORSO,
+    orden: 2,
+    label: "Cédula (dorso)",
     obligatorio: true,
     vencimiento: false,
     soloImagen: true,
@@ -23,7 +32,7 @@ export const DOCS_UNIDAD: DocUnidadMeta[] = [
   },
   {
     tipo: TipoDocumento.SEGURO,
-    orden: 2,
+    orden: 3,
     label: "Seguro",
     obligatorio: true,
     vencimiento: true,
@@ -32,7 +41,7 @@ export const DOCS_UNIDAD: DocUnidadMeta[] = [
   },
   {
     tipo: TipoDocumento.VTV,
-    orden: 3,
+    orden: 4,
     label: "RTO",
     obligatorio: true,
     vencimiento: true,
@@ -41,7 +50,7 @@ export const DOCS_UNIDAD: DocUnidadMeta[] = [
   },
   {
     tipo: TipoDocumento.SENASA,
-    orden: 4,
+    orden: 5,
     label: "SENASA",
     obligatorio: false,
     vencimiento: true,
@@ -50,7 +59,7 @@ export const DOCS_UNIDAD: DocUnidadMeta[] = [
   },
   {
     tipo: TipoDocumento.HOMOLOGACION,
-    orden: 5,
+    orden: 6,
     label: "Homologación",
     obligatorio: false,
     vencimiento: false,

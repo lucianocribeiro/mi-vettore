@@ -19,7 +19,7 @@ type Props = {
   camionetaId?: string;
 };
 
-async function compressImageIfNeeded(file: File): Promise<File | Blob> {
+export async function compressImageIfNeeded(file: File): Promise<File | Blob> {
   if (!file.type.startsWith("image/")) return file;
   const maxWidth = 1600;
   const quality = 0.7;

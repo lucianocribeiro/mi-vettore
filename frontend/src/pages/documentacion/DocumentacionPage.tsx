@@ -284,12 +284,12 @@ export function DocumentacionPage() {
       </h1>
       <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
         {ops
-          ? "Chofer: DNI, licencia frente/dorso, manipulación de alimentos y seguro de accidentes (opcional). Unidad: RTO/VTV, SENASA (opcional), seguro, cédula (sin vencimiento), homologación (opcional), otra documentación (opcional) y foto del vehículo. La documentación de empleados de empresas tercerizadas la carga administración (Pablo/Silvina)."
+          ? "Chofer: DNI, licencia frente/dorso, manipulación de alimentos y seguro de accidentes (opcional). Unidad: RTO/VTV, SENASA (opcional), seguro, cédula frente y dorso (sin vencimiento), homologación (opcional), otra documentación (opcional) y foto del vehículo. La documentación de empleados de empresas tercerizadas la carga administración (Pablo/Silvina)."
           : esPerfilEmpresa
             ? "En el perfil empresa podés asignar, reemplazar o pasar un chofer a otra unidad de tu flota, y cargar la documentación."
             : user?.esDuenoFlota
               ? "Estás en modo conductor. Para asignar o cambiar choferes de las unidades, pasá al perfil Empresa."
-              : "Podés cargar DNI, licencia frente/dorso, manipulación de alimentos y seguro de accidentes (opcional), y los documentos de tu unidad (RTO/VTV, SENASA opcional, seguro, cédula sin vencimiento, homologación opcional, otra doc. y foto). La ficha de otros choferes la carga Vettore."}
+              : "Podés cargar DNI, licencia frente/dorso, manipulación de alimentos y seguro de accidentes (opcional), y los documentos de tu unidad (RTO/VTV, SENASA opcional, seguro, cédula frente y dorso sin vencimiento, homologación opcional, otra doc. y foto). La ficha de otros choferes la carga Vettore."}
       </p>
 
       <div className="mt-4 flex gap-2">

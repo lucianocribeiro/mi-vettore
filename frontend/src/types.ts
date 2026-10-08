@@ -111,6 +111,7 @@ export type TipoDocumento =
   | "SENASA"
   | "SEGURO"
   | "CEDULA"
+  | "CEDULA_DORSO"
   | "HOMOLOGACION"
   | "OTRA_DOCUMENTACION"
   | "FOTO_VEHICULO";
@@ -138,6 +139,7 @@ export const TIPOS_DOCUMENTO_CHOFER: TipoDocumento[] = [
 
 export const TIPOS_DOCUMENTO_UNIDAD: TipoDocumento[] = [
   "CEDULA",
+  "CEDULA_DORSO",
   "SEGURO",
   "VTV",
   "SENASA",
@@ -155,6 +157,7 @@ export const TIPOS_DOCUMENTO_OBLIGATORIOS: TipoDocumento[] = [
   "VTV",
   "SEGURO",
   "CEDULA",
+  "CEDULA_DORSO",
   "FOTO_VEHICULO",
 ];
 
@@ -169,7 +172,8 @@ export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
   VTV: "RTO / VTV",
   SENASA: "SENASA",
   SEGURO: "Seguro",
-  CEDULA: "Cédula",
+  CEDULA: "Cédula (frente)",
+  CEDULA_DORSO: "Cédula (dorso)",
   HOMOLOGACION: "Homologación",
   OTRA_DOCUMENTACION: "Otra documentación",
   FOTO_VEHICULO: "Foto del vehículo",

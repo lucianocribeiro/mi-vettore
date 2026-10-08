@@ -108,7 +108,9 @@ enum TipoDocumento {
   VTV
   SENASA
   SEGURO
+  /// Cédula frente (el nombre del valor se mantiene por compatibilidad).
   CEDULA
+  CEDULA_DORSO
   HOMOLOGACION
   OTRA_DOCUMENTACION
   FOTO_VEHICULO

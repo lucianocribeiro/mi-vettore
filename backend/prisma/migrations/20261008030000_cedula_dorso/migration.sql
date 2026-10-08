@@ -1,0 +1,2 @@
+-- Cédula en dos fotos: CEDULA (frente) + CEDULA_DORSO.
+ALTER TYPE "TipoDocumento" ADD VALUE IF NOT EXISTS 'CEDULA_DORSO' AFTER 'CEDULA';
