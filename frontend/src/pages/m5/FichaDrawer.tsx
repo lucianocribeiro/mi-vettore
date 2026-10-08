@@ -328,10 +328,6 @@ export function FichaDrawer({
                 <Row label="CUIL" value={ch.cuil || "—"} />
                 <Row label="Teléfono" value={ch.telefono || "—"} />
                 <Row label="Email" value={ch.email || "—"} />
-                <Row
-                  label="Perfil"
-                  value={ch.esDuenoFlota ? "Empresa de transporte" : "Chofer"}
-                />
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[var(--vl-text-muted)]">Estado</span>
                   <EstadoBadge estado={ch.estado} />

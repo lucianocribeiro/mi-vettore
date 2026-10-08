@@ -114,6 +114,8 @@ router.post("/", ...write, async (req, res) => {
           req.body?.permiteMultiCamioneta === undefined
             ? true
             : Boolean(req.body.permiteMultiCamioneta),
+        verMantenimiento: req.body?.verMantenimiento === true,
+        verTaller: req.body?.verTaller === true,
       },
     });
       await tx.usuario.create({
@@ -161,6 +163,8 @@ router.put("/:id", ...write, async (req, res) => {
       activo?: boolean;
       contacto?: string | null;
       permiteMultiCamioneta?: boolean;
+      verMantenimiento?: boolean;
+      verTaller?: boolean;
     } = {};
     if (req.body?.nombre !== undefined) data.nombre = String(req.body.nombre).trim();
     if (req.body?.cuit !== undefined) {
@@ -178,6 +182,12 @@ router.put("/:id", ...write, async (req, res) => {
     }
     if (req.body?.permiteMultiCamioneta !== undefined) {
       data.permiteMultiCamioneta = Boolean(req.body.permiteMultiCamioneta);
+    }
+    if (req.body?.verMantenimiento !== undefined) {
+      data.verMantenimiento = Boolean(req.body.verMantenimiento);
+    }
+    if (req.body?.verTaller !== undefined) {
+      data.verTaller = Boolean(req.body.verTaller);
     }
     if (req.body?.tipo !== undefined) {
       const t = String(req.body.tipo).toUpperCase();

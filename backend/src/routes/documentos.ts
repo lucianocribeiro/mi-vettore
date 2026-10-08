@@ -195,7 +195,7 @@ router.post(
       if (choferId && !TIPOS_CHOFER.has(tipo)) {
         res.status(400).json({
           error:
-            "En chofer solo: DNI frente/dorso, licencia frente/dorso, habilitación o seguro de accidentes",
+            "En chofer solo: DNI frente/dorso, licencia frente/dorso, manipulación de alimentos o seguro de accidentes",
         });
         return;
       }

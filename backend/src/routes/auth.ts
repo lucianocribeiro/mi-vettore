@@ -25,6 +25,25 @@ async function empresaNombreForChofer(
   return asig?.empresa.nombre ?? null;
 }
 
+type Modulos = { verMantenimiento: boolean; verTaller: boolean };
+
+/** Internos ven todo; empresa y choferes, lo que el administrador habilitó a la empresa. */
+async function modulosDe(
+  rol: Role,
+  empresaId: string | null | undefined
+): Promise<Modulos> {
+  if (rol !== Role.EMPRESA && rol !== Role.CHOFER) {
+    return { verMantenimiento: true, verTaller: true };
+  }
+  const e = empresaId
+    ? await prisma.empresaTransporte.findUnique({
+        where: { id: empresaId },
+        select: { verMantenimiento: true, verTaller: true },
+      })
+    : null;
+  return { verMantenimiento: e?.verMantenimiento ?? false, verTaller: e?.verTaller ?? false };
+}
+
 function publicUser(
   user: {
     id: string;
@@ -39,12 +58,9 @@ function publicUser(
     empresaId?: string | null;
     debeCambiarPassword?: boolean;
   },
-  chofer?: {
-    esDuenoFlota: boolean;
-    verMantenimiento?: boolean;
-    verTaller?: boolean;
-  } | null,
-  empresaNombre?: string | null
+  chofer?: { esDuenoFlota: boolean } | null,
+  empresaNombre?: string | null,
+  modulos: Modulos = { verMantenimiento: true, verTaller: true }
 ) {
   return {
     id: user.id,
@@ -59,8 +75,8 @@ function publicUser(
     empresaId: user.empresaId ?? null,
     debeCambiarPassword: user.debeCambiarPassword ?? false,
     esDuenoFlota: chofer?.esDuenoFlota ?? false,
-    verMantenimiento: chofer?.verMantenimiento ?? true,
-    verTaller: chofer?.verTaller ?? true,
+    verMantenimiento: modulos.verMantenimiento,
+    verTaller: modulos.verTaller,
     empresaNombre: empresaNombre ?? null,
   };
 }
@@ -87,7 +103,7 @@ router.post("/login", async (req, res) => {
     const includeLogin = { chofer: true, empresa: true } as const;
     let user = null as
       | (Awaited<ReturnType<typeof prisma.usuario.findFirst>> & {
-          chofer: { esDuenoFlota: boolean; verMantenimiento: boolean; verTaller: boolean } | null;
+          chofer: { esDuenoFlota: boolean; empresaId: string } | null;
           empresa: { nombre: string; cuit: string } | null;
         })
       | null;
@@ -177,18 +193,17 @@ router.post("/login", async (req, res) => {
       user.rol === Role.EMPRESA
         ? user.empresa?.nombre ?? null
         : await empresaNombreForChofer(choferId);
+    const modulos = await modulosDe(
+      user.rol,
+      user.rol === Role.EMPRESA ? user.empresaId : chofer?.empresaId
+    );
     res.json({
       token,
       user: publicUser(
         { ...user, choferId },
-        chofer
-          ? {
-              esDuenoFlota: chofer.esDuenoFlota,
-              verMantenimiento: chofer.verMantenimiento,
-              verTaller: chofer.verTaller,
-            }
-          : null,
-        empresaNombre
+        chofer ? { esDuenoFlota: chofer.esDuenoFlota } : null,
+        empresaNombre,
+        modulos
       ),
     });
   } catch (err) {
@@ -283,17 +298,16 @@ router.get("/me", authenticate, async (req: AuthedRequest, res) => {
       user.rol === Role.EMPRESA
         ? user.empresa?.nombre ?? null
         : await empresaNombreForChofer(choferId);
+    const modulos = await modulosDe(
+      user.rol,
+      user.rol === Role.EMPRESA ? user.empresaId : chofer?.empresaId
+    );
     res.json({
       user: publicUser(
         { ...user, choferId },
-        chofer
-          ? {
-              esDuenoFlota: chofer.esDuenoFlota,
-              verMantenimiento: chofer.verMantenimiento,
-              verTaller: chofer.verTaller,
-            }
-          : null,
-        empresaNombre
+        chofer ? { esDuenoFlota: chofer.esDuenoFlota } : null,
+        empresaNombre,
+        modulos
       ),
     });
   } catch (err) {

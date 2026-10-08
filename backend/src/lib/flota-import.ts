@@ -35,7 +35,6 @@ export const FLOTA_COLUMNAS: Record<HojaFlota, Columna[]> = {
     { header: "DNI", key: "dni", width: 14 },
     { header: "Email", key: "email", width: 28 },
     { header: "Teléfono", key: "telefono", width: 16 },
-    { header: "Empresa transp.", key: "dueno", width: 14 },
     { header: "Estado", key: "estado", width: 12 },
     { header: "Empresa", key: "empresa", width: 26 },
   ],
@@ -70,7 +69,6 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
     dni: "30111222",
     email: "ana@empresa.com",
     telefono: "2644000000",
-    dueno: "No",
     estado: "ACTIVO",
     empresa: EMPRESA_EJEMPLO,
   },
@@ -94,7 +92,7 @@ const INSTRUCCIONES: Record<HojaFlota, string[]> = {
   ],
   choferes: [
     "Obligatorias: Nombre completo, DNI y Empresa (nombre o CUIT de una empresa ya cargada).",
-    "Empresa transp.: Sí / No. Estado: ACTIVO / INHABILITADO / INACTIVO.",
+    "Estado: ACTIVO / INHABILITADO / INACTIVO.",
     "El chofer accede con el DNI.",
   ],
   unidades: [
@@ -164,7 +162,6 @@ export type FilaChofer = {
   dni: string;
   email: string;
   telefono: string;
-  dueno: boolean | null;
   estado: "ACTIVO" | "INHABILITADO" | "INACTIVO" | null;
   empresa: string;
 };
@@ -284,7 +281,6 @@ export async function parseFlotaWorkbook(
         error(n, "Nombre completo, DNI y Empresa son obligatorios");
         return;
       }
-      const duenoRaw = norm(txt(row, "dueno"));
       const estadoRaw = txt(row, "estado").toUpperCase();
       if (estadoRaw && !["ACTIVO", "INHABILITADO", "INACTIVO"].includes(estadoRaw)) {
         error(n, "Estado debe ser ACTIVO, INHABILITADO o INACTIVO");
@@ -296,7 +292,6 @@ export async function parseFlotaWorkbook(
         dni,
         email: txt(row, "email").toLowerCase(),
         telefono: txt(row, "telefono"),
-        dueno: duenoRaw === "si" ? true : duenoRaw === "no" ? false : null,
         estado: (estadoRaw || null) as FilaChofer["estado"],
         empresa,
       });

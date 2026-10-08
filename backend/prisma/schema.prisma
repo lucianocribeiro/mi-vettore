@@ -177,9 +177,6 @@ model Chofer {
   email               String?
   /// Empresa unipersonal / titular: misma UI de chofer; ve y rota patentes de su empresa.
   esDuenoFlota        Boolean          @default(false)
-  /// Módulos opcionales (Documentación es siempre obligatorio).
-  verMantenimiento    Boolean          @default(true)
-  verTaller           Boolean          @default(true)
   estado              EstadoChofer     @default(ACTIVO)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
@@ -314,6 +311,9 @@ model EmpresaTransporte {
   activo                 Boolean          @default(true)
   /// Temporal: visible, pero no se le asignan unidades/choferes ni pide taller. Inactiva = activo false.
   inhabilitada           Boolean          @default(false)
+  /// Módulos extra que habilita el administrador (Documentación siempre está habilitado).
+  verMantenimiento       Boolean          @default(false)
+  verTaller              Boolean          @default(false)
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   asignaciones           AsignacionFlota[]

@@ -167,9 +167,8 @@ export function M5FichaPage() {
   const [fCuil, setFCuil] = useState("");
   const [fTelefono, setFTelefono] = useState("");
   const [fEmailChofer, setFEmailChofer] = useState("");
-  const [fEsDueno, setFEsDueno] = useState(false);
-  const [fVerMant, setFVerMant] = useState(true);
-  const [fVerTaller, setFVerTaller] = useState(true);
+  const [fVerMant, setFVerMant] = useState(false);
+  const [fVerTaller, setFVerTaller] = useState(false);
   const [fEstadoChofer, setFEstadoChofer] = useState<EstadoEntidad>("ACTIVO");
   const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
@@ -392,9 +391,8 @@ export function M5FichaPage() {
     setFCuil("");
     setFTelefono("");
     setFEmailChofer("");
-    setFEsDueno(false);
-    setFVerMant(true);
-    setFVerTaller(true);
+    setFVerMant(false);
+    setFVerTaller(false);
     setFEstadoChofer("ACTIVO");
     setFCuit("");
     setFPasswordEmpresa("");
@@ -438,9 +436,6 @@ export function M5FichaPage() {
     setFCuil(item.cuil ?? "");
     setFTelefono(item.telefono ?? "");
     setFEmailChofer(item.email ?? "");
-    setFEsDueno(!!item.esDuenoFlota);
-    setFVerMant(item.verMantenimiento !== false);
-    setFVerTaller(item.verTaller !== false);
     setFEstadoChofer(item.estado);
     setForm({ kind: "chofer", item });
   }
@@ -450,6 +445,8 @@ export function M5FichaPage() {
     setFNombre(item.nombre);
     setFCuit(item.cuit ?? "");
     setFPasswordEmpresa("");
+    setFVerMant(!!item.verMantenimiento);
+    setFVerTaller(!!item.verTaller);
     setForm({ kind: "empresa", item });
   }
 
@@ -552,9 +549,6 @@ export function M5FichaPage() {
           cuil: fCuil || null,
           telefono: fTelefono || null,
           email: fEmailChofer || null,
-          esDuenoFlota: fEsDueno,
-          verMantenimiento: fVerMant,
-          verTaller: fVerTaller,
           estado: fEstadoChofer,
         };
         if (form.item) {
@@ -596,6 +590,8 @@ export function M5FichaPage() {
           nombre: fNombre,
           cuit: fCuit || null,
           password: fPasswordEmpresa || undefined,
+          verMantenimiento: fVerMant,
+          verTaller: fVerTaller,
         };
         if (form.item) {
           const updated = await apiFetch<Empresa & { credencialTemporal?: string }>(
@@ -1194,7 +1190,6 @@ export function M5FichaPage() {
         c.email,
         c.telefono,
         empresaNombrePorId.get(c.empresaId ?? ""),
-        c.esDuenoFlota ? "empresa de transporte" : "",
       ]
         .filter(Boolean)
         .join(" ")
@@ -1490,7 +1485,6 @@ export function M5FichaPage() {
                 <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
                   DNI {c.dni}
                   {c.cuil ? ` · CUIL ${c.cuil}` : ""}
-                  {c.esDuenoFlota ? " · empresa de transporte" : ""}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   <EstadoBadge estado={c.estado} />
@@ -2041,32 +2035,6 @@ export function M5FichaPage() {
                   onChange={(e) => setFCuil(e.target.value)}
                 />
               </Field>
-              <Field label="Perfil flota">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={fEsDueno}
-                    onChange={(e) => setFEsDueno(e.target.checked)}
-                  />
-                  Empresa de transporte (ve todas las unidades)
-                </label>
-                <label className="mt-2 flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={fVerMant}
-                    onChange={(e) => setFVerMant(e.target.checked)}
-                  />
-                  Módulo Mantenimiento
-                </label>
-                <label className="mt-2 flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={fVerTaller}
-                    onChange={(e) => setFVerTaller(e.target.checked)}
-                  />
-                  Módulo Taller
-                </label>
-              </Field>
               <Field label="Estado">
                 <select
                   className={inputClass}
@@ -2136,6 +2104,28 @@ export function M5FichaPage() {
                   onChange={(e) => setFCuit(e.target.value)}
                   required
                 />
+              </Field>
+              <Field label="Módulos">
+                <label className="flex items-center gap-2 text-sm text-[var(--vl-text-muted)]">
+                  <input type="checkbox" checked disabled />
+                  Documentación (siempre habilitado)
+                </label>
+                <label className="mt-2 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fVerMant}
+                    onChange={(e) => setFVerMant(e.target.checked)}
+                  />
+                  Mantenimiento
+                </label>
+                <label className="mt-2 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fVerTaller}
+                    onChange={(e) => setFVerTaller(e.target.checked)}
+                  />
+                  Taller
+                </label>
               </Field>
               {!form.item && (
                 <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">

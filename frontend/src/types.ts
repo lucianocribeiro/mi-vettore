@@ -164,7 +164,7 @@ export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
   LICENCIA: "Licencia",
   LICENCIA_FRENTE: "Licencia (frente)",
   LICENCIA_DORSO: "Licencia (dorso)",
-  HABILITACION_MANIPULACION: "Habilitación manipulación",
+  HABILITACION_MANIPULACION: "Manipulación de alimentos",
   SEGURO_ACCIDENTES: "Seguro de accidentes personales",
   VTV: "RTO / VTV",
   SENASA: "SENASA",
@@ -246,6 +246,9 @@ export type Empresa = {
   permiteMultiCamioneta?: boolean;
   activo?: boolean;
   inhabilitada?: boolean;
+  /** Módulos extra habilitados por el administrador. */
+  verMantenimiento?: boolean;
+  verTaller?: boolean;
   choferes?: Array<{ id: string; nombre: string; apellido?: string; dni: string; estado: string }>;
   unidades?: Array<{ id: string; patente: string; estado: string }>;
 };
@@ -274,8 +277,6 @@ export type Chofer = {
   telefono: string | null;
   email: string | null;
   esDuenoFlota: boolean;
-  verMantenimiento?: boolean;
-  verTaller?: boolean;
   estado: EstadoChofer;
   asignaciones?: AsignacionFlota[];
 };

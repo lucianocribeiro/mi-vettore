@@ -118,7 +118,6 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
         dni: c.dni,
         email: c.email ?? "",
         telefono: c.telefono ?? "",
-        dueno: c.esDuenoFlota ? "Sí" : "No",
         estado: c.estado,
         empresa: c.empresa.nombre,
       })),
@@ -230,8 +229,6 @@ router.post("/", ...write, async (req, res) => {
           ? String(req.body.email).trim().toLowerCase()
           : null,
         esDuenoFlota: Boolean(req.body?.esDuenoFlota),
-        verMantenimiento: req.body?.verMantenimiento !== false,
-        verTaller: req.body?.verTaller !== false,
         estado: estadoRaw as EstadoChofer,
       },
       include: includeAsignaciones,
@@ -328,12 +325,6 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
     }
     if (req.body?.esDuenoFlota !== undefined) {
       data.esDuenoFlota = Boolean(req.body.esDuenoFlota);
-    }
-    if (req.body?.verMantenimiento !== undefined) {
-      data.verMantenimiento = Boolean(req.body.verMantenimiento);
-    }
-    if (req.body?.verTaller !== undefined) {
-      data.verTaller = Boolean(req.body.verTaller);
     }
     if (req.body?.estado !== undefined) {
       const s = String(req.body.estado).toUpperCase();
