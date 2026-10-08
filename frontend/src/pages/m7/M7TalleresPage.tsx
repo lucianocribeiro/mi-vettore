@@ -1071,7 +1071,9 @@ export function M7TalleresPage() {
                     editandoPasoActual && (
                   <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                     <div className="rounded-xl border p-3">
-                      <div className="text-xs text-[var(--vl-text-muted)]">Presupuesto original</div>
+                      <div className="text-xs text-[var(--vl-text-muted)]">
+                        {enSeleccion ? "Gasto total" : "Presupuesto original"}
+                      </div>
                       <div className="text-base font-bold">
                         {(enSeleccion ? totTildados : presupuestoAprobadoFijo) > 0
                           ? money(enSeleccion ? totTildados : presupuestoAprobadoFijo)
