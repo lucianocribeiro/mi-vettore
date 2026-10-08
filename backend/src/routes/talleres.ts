@@ -1653,6 +1653,62 @@ router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
+/** Corrige el kilometraje de una reparación externa (y de su registro de mantenimiento). */
+router.patch("/externos/:id", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const km = Number(req.body?.km);
+    if (!Number.isInteger(km) || km < 0) {
+      return void res.status(400).json({ error: "Indicá el kilometraje" });
+    }
+    const ot = await prisma.ordenTrabajo.findUnique({
+      where: { id: req.params.id },
+      include: { solicitud: { select: { camionetaId: true } } },
+    });
+    if (!ot || !ot.externo) {
+      return void res.status(404).json({ error: "Reparación externa no encontrada" });
+    }
+    const camionetaId = ot.solicitud.camionetaId;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.ordenTrabajo.update({ where: { id: ot.id }, data: { kmAlMomento: km } });
+      await tx.registroMantenimiento.updateMany({ where: { otId: ot.id }, data: { km } });
+      const camioneta = await tx.camioneta.findUnique({
+        where: { id: camionetaId },
+        select: { km: true },
+      });
+      if (camioneta && km > camioneta.km) {
+        await applyKmUpdate(tx, {
+          camionetaId,
+          existingKm: camioneta.km,
+          nextKm: km,
+          userId: req.user!.id,
+          allowDecrease: false,
+        });
+        await tx.camioneta.update({
+          where: { id: camionetaId },
+          data: { km, kmActualizadoAt: new Date() },
+        });
+      }
+      return tx.ordenTrabajo.findUniqueOrThrow({
+        where: { id: ot.id },
+        include: includeOtExterna,
+      });
+    });
+
+    const cats = await prisma.categoriaDiagnostico.findMany({
+      select: { id: true, nombre: true, padreId: true, nivel: true },
+    });
+    res.json(serializeOtExterna(updated, cats));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al editar la reparación externa" });
+  }
+});
+
 router.delete("/externos/:id", authenticate, async (req: AuthedRequest, res) => {
   try {
     if (!isInternalOpsRole(req.user!.rol)) {

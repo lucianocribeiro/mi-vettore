@@ -51,6 +51,8 @@ export function TallerExternoPage() {
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [confirmBorrar, setConfirmBorrar] = useState(false);
   const [borrando, setBorrando] = useState(false);
+  const [editKm, setEditKm] = useState<string | null>(null);
+  const [guardandoKm, setGuardandoKm] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -84,7 +86,32 @@ export function TallerExternoPage() {
 
   useEffect(() => {
     setConfirmBorrar(false);
+    setEditKm(null);
   }, [ot?.id]);
+
+  async function guardarKm() {
+    if (!token || !ot || editKm === null) return;
+    const km = Number(editKm.replace(/\D/g, ""));
+    if (!editKm.trim() || !Number.isInteger(km) || km < 0) {
+      setError("Indicá un kilometraje válido");
+      return;
+    }
+    setGuardandoKm(true);
+    try {
+      const updated = await apiFetch<OtExterna>(
+        `/api/talleres/externos/${ot.id}`,
+        { method: "PATCH", body: JSON.stringify({ km }) },
+        token
+      );
+      setOts((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+      setEditKm(null);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar el km");
+    } finally {
+      setGuardandoKm(false);
+    }
+  }
 
   async function borrar() {
     if (!token || !ot) return;
@@ -195,9 +222,53 @@ export function TallerExternoPage() {
                 </div>
                 <div>
                   <dt className="text-[11px] text-[var(--vl-text-muted)]">Km</dt>
-                  <dd className="font-medium">
-                    {ot.kmAlMomento != null ? `${ot.kmAlMomento.toLocaleString("es-AR")} km` : "—"}
-                  </dd>
+                  {editKm !== null ? (
+                    <dd className="mt-0.5 flex flex-wrap items-center gap-2">
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        autoFocus
+                        value={editKm}
+                        onChange={(e) => setEditKm(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void guardarKm();
+                          if (e.key === "Escape") setEditKm(null);
+                        }}
+                        aria-label="Kilometraje"
+                        className="min-h-9 w-36 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1 text-sm"
+                      />
+                      <button
+                        type="button"
+                        disabled={guardandoKm}
+                        onClick={() => void guardarKm()}
+                        className="rounded-md bg-violet-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                      >
+                        {guardandoKm ? "Guardando…" : "Guardar"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={guardandoKm}
+                        onClick={() => setEditKm(null)}
+                        className="rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs"
+                      >
+                        Cancelar
+                      </button>
+                    </dd>
+                  ) : (
+                    <dd className="flex flex-wrap items-baseline gap-2 font-medium">
+                      {ot.kmAlMomento != null ? `${ot.kmAlMomento.toLocaleString("es-AR")} km` : "—"}
+                      {puedeCargar && (
+                        <button
+                          type="button"
+                          onClick={() => setEditKm(ot.kmAlMomento != null ? String(ot.kmAlMomento) : "")}
+                          className="text-xs font-normal text-violet-700 underline-offset-2 hover:underline dark:text-violet-300"
+                        >
+                          Editar
+                        </button>
+                      )}
+                    </dd>
+                  )}
                 </div>
                 <div>
                   <dt className="text-[11px] text-[var(--vl-text-muted)]">Nivel 1</dt>
