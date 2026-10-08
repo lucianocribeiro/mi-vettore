@@ -114,7 +114,20 @@ export type TipoDocumento =
   | "CEDULA_DORSO"
   | "HOMOLOGACION"
   | "OTRA_DOCUMENTACION"
-  | "FOTO_VEHICULO";
+  | "FOTO_VEHICULO"
+  | "FOTO_ATRAS"
+  | "FOTO_LATERAL_IZQ"
+  | "FOTO_LATERAL_DER"
+  | "FOTO_CARGA";
+
+/** Las 5 fotos obligatorias de la unidad (FOTO_VEHICULO = frente). */
+export const TIPOS_FOTO_VEHICULO: TipoDocumento[] = [
+  "FOTO_VEHICULO",
+  "FOTO_ATRAS",
+  "FOTO_LATERAL_IZQ",
+  "FOTO_LATERAL_DER",
+  "FOTO_CARGA",
+];
 
 export type EstadoValidacionDoc = "PENDIENTE" | "VALIDADO" | "RECHAZADO";
 
@@ -145,7 +158,7 @@ export const TIPOS_DOCUMENTO_UNIDAD: TipoDocumento[] = [
   "SENASA",
   "HOMOLOGACION",
   "OTRA_DOCUMENTACION",
-  "FOTO_VEHICULO",
+  ...TIPOS_FOTO_VEHICULO,
 ];
 
 export const TIPOS_DOCUMENTO_OBLIGATORIOS: TipoDocumento[] = [
@@ -158,7 +171,7 @@ export const TIPOS_DOCUMENTO_OBLIGATORIOS: TipoDocumento[] = [
   "SEGURO",
   "CEDULA",
   "CEDULA_DORSO",
-  "FOTO_VEHICULO",
+  ...TIPOS_FOTO_VEHICULO,
 ];
 
 export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
@@ -176,7 +189,11 @@ export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
   CEDULA_DORSO: "Cédula (dorso)",
   HOMOLOGACION: "Homologación",
   OTRA_DOCUMENTACION: "Otra documentación",
-  FOTO_VEHICULO: "Foto del vehículo",
+  FOTO_VEHICULO: "Foto: frente",
+  FOTO_ATRAS: "Foto: atrás",
+  FOTO_LATERAL_IZQ: "Foto: lateral izquierdo",
+  FOTO_LATERAL_DER: "Foto: lateral derecho",
+  FOTO_CARGA: "Foto: carga",
 };
 
 export const TIPO_TALLER_LABEL: Record<TipoTaller, string> = {
@@ -332,6 +349,8 @@ export type Camioneta = {
   estadoDesde?: string | null;
   /** Fin del periodo en estado no operativo. */
   estadoHasta?: string | null;
+  /** Si false, no se pide SENASA en esta unidad. */
+  pideSenasa?: boolean;
   asignaciones?: AsignacionFlota[];
   /** Presente en respuestas de mantenimiento/update si el salto de km es alto. */
   alertaKmAnomalia?: boolean;

@@ -113,7 +113,12 @@ enum TipoDocumento {
   CEDULA_DORSO
   HOMOLOGACION
   OTRA_DOCUMENTACION
+  /// Foto del vehículo: frente (el nombre del valor se mantiene por compatibilidad).
   FOTO_VEHICULO
+  FOTO_ATRAS
+  FOTO_LATERAL_IZQ
+  FOTO_LATERAL_DER
+  FOTO_CARGA
 }
 
 enum EstadoValidacionDoc {

@@ -64,6 +64,10 @@ const TIPOS_UNIDAD = new Set<TipoDocumento>([
   TipoDocumento.HOMOLOGACION,
   TipoDocumento.OTRA_DOCUMENTACION,
   TipoDocumento.FOTO_VEHICULO,
+  TipoDocumento.FOTO_ATRAS,
+  TipoDocumento.FOTO_LATERAL_IZQ,
+  TipoDocumento.FOTO_LATERAL_DER,
+  TipoDocumento.FOTO_CARGA,
 ]);
 
 /** Obligatorios (UI / validación blanda). SENASA, Homologación, OTRA_DOCUMENTACION y SEGURO_ACCIDENTES son opcionales. Cédula no lleva vencimiento. */
@@ -78,6 +82,10 @@ const TIPOS_OBLIGATORIOS = new Set<TipoDocumento>([
   TipoDocumento.CEDULA,
   TipoDocumento.CEDULA_DORSO,
   TipoDocumento.FOTO_VEHICULO,
+  TipoDocumento.FOTO_ATRAS,
+  TipoDocumento.FOTO_LATERAL_IZQ,
+  TipoDocumento.FOTO_LATERAL_DER,
+  TipoDocumento.FOTO_CARGA,
 ]);
 
 function parseTipo(raw: unknown): TipoDocumento | null {
@@ -231,7 +239,7 @@ router.post(
       if (camionetaId && !TIPOS_UNIDAD.has(tipo)) {
         res.status(400).json({
           error:
-            "En unidad solo: RTO/VTV, SENASA, seguro, cédula frente/dorso, homologación, otra documentación o foto del vehículo",
+            "En unidad solo: RTO/VTV, SENASA, seguro, cédula frente/dorso, homologación, otra documentación o fotos del vehículo",
         });
         return;
       }
@@ -278,7 +286,7 @@ router.post(
       }
       const metaUnidad = metaDocUnidad(tipo);
       if (metaUnidad?.soloImagen && !req.file.mimetype.startsWith("image/")) {
-        res.status(400).json({ error: "La cédula requiere una foto" });
+        res.status(400).json({ error: `${metaUnidad.label} requiere una foto` });
         return;
       }
 

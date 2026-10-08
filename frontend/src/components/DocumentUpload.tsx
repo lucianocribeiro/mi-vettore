@@ -7,6 +7,7 @@ import {
   TIPOS_DOCUMENTO_CON_VENCIMIENTO,
   TIPOS_DOCUMENTO_OBLIGATORIOS,
   TIPOS_DOCUMENTO_UNIDAD,
+  TIPOS_FOTO_VEHICULO,
   TIPO_DOCUMENTO_LABEL,
   type Chofer,
   type DocumentoEntidad,
@@ -17,6 +18,14 @@ import {
 type Props = {
   choferId?: string;
   camionetaId?: string;
+};
+
+const FOTO_HINT: Partial<Record<TipoDocumento, string>> = {
+  FOTO_VEHICULO: "Vehículo de frente, con la patente visible.",
+  FOTO_ATRAS: "Vehículo desde atrás, con la patente visible.",
+  FOTO_LATERAL_IZQ: "Costado izquierdo completo del vehículo.",
+  FOTO_LATERAL_DER: "Costado derecho completo del vehículo.",
+  FOTO_CARGA: "Caja / zona de carga por dentro.",
 };
 
 export async function compressImageIfNeeded(file: File): Promise<File | Blob> {
@@ -311,9 +320,9 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
                     {esObligatorio ? "(obligatorio)" : "(opcional)"}
                   </span>
                 </div>
-                {t === "FOTO_VEHICULO" && (
+                {FOTO_HINT[t] && (
                   <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                    Foto del vehículo (Vettore indica el detalle / ángulo requerido).
+                    {FOTO_HINT[t]}
                   </div>
                 )}
                 {latest ? (
@@ -382,10 +391,18 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
                   </>
                 )}
                 <label className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-[#1e4080]/50 bg-[#1e4080]/5 px-3 text-xs font-semibold text-[#1e4080] dark:text-sky-300">
-                  {uploading && tipoUploading === t ? "Subiendo…" : "Foto / PDF"}
+                  {uploading && tipoUploading === t
+                    ? "Subiendo…"
+                    : TIPOS_FOTO_VEHICULO.includes(t)
+                      ? "Sacar foto"
+                      : "Foto / PDF"}
                   <input
                     type="file"
-                    accept="image/*,application/pdf"
+                    accept={
+                      TIPOS_FOTO_VEHICULO.includes(t)
+                        ? "image/*"
+                        : "image/*,application/pdf"
+                    }
                     capture="environment"
                     className="sr-only"
                     disabled={uploading}
