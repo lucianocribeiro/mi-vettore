@@ -5,6 +5,7 @@ import { ROLE_LABELS, type Role } from "../types";
 import { ThemeToggle } from "./ThemeToggle";
 import {
   AlertCircle,
+  AlertTriangle,
   Clock,
   CreditCard,
   FileText,
@@ -50,6 +51,13 @@ const NAV: NavItem[] = [
         roles: ["ADMINISTRADOR", "OPERACIONES"],
       },
     ],
+  },
+  {
+    to: "/inhabilitaciones",
+    label: "Inhabilitaciones",
+    sub: "Seguimiento",
+    icon: AlertTriangle,
+    roles: ["ADMINISTRADOR", "OPERACIONES"],
   },
   {
     to: "/documentacion",

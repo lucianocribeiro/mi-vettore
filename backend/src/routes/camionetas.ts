@@ -25,6 +25,7 @@ import { uploadDocumento } from "../lib/supabase-storage.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
 import { estadoEntidadFrom, MOTIVOS_INHABILITAR_UNIDAD } from "../lib/estado-entidad.js";
 import { errorEquipoTipoFrio } from "../lib/equipo-frio.js";
+import { sincronizarInhabilitacionUnidad } from "../lib/inhabilitaciones.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -988,6 +989,7 @@ router.post("/", ...write, async (req, res) => {
       },
       include: includeAsignaciones,
     });
+    await sincronizarInhabilitacionUnidad(prisma, item, req.body, (req as AuthedRequest).user?.id);
 
     if (cedulaFoto.startsWith("data:image/")) {
       const mime = cedulaFoto.slice(5, cedulaFoto.indexOf(";"));
@@ -1212,6 +1214,9 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
       data,
       include: includeAsignaciones,
     });
+    if ("estado" in data || "estadoDesde" in data || "estadoHasta" in data) {
+      await sincronizarInhabilitacionUnidad(prisma, item, req.body, req.user?.id);
+    }
     res.json({
       ...item,
       ...(kmAnomalia
@@ -1401,13 +1406,14 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
   }
 });
 
-router.post("/:id/reactivar", ...write, async (req, res) => {
+router.post("/:id/reactivar", ...write, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.camioneta.update({
       where: { id: req.params.id },
       data: { estado: EstadoCamioneta.OPERATIVA, estadoDesde: null, estadoHasta: null },
       include: includeAsignaciones,
     });
+    await sincronizarInhabilitacionUnidad(prisma, item, undefined, req.user?.id);
     res.json(item);
   } catch {
     res.status(404).json({ error: "Camioneta no encontrada" });
@@ -1465,7 +1471,7 @@ router.post("/:id/asignacion", authenticate, async (req: AuthedRequest, res) => 
 });
 
 /** Activa = OPERATIVA, Inhabilitada = vacaciones / fuera de servicio (motivo), Inactiva = INACTIVA. */
-router.post("/:id/estado", ...write, async (req, res) => {
+router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
   try {
     const estado = estadoEntidadFrom(req.body?.estado);
     if (!estado) {
@@ -1482,14 +1488,17 @@ router.post("/:id/estado", ...write, async (req, res) => {
       }
       destino = motivo as EstadoCamioneta;
     }
+    const inhabilitar = estado === "INHABILITADO";
     const item = await prisma.camioneta.update({
       where: { id: req.params.id },
       data: {
         estado: destino,
-        ...(destino === EstadoCamioneta.DE_VACACIONES ? {} : { estadoDesde: null, estadoHasta: null }),
+        estadoDesde: inhabilitar ? parseDate(req.body?.desde) ?? new Date() : null,
+        estadoHasta: inhabilitar ? parseDate(req.body?.hasta) : null,
       },
       include: includeAsignaciones,
     });
+    await sincronizarInhabilitacionUnidad(prisma, item, req.body, req.user?.id);
     res.json(item);
   } catch {
     res.status(404).json({ error: "Camioneta no encontrada" });
@@ -1526,26 +1535,28 @@ router.post("/:id/eliminar", ...write, async (req, res) => {
 });
 
 /** Soft delete: marca FUERA_SERVICIO */
-router.post("/:id/baja", ...write, async (req, res) => {
+router.post("/:id/baja", ...write, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.camioneta.update({
       where: { id: req.params.id },
       data: { estado: EstadoCamioneta.FUERA_SERVICIO },
       include: includeAsignaciones,
     });
+    await sincronizarInhabilitacionUnidad(prisma, item, req.body, req.user?.id);
     res.json(item);
   } catch {
     res.status(404).json({ error: "Camioneta no encontrada" });
   }
 });
 
-router.delete("/:id", ...write, async (req, res) => {
+router.delete("/:id", ...write, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.camioneta.update({
       where: { id: req.params.id },
       data: { estado: EstadoCamioneta.FUERA_SERVICIO },
       include: includeAsignaciones,
     });
+    await sincronizarInhabilitacionUnidad(prisma, item, req.body, req.user?.id);
     res.json(item);
   } catch {
     res.status(404).json({ error: "Camioneta no encontrada" });

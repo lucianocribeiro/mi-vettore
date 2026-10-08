@@ -6,6 +6,11 @@ import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
 import { estadoEntidadFrom } from "../lib/estado-entidad.js";
+import {
+  cerrarInhabilitacionesDeEmpresa,
+  datosInhabilitacionDe,
+  sincronizarInhabilitacion,
+} from "../lib/inhabilitaciones.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
@@ -236,13 +241,14 @@ router.put("/:id", ...write, async (req, res) => {
   }
 });
 
-router.delete("/:id", ...write, async (req, res) => {
+router.delete("/:id", ...write, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.$transaction(async (tx) => {
       const empresa = await tx.empresaTransporte.update({
         where: { id: req.params.id },
-        data: { activo: false },
+        data: { activo: false, inhabilitada: false },
       });
+      await cerrarInhabilitacionesDeEmpresa(tx, empresa.id, req.user?.id);
       await tx.usuario.updateMany({
         where: { empresaId: empresa.id, rol: Role.EMPRESA },
         data: { estado: "INACTIVO" },
@@ -292,7 +298,7 @@ router.post("/:id/reactivar", ...write, async (req, res) => {
 });
 
 /** Activo / Inhabilitado / Inactivo. Inactivar hace cascade; volver desde inactiva lo revierte. */
-router.post("/:id/estado", ...write, async (req, res) => {
+router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
   try {
     const estado = estadoEntidadFrom(req.body?.estado);
     if (!estado) {
@@ -304,8 +310,11 @@ router.post("/:id/estado", ...write, async (req, res) => {
       res.status(404).json({ error: "Empresa no encontrada" });
       return;
     }
+    const datos = datosInhabilitacionDe(req.body, req.user?.id);
     const item = await prisma.$transaction(async (tx) => {
+      await sincronizarInhabilitacion(tx, "EMPRESA", actual.id, estado === "INHABILITADO", datos);
       if (estado === "INACTIVO") {
+        await cerrarInhabilitacionesDeEmpresa(tx, actual.id, req.user?.id);
         await tx.usuario.updateMany({
           where: { empresaId: actual.id, rol: Role.EMPRESA },
           data: { estado: "INACTIVO" },

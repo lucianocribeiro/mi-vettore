@@ -20,10 +20,6 @@ import {
   type FiltroEstado,
 } from "./EstadoEntidad";
 
-const MOTIVOS_INHABILITAR_UNIDAD = [
-  { value: "DE_VACACIONES", label: "De vacaciones" },
-  { value: "FUERA_SERVICIO", label: "Fuera de servicio" },
-];
 import {
   ROLE_LABELS,
   TIPO_TALLER_LABEL,
@@ -45,6 +41,7 @@ import { FichaDrawer } from "./FichaDrawer";
 import { Field, FormModal, inputClass } from "./FormModal";
 import { NoticeDialog } from "../../components/NoticeDialog";
 import { EquiposFrioAbmPanel, type EquipoFrio } from "./EquiposFrioAbmPanel";
+import { InhabilitarDialog, type DatosInhabilitar } from "./InhabilitarDialog";
 import {
   MarcasModelosAbmPanel,
   type MarcaCamionetaAbm,
@@ -134,6 +131,10 @@ export function M5FichaPage() {
   const [usuarios, setUsuarios] = useState<User[]>([]);
   const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([]);
   const [equiposFrio, setEquiposFrio] = useState<EquipoFrio[]>([]);
+  const [inhabilitando, setInhabilitando] = useState<{
+    tipo: "empresa" | "chofer" | "camioneta";
+    id: string;
+  } | null>(null);
   const [marcasCamioneta, setMarcasCamioneta] = useState<MarcaCamionetaAbm[]>(
     []
   );
@@ -839,10 +840,14 @@ export function M5FichaPage() {
     tipo: "empresa" | "chofer" | "camioneta",
     id: string,
     estado: EstadoEntidad,
-    motivo?: string
+    datos?: DatosInhabilitar
   ) {
     if (!token || !canEdit) return;
-    let msg = CONFIRM_ESTADO[tipo][estado];
+    if (estado === "INHABILITADO" && !datos) {
+      setInhabilitando({ tipo, id });
+      return;
+    }
+    let msg = estado === "INHABILITADO" ? undefined : CONFIRM_ESTADO[tipo][estado];
     if (tipo === "empresa" && estado !== "INACTIVO") {
       const emp = empresas.find((x) => x.id === id);
       if (emp?.activo === false) {
@@ -854,7 +859,7 @@ export function M5FichaPage() {
     try {
       const updated = await apiFetch<Empresa | Chofer | Camioneta>(
         `/api/${base}/${id}/estado`,
-        { method: "POST", body: JSON.stringify({ estado, motivo }) },
+        { method: "POST", body: JSON.stringify({ estado, ...datos }) },
         token
       );
       if (tipo === "empresa") {
@@ -869,7 +874,9 @@ export function M5FichaPage() {
         if (drawer?.tipo === "camioneta" && drawer.item.id === id) setDrawer({ tipo: "camioneta", item: cam });
       }
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo cambiar el estado");
+      const mensaje = err instanceof ApiError ? err.message : "No se pudo cambiar el estado";
+      if (datos) throw new Error(mensaje);
+      alert(mensaje);
     }
   }
 
@@ -1421,10 +1428,7 @@ export function M5FichaPage() {
                       {canEdit && (
                         <EstadoAcciones
                           estado={estadoUnidad(c)}
-                          motivos={MOTIVOS_INHABILITAR_UNIDAD}
-                          onCambiar={(estado, motivo) =>
-                            void cambiarEstado("camioneta", c.id, estado, motivo)
-                          }
+                          onCambiar={(estado) => void cambiarEstado("camioneta", c.id, estado)}
                           onEliminar={() => void eliminarEntidad("camioneta", c.id)}
                         />
                       )}
@@ -1903,6 +1907,32 @@ export function M5FichaPage() {
               ""
             ),
           ])}
+        />
+      )}
+
+      {inhabilitando && (
+        <InhabilitarDialog
+          titulo={`Inhabilitar ${
+            inhabilitando.tipo === "empresa"
+              ? empresas.find((e) => e.id === inhabilitando.id)?.nombre ?? "empresa"
+              : inhabilitando.tipo === "chofer"
+                ? (() => {
+                    const ch = choferes.find((c) => c.id === inhabilitando.id);
+                    return ch ? `${ch.nombre} ${ch.apellido ?? ""}`.trim() : "chofer";
+                  })()
+                : camionetas.find((c) => c.id === inhabilitando.id)?.patente ?? "unidad"
+          }`}
+          aviso={
+            inhabilitando.tipo === "camioneta"
+              ? "No se le asignan choferes mientras esté inhabilitada."
+              : "Sigue viendo la app, pero no se le asignan unidades/choferes ni puede pedir taller."
+          }
+          esUnidad={inhabilitando.tipo === "camioneta"}
+          onClose={() => setInhabilitando(null)}
+          onSubmit={async (datos) => {
+            await cambiarEstado(inhabilitando.tipo, inhabilitando.id, "INHABILITADO", datos);
+            setInhabilitando(null);
+          }}
         />
       )}
 

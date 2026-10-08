@@ -13,6 +13,7 @@ import { M3ComunicacionesPage } from "./pages/m3/M3ComunicacionesPage";
 import { M6MantenimientoPage } from "./pages/m6/M6MantenimientoPage";
 import { M7TalleresPage } from "./pages/m7/M7TalleresPage";
 import { HistorialTalleresPage } from "./pages/m7/HistorialTalleresPage";
+import { InhabilitacionesPage } from "./pages/inhabilitaciones/InhabilitacionesPage";
 import { TallerExternoPage } from "./pages/m7/TallerExternoPage";
 import { DocumentacionPage } from "./pages/documentacion/DocumentacionPage";
 import { SugerenciasPage } from "./pages/SugerenciasPage";
@@ -151,6 +152,16 @@ export default function App() {
                 <SugerenciasOnlyGate>
                   <VettoreOpsGate>
                     <HistorialTalleresPage />
+                  </VettoreOpsGate>
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
+              path="/inhabilitaciones"
+              element={
+                <SugerenciasOnlyGate>
+                  <VettoreOpsGate>
+                    <InhabilitacionesPage />
                   </VettoreOpsGate>
                 </SugerenciasOnlyGate>
               }

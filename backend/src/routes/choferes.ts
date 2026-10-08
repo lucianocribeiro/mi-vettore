@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
 import { estadoEntidadFrom } from "../lib/estado-entidad.js";
+import { datosInhabilitacionDe, sincronizarInhabilitacion } from "../lib/inhabilitaciones.js";
 import { ensureUsuarioForChofer } from "../lib/usuario-chofer.js";
 import { generateTempPassword } from "../lib/temp-password.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
@@ -236,6 +237,15 @@ router.post("/", ...write, async (req, res) => {
       },
       include: includeAsignaciones,
     });
+    if (item.estado === EstadoChofer.INHABILITADO) {
+      await sincronizarInhabilitacion(
+        prisma,
+        "CHOFER",
+        item.id,
+        true,
+        datosInhabilitacionDe(req.body, (req as AuthedRequest).user?.id)
+      );
+    }
     const access = await ensureUsuarioForChofer({
       choferId: item.id,
       email: item.email,
@@ -277,7 +287,7 @@ router.post("/", ...write, async (req, res) => {
   }
 });
 
-router.put("/:id", ...write, async (req, res) => {
+router.put("/:id", ...write, async (req: AuthedRequest, res) => {
   try {
     const existing = await prisma.chofer.findUnique({ where: { id: req.params.id } });
     if (!existing) {
@@ -339,6 +349,15 @@ router.put("/:id", ...write, async (req, res) => {
       data,
       include: includeAsignaciones,
     });
+    if (data.estado !== undefined && data.estado !== existing.estado) {
+      await sincronizarInhabilitacion(
+        prisma,
+        "CHOFER",
+        item.id,
+        item.estado === EstadoChofer.INHABILITADO,
+        datosInhabilitacionDe(req.body, req.user?.id)
+      );
+    }
     await ensureUsuarioForChofer({
       choferId: item.id,
       email: item.email,
@@ -360,20 +379,21 @@ router.put("/:id", ...write, async (req, res) => {
   }
 });
 
-router.delete("/:id", ...write, async (req, res) => {
+router.delete("/:id", ...write, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.chofer.update({
       where: { id: req.params.id },
       data: { estado: EstadoChofer.INACTIVO },
       include: includeAsignaciones,
     });
+    await sincronizarInhabilitacion(prisma, "CHOFER", item.id, false, { userId: req.user?.id });
     res.json(item);
   } catch {
     res.status(404).json({ error: "Chofer no encontrado" });
   }
 });
 
-router.post("/:id/estado", ...write, async (req, res) => {
+router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
   try {
     const estado = estadoEntidadFrom(req.body?.estado);
     if (!estado) {
@@ -385,6 +405,13 @@ router.post("/:id/estado", ...write, async (req, res) => {
       data: { estado: EstadoChofer[estado] },
       include: includeAsignaciones,
     });
+    await sincronizarInhabilitacion(
+      prisma,
+      "CHOFER",
+      item.id,
+      estado === "INHABILITADO",
+      datosInhabilitacionDe(req.body, req.user?.id)
+    );
     res.json(item);
   } catch {
     res.status(404).json({ error: "Chofer no encontrado" });
@@ -425,13 +452,14 @@ router.post("/:id/eliminar", ...write, async (req, res) => {
   }
 });
 
-router.post("/:id/baja", ...write, async (req, res) => {
+router.post("/:id/baja", ...write, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.chofer.update({
       where: { id: req.params.id },
       data: { estado: EstadoChofer.INACTIVO },
       include: includeAsignaciones,
     });
+    await sincronizarInhabilitacion(prisma, "CHOFER", item.id, false, { userId: req.user?.id });
     res.json(item);
   } catch {
     res.status(404).json({ error: "Chofer no encontrado" });

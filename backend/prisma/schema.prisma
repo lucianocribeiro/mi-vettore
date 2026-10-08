@@ -147,6 +147,8 @@ model Usuario {
   avisos               AvisoInterno[]     @relation("AvisoUsuario")
   docsValidados        DocumentoEntidad[] @relation("DocValidador")
   correccionesAdmin    CorreccionAdmin[]
+  inhabilitacionesCreadas  Inhabilitacion[] @relation("InhabilitacionCreador")
+  inhabilitacionesCerradas Inhabilitacion[] @relation("InhabilitacionCierre")
 
   @@index([empresaId])
 }
@@ -187,6 +189,7 @@ model Chofer {
   usuarios            Usuario[]
   solicitudes         SolicitudTaller[]
   documentos          DocumentoEntidad[]
+  inhabilitaciones    Inhabilitacion[]
 
   @@index([empresaId])
 }
@@ -295,6 +298,7 @@ model Camioneta {
   documentos             DocumentoEntidad[]
   kmRegistros            KmRegistro[]
   registrosMantenimiento RegistroMantenimiento[]
+  inhabilitaciones       Inhabilitacion[]
 
   @@index([empresaId])
 }
@@ -316,6 +320,38 @@ model EmpresaTransporte {
   unidades               Camioneta[]      @relation("EmpresaUnidades")
   choferes               Chofer[]
   usuarios               Usuario[]
+  inhabilitaciones       Inhabilitacion[]
+}
+
+/// Seguimiento de inhabilitaciones de empresa, chofer o unidad. Abierta = cerradaAt null.
+model Inhabilitacion {
+  id           String    @id @default(cuid())
+  /// EMPRESA | CHOFER | UNIDAD
+  entidad      String
+  empresaId    String?
+  choferId     String?
+  camionetaId  String?
+  /// Unidades: DE_VACACIONES o FUERA_SERVICIO.
+  tipo         String?
+  motivo       String
+  desde        DateTime
+  hasta        DateTime?
+  creadoPorId  String?
+  cerradaAt    DateTime?
+  cerradaPorId String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  empresa    EmpresaTransporte? @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  chofer     Chofer?            @relation(fields: [choferId], references: [id], onDelete: Cascade)
+  camioneta  Camioneta?         @relation(fields: [camionetaId], references: [id], onDelete: Cascade)
+  creadoPor  Usuario?           @relation("InhabilitacionCreador", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  cerradaPor Usuario?           @relation("InhabilitacionCierre", fields: [cerradaPorId], references: [id], onDelete: SetNull)
+
+  @@index([cerradaAt])
+  @@index([empresaId])
+  @@index([choferId])
+  @@index([camionetaId])
 }
 
 /// Vínculo ternario: chofer y patente al mismo nivel bajo la empresa (sin chofer↔patente fijo).

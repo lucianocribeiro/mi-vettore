@@ -17,6 +17,10 @@ import {
 import { ensureUsuarioForChofer } from "../lib/usuario-chofer.js";
 import { generateTempPassword } from "../lib/temp-password.js";
 import { reasignarChoferUnidad } from "../lib/asignacion-flota.js";
+import {
+  sincronizarInhabilitacion,
+  sincronizarInhabilitacionUnidad,
+} from "../lib/inhabilitaciones.js";
 import bcrypt from "bcryptjs";
 
 const router = Router();
@@ -161,6 +165,12 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
           const saved = current
             ? await tx.chofer.update({ where: { id: current.id }, data })
             : await tx.chofer.create({ data: { ...data, dni: c.dni, empresaId } });
+          if (saved.estado !== current?.estado) {
+            await sincronizarInhabilitacion(tx, "CHOFER", saved.id, saved.estado === "INHABILITADO", {
+              userId: req.user?.id,
+              motivoPorDefecto: "Importado desde Excel",
+            });
+          }
           if (current) actualizados.choferes++;
           else creados.choferes++;
           choferesParaAcceso.push(saved.id);
@@ -207,25 +217,24 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
             }
           }
 
-          let camionetaId: string;
-          if (current) {
-            await tx.camioneta.update({
-              where: { id: current.id },
-              data: { ...datos, empresaId },
-            });
-            camionetaId = current.id;
-            actualizados.unidades++;
-          } else {
-            const nueva = await tx.camioneta.create({
-              data: {
-                ...(datos as Prisma.CamionetaUncheckedCreateInput),
-                patente: u.patente,
-                empresaId,
-                estado: (datos.estado as EstadoCamioneta | undefined) ?? EstadoCamioneta.OPERATIVA,
-              },
-            });
-            camionetaId = nueva.id;
-            creados.unidades++;
+          const guardada = current
+            ? await tx.camioneta.update({
+                where: { id: current.id },
+                data: { ...datos, empresaId },
+              })
+            : await tx.camioneta.create({
+                data: {
+                  ...(datos as Prisma.CamionetaUncheckedCreateInput),
+                  patente: u.patente,
+                  empresaId,
+                  estado: (datos.estado as EstadoCamioneta | undefined) ?? EstadoCamioneta.OPERATIVA,
+                },
+              });
+          const camionetaId = guardada.id;
+          if (current) actualizados.unidades++;
+          else creados.unidades++;
+          if (guardada.estado !== current?.estado) {
+            await sincronizarInhabilitacionUnidad(tx, guardada, undefined, req.user?.id);
           }
 
           if (u.choferes.length) {
