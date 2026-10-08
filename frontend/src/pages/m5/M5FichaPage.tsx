@@ -992,18 +992,6 @@ export function M5FichaPage() {
     return filterCamionetas(visibles, { ...EMPTY_FLOTA_FILTERS, query: abmQuery });
   }, [camionetasDeEmpresa, abmQuery, estadoFiltro.camioneta]);
 
-  const patentesPorChofer = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const cam of camionetas) {
-      if (cam.estado === "INACTIVA") continue;
-      for (const a of cam.asignaciones ?? []) {
-        if (a.periodoHasta) continue;
-        map.set(a.choferId, [...(map.get(a.choferId) ?? []), cam.patente]);
-      }
-    }
-    return map;
-  }, [camionetas]);
-
   const empresaCounts = useMemo(
     () => contarEstados(Array.isArray(empresas) ? empresas : [], estadoEmpresa),
     [empresas]
@@ -1022,7 +1010,11 @@ export function M5FichaPage() {
         .filter((c) => c.estado !== "INACTIVO")
         .map((c) => `${c.nombre} ${c.apellido ?? ""} ${c.dni}`)
         .join(" ");
-      const hay = [e.nombre, e.cuit, e.contacto, choferesTxt]
+      const patentesTxt = (e.unidades ?? [])
+        .filter((u) => u.estado !== "INACTIVA")
+        .map((u) => u.patente)
+        .join(" ");
+      const hay = [e.nombre, e.cuit, e.contacto, choferesTxt, patentesTxt]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -1694,10 +1686,11 @@ export function M5FichaPage() {
           </p>
         </div>
         <EntityTable
-          headers={["Nombre", "CUIT", "Estado", "Choferes", ""]}
+          headers={["Nombre", "CUIT", "Estado", "Choferes", "Patentes", ""]}
           rows={empresasFiltradas.map((e) => {
             const wa = whatsappDigits(e.contacto);
             const choferesEmp = (e.choferes ?? []).filter((c) => c.estado !== "INACTIVO");
+            const unidadesEmp = (e.unidades ?? []).filter((u) => u.estado !== "INACTIVA");
             const estadoEmp = estadoEmpresa(e);
             return [
               e.nombre,
@@ -1705,21 +1698,21 @@ export function M5FichaPage() {
               <EstadoBadge key={`est-${e.id}`} estado={estadoEmp} />,
               choferesEmp.length ? (
                 <ul key={`ch-${e.id}`} className="space-y-0.5">
-                  {choferesEmp.map((c) => {
-                    const patentes = patentesPorChofer.get(c.id) ?? [];
-                    return (
-                      <li key={c.id}>
-                        {`${c.nombre} ${c.apellido ?? ""}`.trim()}
-                        <span className="text-[var(--vl-text-muted)]">
-                          {" · "}
-                          {patentes.length ? patentes.join(", ") : "sin patente"}
-                        </span>
-                      </li>
-                    );
-                  })}
+                  {choferesEmp.map((c) => (
+                    <li key={c.id}>{`${c.nombre} ${c.apellido ?? ""}`.trim()}</li>
+                  ))}
                 </ul>
               ) : (
                 "Sin choferes"
+              ),
+              unidadesEmp.length ? (
+                <ul key={`un-${e.id}`} className="space-y-0.5">
+                  {unidadesEmp.map((u) => (
+                    <li key={u.id}>{u.patente}</li>
+                  ))}
+                </ul>
+              ) : (
+                "Sin patentes"
               ),
               <div key={e.id} className="flex flex-wrap items-center justify-end gap-2 text-xs">
                 {wa && (
