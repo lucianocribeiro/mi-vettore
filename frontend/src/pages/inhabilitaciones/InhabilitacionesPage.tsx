@@ -178,10 +178,6 @@ export function InhabilitacionesPage() {
           </span>
           <h1 className="text-lg font-bold text-[var(--vl-heading)] sm:text-xl">Inhabilitaciones</h1>
         </div>
-        <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-          Empresas, choferes y unidades inhabilitados: motivo, desde cuándo, hasta cuándo y quién lo hizo.
-          Se inhabilita desde la Ficha integral.
-        </p>
       </div>
 
       <div className="mb-4 space-y-3">

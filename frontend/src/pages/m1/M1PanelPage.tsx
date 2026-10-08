@@ -274,10 +274,6 @@ export function M1PanelPage() {
               Panel de control de tráfico
             </h1>
           </div>
-          <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            Vista única de pedidos y cambios. Los que llegan por el formulario
-            del cliente o desde talleres entran directo acá.
-          </p>
           <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
             Colores de estado: pendiente &gt;{AGE_WARN_HOURS}h = alerta, &gt;
             {AGE_CRITICAL_HOURS}h = crítico (desde la creación).

@@ -134,10 +134,6 @@ export function EquiposFrioAbmPanel({ query = "" }: { query?: string }) {
         <h2 className="text-base font-bold text-[var(--vl-heading)]">
           Equipo de frío
         </h2>
-        <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-          Marcas de equipo y los tipos de frío que admite cada una. Al cargar
-          una unidad, el tipo de frío se limita a los marcados acá.
-        </p>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

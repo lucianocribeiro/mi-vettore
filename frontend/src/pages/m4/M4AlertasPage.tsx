@@ -16,7 +16,6 @@ type Alerta = {
 export function M4AlertasPage() {
   const { token, user } = useAuth();
   const [alertas, setAlertas] = useState<Alerta[]>([]);
-  const [dias, setDias] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exportando, setExportando] = useState(false);
@@ -32,7 +31,6 @@ export function M4AlertasPage() {
         token
       );
       setAlertas(data.alertas);
-      setDias(data.diasVentana);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar alertas");
     } finally {
@@ -76,10 +74,6 @@ export function M4AlertasPage() {
               Alertas de vencimiento
             </h1>
           </div>
-          <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            VTV, seguro y licencias que vencen en los próximos {dias} días (o ya
-            vencieron).
-          </p>
         </div>
         <button
           type="button"

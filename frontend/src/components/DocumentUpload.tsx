@@ -263,11 +263,6 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
       <div className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
         {choferId ? "Documentos del chofer" : "Documentos de la unidad"}
       </div>
-      <p className="text-[11px] text-[var(--vl-text-muted)]">
-        Completá cada título a la derecha: fecha de vencimiento (si aplica) y foto o PDF.
-        Los marcados como obligatorios deben cargarse.
-      </p>
-
       <div className="space-y-2">
         {choferId && (
           <div className="flex flex-col gap-2.5 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50">

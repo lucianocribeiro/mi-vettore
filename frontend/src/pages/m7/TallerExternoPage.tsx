@@ -109,13 +109,6 @@ export function TallerExternoPage() {
             <span className="h-2.5 w-2.5 rounded-full bg-violet-500" />
             Taller externo
           </h1>
-          <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            {puedeCargar
-              ? "Reparaciones hechas fuera del circuito interno. Sin presupuestos ni montos: se carga la solicitud y queda en el historial de talleres como OTE."
-              : user?.rol === "EMPRESA" || user?.esDuenoFlota
-                ? "Reparaciones en talleres externos de las unidades de tu flota."
-                : "Reparaciones en talleres externos de tu unidad."}
-          </p>
         </div>
         {puedeSolicitar && (
           <button

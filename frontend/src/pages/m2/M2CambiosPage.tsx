@@ -60,9 +60,6 @@ export function M2CambiosPage() {
         <h1 className="text-lg font-bold text-[var(--vl-heading)] sm:text-xl">
           Formulario de cambios
         </h1>
-        <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-          Cargá altas, bajas o cambios de servicio. El motivo es obligatorio.
-        </p>
         {user?.nombre && (
           <p className="mt-1 text-xs text-[var(--vl-text-muted)]">
             Sesión: {user.nombre}

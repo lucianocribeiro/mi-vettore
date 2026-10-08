@@ -480,13 +480,6 @@ export function M7TalleresPage() {
           <h1 className="text-lg font-bold text-[var(--vl-heading)] sm:text-xl">
             {isOps(rol) ? "Taller interno · órdenes de trabajo" : "Talleres y órdenes de trabajo"}
           </h1>
-          <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            {esRolEmpresa || esDuenoEmpresa
-              ? "Seguí las OT de tu flota. El circuito de proveedores y cuenta corriente es interno de Vettore."
-              : esChofer
-                ? "Seguí el estado de tu solicitud. El detalle interno lo ve solo el equipo de Vettore."
-                : "Solicitud → presupuesto → selección → ajuste de importes → comparación y cierre."}
-          </p>
           <p className="mt-1 text-xs font-medium text-[#1e4080] dark:text-sky-300">
             {roleActionHint(rol, {
               esDuenoEmpresa,

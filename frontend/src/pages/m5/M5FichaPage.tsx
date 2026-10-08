@@ -1260,11 +1260,6 @@ export function M5FichaPage() {
                 : "Ficha integral: camioneta / chofer / empresa"}
             </h1>
           </div>
-          <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            {vistaUsuarios
-              ? "Personal interno de Vettore (administrador, operaciones, sugerencias)."
-              : "Registro maestro y ABM: reasignar patentes desde acá, con historial conservado."}
-          </p>
         </div>
         {isInternalOps(user?.rol) && (
           <div className="flex flex-wrap gap-2">
@@ -1555,10 +1550,6 @@ export function M5FichaPage() {
 
       {!loading && !error && tab === "asignacion" && (
         <div className="space-y-4">
-          <p className="text-sm text-[var(--vl-text-muted)]">
-            Elegí la empresa y asigná uno o más choferes a cada patente. Solo
-            aparecen choferes de esa empresa.
-          </p>
           <label className="block max-w-md text-xs text-[var(--vl-text-muted)]">
             Empresa de transporte
             <select

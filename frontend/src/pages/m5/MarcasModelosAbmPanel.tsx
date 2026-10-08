@@ -151,10 +151,6 @@ export function MarcasModelosAbmPanel({ query = "" }: { query?: string }) {
         <h2 className="text-base font-bold text-[var(--vl-heading)]">
           Marcas y modelos
         </h2>
-        <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-          Catálogo para el alta de unidades: elegís marca y el modelo se completa
-          según esa marca.
-        </p>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

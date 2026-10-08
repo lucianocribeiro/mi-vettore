@@ -302,21 +302,14 @@ export function M6MantenimientoPage() {
         <h1 className="mt-2 text-lg font-bold text-[var(--vl-heading)] sm:text-xl">
           Panel de unidades
         </h1>
-        <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-          {esDueno
-            ? "Tarjetas de tu flota: tocá una para cargar km / aceite."
-            : "Tu unidad en tarjeta: tocá para actualizar km / aceite."}
-          {user?.empresaNombre ? (
-            <>
-              {" "}
-              Empresa:{" "}
-              <span className="font-medium text-[var(--vl-heading)]">
-                {user.empresaNombre}
-              </span>
-              .
-            </>
-          ) : null}
-        </p>
+        {user?.empresaNombre && (
+          <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
+            Empresa:{" "}
+            <span className="font-medium text-[var(--vl-heading)]">
+              {user.empresaNombre}
+            </span>
+          </p>
+        )}
         <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-[var(--vl-text-muted)]">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Ok

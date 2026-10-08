@@ -333,11 +333,6 @@ export function HistorialTalleresPage() {
               Historial de talleres
             </h1>
           </div>
-          <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            {vista === "conceptos"
-              ? "Árbol de conceptos / totizaciones por nivel de diagnóstico."
-              : "Buscá por unidad, OT o taller: qué se usó y cuánto se facturó."}
-          </p>
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:max-w-md sm:justify-end">
           <button

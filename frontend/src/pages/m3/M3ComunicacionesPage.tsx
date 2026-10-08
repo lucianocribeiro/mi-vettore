@@ -180,11 +180,6 @@ export function M3ComunicacionesPage() {
               Motor de comunicaciones
             </h1>
           </div>
-          <p className="mt-1 text-sm text-[var(--vl-text-muted)]">
-            Email automático Lun–Vie 09/12/15, recordatorio de km los lunes y
-            alertas de VTV/licencia a las 08:30. WhatsApp de urgencias queda
-            en el botón de emergencia del chofer.
-          </p>
           {meta && (
             <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
               Cobertura desde hoy: <strong>{meta.coberturaHoy.label}</strong>
