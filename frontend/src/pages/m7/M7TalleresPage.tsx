@@ -402,6 +402,68 @@ export function M7TalleresPage() {
     }
   }
 
+  /** Guarda lo pendiente de la etapa actual (ítem en edición, tildes e importes). */
+  async function guardarPaso(): Promise<{ ok: boolean; guardoItem: boolean }> {
+    if (!ot) return { ok: false, guardoItem: false };
+    setBusy(true);
+    let guardoItem = false;
+    try {
+      if (itemSaveRef.current && itemFormDirty) {
+        const ok = await itemSaveRef.current();
+        if (!ok) {
+          setError("Completá los campos obligatorios del ítem para guardar");
+          return { ok: false, guardoItem };
+        }
+        guardoItem = true;
+      }
+
+      let needReload = false;
+      for (const [id, aprobado] of Object.entries(aprobadoDrafts)) {
+        const item = (ot.items ?? []).find((i) => i.id === id);
+        if (!item || !!item.aprobado === aprobado) continue;
+        await apiFetch(
+          `/api/talleres/${ot.id}/items/${id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              aprobado,
+              sugeridoEmpresa: aprobado,
+            }),
+          },
+          token!
+        );
+        needReload = true;
+      }
+
+      if (isAjusteStep(ot.currentStep) && !ot.sinPresupuesto) {
+        for (const [id, draft] of Object.entries(importeDrafts)) {
+          if (!Number.isFinite(draft) || draft < 0) continue;
+          const item = (ot.items ?? []).find((i) => i.id === id);
+          if (!item || item.importe === draft) continue;
+          await apiFetch(
+            `/api/talleres/${ot.id}/items/${id}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({ importe: draft }),
+            },
+            token!
+          );
+          needReload = true;
+        }
+      }
+
+      if (needReload) await load();
+      setAprobadoDrafts({});
+      setImporteDrafts({});
+      return { ok: true, guardoItem };
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Error al guardar");
+      return { ok: false, guardoItem };
+    } finally {
+      setBusy(false);
+    }
+  }
+
   /** Ops: vuelve a una etapa ya recorrida para poder editarla. */
   async function irAEtapaParaEditar(step: number) {
     if (!ot || !puedeEditarTaller || ot.cerradaAt) {
@@ -1144,69 +1206,7 @@ export function M7TalleresPage() {
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={() => {
-                            void (async () => {
-                              setBusy(true);
-                              try {
-                                if (itemSaveRef.current && itemFormDirty) {
-                                  const ok = await itemSaveRef.current();
-                                  if (!ok) {
-                                    setError(
-                                      "Completá los campos obligatorios del ítem para guardar"
-                                    );
-                                    return;
-                                  }
-                                }
-
-                                let needReload = false;
-                                for (const [id, aprobado] of Object.entries(aprobadoDrafts)) {
-                                  const item = (ot.items ?? []).find((i) => i.id === id);
-                                  if (!item || !!item.aprobado === aprobado) continue;
-                                  await apiFetch(
-                                    `/api/talleres/${ot.id}/items/${id}`,
-                                    {
-                                      method: "PATCH",
-                                      body: JSON.stringify({
-                                        aprobado,
-                                        sugeridoEmpresa: aprobado,
-                                      }),
-                                    },
-                                    token!
-                                  );
-                                  needReload = true;
-                                }
-
-                                if (isAjusteStep(ot.currentStep) && !ot.sinPresupuesto) {
-                                  for (const [id, draft] of Object.entries(importeDrafts)) {
-                                    if (!Number.isFinite(draft) || draft < 0) continue;
-                                    const item = (ot.items ?? []).find((i) => i.id === id);
-                                    if (!item || item.importe === draft) continue;
-                                    await apiFetch(
-                                      `/api/talleres/${ot.id}/items/${id}`,
-                                      {
-                                        method: "PATCH",
-                                        body: JSON.stringify({ importe: draft }),
-                                      },
-                                      token!
-                                    );
-                                    needReload = true;
-                                  }
-                                }
-
-                                if (needReload) await load();
-                                setAprobadoDrafts({});
-                                setImporteDrafts({});
-                              } catch (err) {
-                                setError(
-                                  err instanceof ApiError
-                                    ? err.message
-                                    : "Error al guardar"
-                                );
-                              } finally {
-                                setBusy(false);
-                              }
-                            })();
-                          }}
+                          onClick={() => void guardarPaso()}
                           className={`inline-flex h-12 min-h-12 flex-1 items-center justify-center rounded-xl border-2 px-3 text-sm font-semibold disabled:opacity-50 ${
                             hayCambiosPendientes
                               ? "border-[#1e4080] bg-[#1e4080] text-white"
@@ -1385,14 +1385,14 @@ export function M7TalleresPage() {
               id="avanzar-sin-guardar-title"
               className="text-base font-bold text-[var(--vl-heading)]"
             >
-              ¿Avanzar sin guardar?
+              Hay cambios sin guardar
             </h3>
             <p className="mt-2 text-sm text-[var(--vl-text-muted)]">
-              Estás avanzando sin guardar la etapa{" "}
+              La etapa{" "}
               <strong className="text-[var(--vl-heading)]">
                 {OT_STEPS[ot.currentStep]?.label ?? "actual"}
-              </strong>
-              . Los cambios pendientes se van a perder. ¿Estás seguro?
+              </strong>{" "}
+              tiene cambios sin guardar. ¿Qué querés hacer?
             </p>
             <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
@@ -1425,9 +1425,37 @@ export function M7TalleresPage() {
                     setBrowseStep(null);
                   })();
                 }}
-                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-amber-600 bg-amber-600 px-4 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none sm:min-w-[11rem]"
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-amber-600 bg-amber-600 px-4 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none"
               >
-                {busy ? "Avanzando…" : "Sí, avanzar sin guardar"}
+                Avanzar sin guardar
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  void (async () => {
+                    const { ok, guardoItem } = await guardarPaso();
+                    setConfirmAvanzarSinGuardar(false);
+                    if (!ok) return;
+                    const sinItems =
+                      !guardoItem &&
+                      isAsignacionOPresupuestoStep(ot.currentStep) &&
+                      (ot.items ?? []).filter((i) => i.tipo === "PRESUPUESTO")
+                        .length === 0;
+                    if (sinItems) {
+                      setConfirmSinPresupuesto(true);
+                      return;
+                    }
+                    await call(`/api/talleres/${ot.id}/avanzar`, {
+                      method: "POST",
+                      body: JSON.stringify({}),
+                    });
+                    setBrowseStep(null);
+                  })();
+                }}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-[#1e4080] bg-[#1e4080] px-4 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none"
+              >
+                {busy ? "Guardando…" : "Guardar y avanzar"}
               </button>
             </div>
           </div>
