@@ -134,7 +134,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
     const vencimiento = vencByTipo[tipoDoc] ?? "";
     if (needsVenc && !vencimiento) {
       setError(
-        `Indicá el vencimiento de ${TIPO_DOCUMENTO_LABEL[tipoDoc] ?? tipoDoc}`
+        `Indicá la fecha de vencimiento de ${TIPO_DOCUMENTO_LABEL[tipoDoc] ?? tipoDoc}`
       );
       return;
     }
@@ -250,7 +250,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
         {choferId ? "Documentos del chofer" : "Documentos de la unidad"}
       </div>
       <p className="text-[11px] text-[var(--vl-text-muted)]">
-        Completá cada título a la derecha: vencimiento (si aplica) y foto o PDF.
+        Completá cada título a la derecha: fecha de vencimiento (si aplica) y foto o PDF.
         Los marcados como obligatorios deben cargarse.
       </p>
 
@@ -320,7 +320,7 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
                   <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
                     {latest.nombreOriginal || "archivo"}
                     {latest.vencimiento
-                      ? ` · vence ${formatDate(latest.vencimiento)}`
+                      ? ` · fecha de vencimiento ${formatDate(latest.vencimiento)}`
                       : ""}
                     {` · ${latest.estadoValidacion.toLowerCase()}`}
                   </div>
@@ -332,15 +332,18 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {needs && (
-                  <input
-                    type="date"
-                    aria-label={`Vencimiento ${TIPO_DOCUMENTO_LABEL[t] ?? t}`}
-                    value={venc}
-                    onChange={(e) =>
-                      setVencByTipo((prev) => ({ ...prev, [t]: e.target.value }))
-                    }
-                    className="min-h-10 min-w-0 flex-1 basis-[9.5rem] rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-xs text-[var(--vl-text)] sm:max-w-[11rem] sm:flex-none"
-                  />
+                  <label className="flex min-w-0 flex-1 basis-[9.5rem] flex-col gap-0.5 text-[10px] font-medium text-[var(--vl-text-muted)] sm:max-w-[11rem] sm:flex-none">
+                    Fecha de vencimiento
+                    <input
+                      type="date"
+                      aria-label={`Fecha de vencimiento ${TIPO_DOCUMENTO_LABEL[t] ?? t}`}
+                      value={venc}
+                      onChange={(e) =>
+                        setVencByTipo((prev) => ({ ...prev, [t]: e.target.value }))
+                      }
+                      className="min-h-10 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5 text-xs text-[var(--vl-text)]"
+                    />
+                  </label>
                 )}
                 {latest && (
                   <button

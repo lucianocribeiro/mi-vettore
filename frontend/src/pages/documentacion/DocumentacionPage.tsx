@@ -437,7 +437,7 @@ export function DocumentacionPage() {
                 className="min-h-11 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
               />
               <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
-                Vencimiento
+                Fecha de vencimiento
                 <select
                   value={adv.vencimiento}
                   onChange={(e) =>

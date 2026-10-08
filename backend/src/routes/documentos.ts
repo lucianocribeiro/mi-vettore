@@ -286,7 +286,7 @@ router.post(
       const requiereVenc = metaUnidad ? metaUnidad.vencimiento : CON_VENCIMIENTO.has(tipo);
       if (requiereVenc) {
         if (!req.body?.vencimiento) {
-          res.status(400).json({ error: "Vencimiento obligatorio para este tipo" });
+          res.status(400).json({ error: "Fecha de vencimiento obligatoria para este documento" });
           return;
         }
         vencimiento = parseDateOnly(req.body.vencimiento);
