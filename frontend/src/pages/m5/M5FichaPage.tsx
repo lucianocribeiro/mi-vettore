@@ -144,6 +144,8 @@ export function M5FichaPage() {
   const [drawer, setDrawer] = useState<DrawerOpen>(null);
   /** Buscador único del ABM (todas las pestañas). */
   const [abmQuery, setAbmQuery] = useState("");
+  /** Filtro por empresa compartido por Unidades y Choferes. */
+  const [empresaFiltro, setEmpresaFiltro] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState<
     Record<"empresas" | "chofer" | "camioneta", FiltroEstado>
   >({ empresas: "TODOS", chofer: "TODOS", camioneta: "TODOS" });
@@ -965,19 +967,29 @@ export function M5FichaPage() {
     { id: "equiposFrio", label: "Equipo de frío" },
   ];
 
+  const empresaNombrePorId = useMemo(
+    () => new Map(empresas.map((e) => [e.id, e.nombre])),
+    [empresas]
+  );
+
+  const camionetasDeEmpresa = useMemo(() => {
+    const list = Array.isArray(camionetas) ? camionetas : [];
+    return empresaFiltro ? list.filter((c) => c.empresaId === empresaFiltro) : list;
+  }, [camionetas, empresaFiltro]);
+
   const unidadCounts = useMemo(
-    () => contarEstados(Array.isArray(camionetas) ? camionetas : [], estadoUnidad),
-    [camionetas]
+    () => contarEstados(camionetasDeEmpresa, estadoUnidad),
+    [camionetasDeEmpresa]
   );
 
   const camionetasFiltradas = useMemo(() => {
-    const list = Array.isArray(camionetas) ? camionetas : [];
+    const list = camionetasDeEmpresa;
     const visibles =
       estadoFiltro.camioneta === "TODOS"
         ? list
         : list.filter((c) => estadoUnidad(c) === estadoFiltro.camioneta);
     return filterCamionetas(visibles, { ...EMPTY_FLOTA_FILTERS, query: abmQuery });
-  }, [camionetas, abmQuery, estadoFiltro.camioneta]);
+  }, [camionetasDeEmpresa, abmQuery, estadoFiltro.camioneta]);
 
   const patentesPorChofer = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -1166,16 +1178,20 @@ export function M5FichaPage() {
     }
   }
 
+  const choferesDeEmpresa = useMemo(
+    () => (empresaFiltro ? choferes.filter((c) => c.empresaId === empresaFiltro) : choferes),
+    [choferes, empresaFiltro]
+  );
+
   const choferCounts = useMemo(
-    () => contarEstados(choferes, (c) => c.estado),
-    [choferes]
+    () => contarEstados(choferesDeEmpresa, (c) => c.estado),
+    [choferesDeEmpresa]
   );
 
   const choferesFiltrados = useMemo(() => {
-    const list =
-      estadoFiltro.chofer === "TODOS"
-        ? choferes
-        : choferes.filter((c) => c.estado === estadoFiltro.chofer);
+    const list = choferesDeEmpresa.filter(
+      (c) => estadoFiltro.chofer === "TODOS" || c.estado === estadoFiltro.chofer
+    );
     const q = abmQuery.trim().toLowerCase();
     if (!q) return list;
     return list.filter((c) => {
@@ -1186,6 +1202,7 @@ export function M5FichaPage() {
         c.cuil,
         c.email,
         c.telefono,
+        empresaNombrePorId.get(c.empresaId ?? ""),
         c.esDuenoFlota ? "empresa de transporte" : "",
       ]
         .filter(Boolean)
@@ -1193,7 +1210,7 @@ export function M5FichaPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [choferes, abmQuery, estadoFiltro.chofer]);
+  }, [choferesDeEmpresa, abmQuery, estadoFiltro.chofer, empresaNombrePorId]);
 
   const usuariosFiltrados = useMemo(() => {
     const internos: Role[] = ["ADMINISTRADOR", "OPERACIONES", "SUGERENCIAS"];
@@ -1318,6 +1335,23 @@ export function M5FichaPage() {
               autoComplete="off"
               className="min-h-11 w-full min-w-0 flex-1 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080] sm:max-w-md"
             />
+          )}
+          {(tab === "camioneta" || tab === "chofer") && (
+            <select
+              value={empresaFiltro}
+              onChange={(e) => setEmpresaFiltro(e.target.value)}
+              aria-label="Filtrar por empresa"
+              className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080] sm:w-64"
+            >
+              <option value="">Todas las empresas</option>
+              {[...empresas]
+                .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                .map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nombre}
+                  </option>
+                ))}
+            </select>
           )}
         </div>
       )}
@@ -1456,7 +1490,10 @@ export function M5FichaPage() {
                 onClick={() => setDrawer({ tipo: "chofer", item: c })}
                 className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4 text-left transition hover:border-slate-400 hover:shadow-sm dark:hover:border-slate-500"
               >
-                <div className="font-semibold text-[var(--vl-heading)]">
+                <div className="text-xs text-[var(--vl-text-muted)]">
+                  {empresaNombrePorId.get(c.empresaId ?? "") ?? "Sin empresa"}
+                </div>
+                <div className="mt-1 font-semibold text-[var(--vl-heading)]">
                   {c.nombre}
                 </div>
                 <div className="mt-1 text-xs text-[var(--vl-text-muted)]">
