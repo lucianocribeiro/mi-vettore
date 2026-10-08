@@ -88,6 +88,11 @@ const TIPOS_OBLIGATORIOS = new Set<TipoDocumento>([
   TipoDocumento.FOTO_CARGA,
 ]);
 
+/** Tipos que admiten varios archivos a la vez (el resto muestra solo el último). */
+const MAX_ARCHIVOS: Partial<Record<TipoDocumento, number>> = {
+  [TipoDocumento.SEGURO_ACCIDENTES]: 3,
+};
+
 function parseTipo(raw: unknown): TipoDocumento | null {
   const s = String(raw ?? "").toUpperCase();
   if (!(s in TipoDocumento)) return null;
@@ -440,6 +445,23 @@ router.post(
         res.status(400).json({ error: "Archivo obligatorio (PDF o imagen)" });
         return;
       }
+      const max = MAX_ARCHIVOS[tipo];
+      if (max) {
+        const cargados = await prisma.documentoEntidad.count({
+          where: {
+            tipo,
+            ...(choferId ? { choferId } : { camionetaId }),
+            estadoValidacion: { not: EstadoValidacionDoc.RECHAZADO },
+          },
+        });
+        if (cargados >= max) {
+          res.status(400).json({
+            error: `Admite hasta ${max} archivos. Eliminá uno para cargar otro.`,
+          });
+          return;
+        }
+      }
+
       const metaUnidad = metaDocUnidad(tipo);
       if (metaUnidad?.soloImagen && !req.file.mimetype.startsWith("image/")) {
         res.status(400).json({ error: `${metaUnidad.label} requiere una foto` });

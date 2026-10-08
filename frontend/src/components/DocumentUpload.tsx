@@ -21,6 +21,11 @@ type Props = {
   onChange?: () => void;
 };
 
+/** Tipos que admiten varios archivos a la vez (el resto muestra solo el último). */
+const MAX_ARCHIVOS: Partial<Record<TipoDocumento, number>> = {
+  SEGURO_ACCIDENTES: 3,
+};
+
 const FOTO_HINT: Partial<Record<TipoDocumento, string>> = {
   FOTO_VEHICULO: "Vehículo de frente, con la patente visible.",
   FOTO_ATRAS: "Vehículo desde atrás, con la patente visible.",
@@ -222,6 +227,47 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
 
   if (!choferId && !camionetaId) return null;
 
+  function renderAcciones(doc: DocumentoEntidad) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => void openDoc(doc.id)}
+          className="min-h-10 rounded-md border border-[var(--vl-card-border)] px-3 text-xs font-medium text-[var(--vl-heading)]"
+        >
+          Ver
+        </button>
+        {canValidate && (
+          <button
+            type="button"
+            onClick={() => void eliminar(doc)}
+            className="min-h-10 rounded-md border border-red-300 px-3 text-xs font-medium text-red-700 dark:border-red-800 dark:text-red-300"
+          >
+            Eliminar
+          </button>
+        )}
+        {canValidate && doc.estadoValidacion === "PENDIENTE" && (
+          <>
+            <button
+              type="button"
+              onClick={() => void validar(doc.id, "VALIDADO")}
+              className="min-h-10 rounded-md border border-emerald-300 px-2 text-xs text-emerald-700 dark:border-emerald-800 dark:text-emerald-300"
+            >
+              Validar
+            </button>
+            <button
+              type="button"
+              onClick={() => void validar(doc.id, "RECHAZADO")}
+              className="min-h-10 rounded-md border border-red-300 px-2 text-xs text-red-700 dark:border-red-800 dark:text-red-300"
+            >
+              Rechazar
+            </button>
+          </>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
@@ -229,7 +275,12 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
       </div>
       <div className="space-y-2">
         {tipos.map((t) => {
-          const latest = docs.find((d) => d.tipo === t);
+          const max = MAX_ARCHIVOS[t];
+          const archivos = max
+            ? docs.filter((d) => d.tipo === t && d.estadoValidacion !== "RECHAZADO").slice(0, max)
+            : [];
+          const latest = max ? undefined : docs.find((d) => d.tipo === t);
+          const lleno = !!max && archivos.length >= max;
           const needs = conVencimiento.includes(t);
           const esObligatorio = obligatorios.includes(t);
           const venc = vencByTipo[t] ?? "";
@@ -258,7 +309,13 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
                     {FOTO_HINT[t]}
                   </div>
                 )}
-                {latest ? (
+                {max ? (
+                  <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                    {archivos.length === 0
+                      ? `Sin archivo · hasta ${max} fotos`
+                      : `${archivos.length} de ${max} fotos cargadas`}
+                  </div>
+                ) : latest ? (
                   <div className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
                     {latest.nombreOriginal || "archivo"}
                     {latest.vencimiento
@@ -272,6 +329,21 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
                   </div>
                 )}
               </div>
+              {archivos.length > 0 && (
+                <ul className="space-y-1.5">
+                  {archivos.map((d, i) => (
+                    <li
+                      key={d.id}
+                      className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-2 py-1.5"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--vl-text-muted)]">
+                        {`Foto ${i + 1} · ${d.nombreOriginal || "archivo"} · ${d.estadoValidacion.toLowerCase()}`}
+                      </span>
+                      {renderAcciones(d)}
+                    </li>
+                  ))}
+                </ul>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 {needs && (
                   <label className="flex min-w-0 flex-1 basis-[9.5rem] flex-col gap-0.5 text-[10px] font-medium text-[var(--vl-text-muted)] sm:max-w-[11rem] sm:flex-none">
@@ -287,48 +359,16 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
                     />
                   </label>
                 )}
-                {latest && (
-                  <button
-                    type="button"
-                    onClick={() => void openDoc(latest.id)}
-                    className="min-h-10 rounded-md border border-[var(--vl-card-border)] px-3 text-xs font-medium text-[var(--vl-heading)]"
-                  >
-                    Ver
-                  </button>
-                )}
-                {canValidate && latest && (
-                  <button
-                    type="button"
-                    onClick={() => void eliminar(latest)}
-                    className="min-h-10 rounded-md border border-red-300 px-3 text-xs font-medium text-red-700 dark:border-red-800 dark:text-red-300"
-                  >
-                    Eliminar
-                  </button>
-                )}
-                {canValidate && latest?.estadoValidacion === "PENDIENTE" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void validar(latest.id, "VALIDADO")}
-                      className="min-h-10 rounded-md border border-emerald-300 px-2 text-xs text-emerald-700 dark:border-emerald-800 dark:text-emerald-300"
-                    >
-                      Validar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void validar(latest.id, "RECHAZADO")}
-                      className="min-h-10 rounded-md border border-red-300 px-2 text-xs text-red-700 dark:border-red-800 dark:text-red-300"
-                    >
-                      Rechazar
-                    </button>
-                  </>
-                )}
+                {latest && renderAcciones(latest)}
+                {!lleno && (
                 <label className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-[#1e4080]/50 bg-[#1e4080]/5 px-3 text-xs font-semibold text-[#1e4080] dark:text-sky-300">
                   {uploading && tipoUploading === t
                     ? "Subiendo…"
-                    : TIPOS_FOTO_VEHICULO.includes(t)
-                      ? "Sacar foto"
-                      : "Foto / PDF"}
+                    : max
+                      ? `Agregar foto (${archivos.length + 1}/${max})`
+                      : TIPOS_FOTO_VEHICULO.includes(t)
+                        ? "Sacar foto"
+                        : "Foto / PDF"}
                   <input
                     type="file"
                     accept={
@@ -342,6 +382,7 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
                     onChange={(e) => void onFileChange(t, e)}
                   />
                 </label>
+                )}
               </div>
             </div>
           );
