@@ -177,6 +177,8 @@ model Chofer {
   email               String?
   /// Empresa unipersonal / titular: misma UI de chofer; ve y rota patentes de su empresa.
   esDuenoFlota        Boolean          @default(false)
+  /// Si false, no se muestra ni se pide Manipulación de alimentos.
+  pideManipulacion    Boolean          @default(true)
   estado              EstadoChofer     @default(ACTIVO)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
@@ -314,6 +316,8 @@ model EmpresaTransporte {
   /// Módulos extra que habilita el administrador (Documentación siempre está habilitado).
   verMantenimiento       Boolean          @default(false)
   verTaller              Boolean          @default(false)
+  /// Si false, no se muestra ni se pide SENASA en las unidades de la empresa.
+  pideSenasa             Boolean          @default(true)
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   asignaciones           AsignacionFlota[]

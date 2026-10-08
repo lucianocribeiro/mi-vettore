@@ -116,6 +116,7 @@ router.post("/", ...write, async (req, res) => {
             : Boolean(req.body.permiteMultiCamioneta),
         verMantenimiento: req.body?.verMantenimiento === true,
         verTaller: req.body?.verTaller === true,
+        pideSenasa: req.body?.pideSenasa !== false,
       },
     });
       await tx.usuario.create({
@@ -165,6 +166,7 @@ router.put("/:id", ...write, async (req, res) => {
       permiteMultiCamioneta?: boolean;
       verMantenimiento?: boolean;
       verTaller?: boolean;
+      pideSenasa?: boolean;
     } = {};
     if (req.body?.nombre !== undefined) data.nombre = String(req.body.nombre).trim();
     if (req.body?.cuit !== undefined) {
@@ -188,6 +190,9 @@ router.put("/:id", ...write, async (req, res) => {
     }
     if (req.body?.verTaller !== undefined) {
       data.verTaller = Boolean(req.body.verTaller);
+    }
+    if (req.body?.pideSenasa !== undefined) {
+      data.pideSenasa = Boolean(req.body.pideSenasa);
     }
     if (req.body?.tipo !== undefined) {
       const t = String(req.body.tipo).toUpperCase();

@@ -249,6 +249,8 @@ export type Empresa = {
   /** Módulos extra habilitados por el administrador. */
   verMantenimiento?: boolean;
   verTaller?: boolean;
+  /** Si false, SENASA no se muestra en las unidades de la empresa. */
+  pideSenasa?: boolean;
   choferes?: Array<{ id: string; nombre: string; apellido?: string; dni: string; estado: string }>;
   unidades?: Array<{ id: string; patente: string; estado: string }>;
 };
@@ -277,6 +279,8 @@ export type Chofer = {
   telefono: string | null;
   email: string | null;
   esDuenoFlota: boolean;
+  /** Si false, Manipulación de alimentos no se muestra. */
+  pideManipulacion?: boolean;
   estado: EstadoChofer;
   asignaciones?: AsignacionFlota[];
 };

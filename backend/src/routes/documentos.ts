@@ -84,8 +84,35 @@ function parseTipo(raw: unknown): TipoDocumento | null {
   return s as TipoDocumento;
 }
 
-router.get("/meta", authenticate, (_req, res) => {
+/** Documentos que Vettore desactivó: SENASA por empresa, Manipulación de alimentos por chofer. */
+async function tiposOcultos(
+  choferId: string | null | undefined,
+  camionetaId: string | null | undefined
+): Promise<TipoDocumento[]> {
+  if (choferId) {
+    const ch = await prisma.chofer.findUnique({
+      where: { id: choferId },
+      select: { pideManipulacion: true },
+    });
+    return ch && !ch.pideManipulacion ? [TipoDocumento.HABILITACION_MANIPULACION] : [];
+  }
+  if (camionetaId) {
+    const cam = await prisma.camioneta.findUnique({
+      where: { id: camionetaId },
+      select: { empresa: { select: { pideSenasa: true } } },
+    });
+    return cam && !cam.empresa.pideSenasa ? [TipoDocumento.SENASA] : [];
+  }
+  return [];
+}
+
+router.get("/meta", authenticate, async (req, res) => {
+  const ocultos = await tiposOcultos(
+    req.query.choferId ? String(req.query.choferId) : null,
+    req.query.camionetaId ? String(req.query.camionetaId) : null
+  ).catch(() => []);
   res.json({
+    ocultos,
     tipos: Object.values(TipoDocumento),
     tiposChofer: [...TIPOS_CHOFER],
     tiposUnidad: [...TIPOS_UNIDAD],
@@ -204,6 +231,10 @@ router.post(
           error:
             "En unidad solo: RTO/VTV, SENASA, seguro, cédula, homologación, otra documentación o foto del vehículo",
         });
+        return;
+      }
+      if ((await tiposOcultos(choferId, camionetaId)).includes(tipo)) {
+        res.status(400).json({ error: "Este documento no está habilitado" });
         return;
       }
 

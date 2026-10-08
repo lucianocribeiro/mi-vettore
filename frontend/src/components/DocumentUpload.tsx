@@ -83,7 +83,8 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
           tiposUnidad?: TipoDocumento[];
           conVencimiento: TipoDocumento[];
           obligatorios?: TipoDocumento[];
-        }>("/api/documentos/meta", {}, token).catch(() => null),
+          ocultos?: TipoDocumento[];
+        }>(`/api/documentos/meta?${qs}`, {}, token).catch(() => null),
         choferId
           ? apiFetch<Chofer>(`/api/choferes/${choferId}`, {}, token).catch(() => null)
           : Promise.resolve(null),
@@ -94,7 +95,12 @@ export function DocumentUpload({ choferId, camionetaId }: Props) {
         setDniGuardado(chofer.dni);
       }
       // Lista canónica en frontend: un /meta viejo no debe ocultar campos nuevos.
-      setTipos(choferId ? TIPOS_DOCUMENTO_CHOFER : TIPOS_DOCUMENTO_UNIDAD);
+      const ocultos = meta?.ocultos ?? [];
+      setTipos(
+        (choferId ? TIPOS_DOCUMENTO_CHOFER : TIPOS_DOCUMENTO_UNIDAD).filter(
+          (t) => !ocultos.includes(t)
+        )
+      );
       setObligatorios(TIPOS_DOCUMENTO_OBLIGATORIOS);
       if (meta?.conVencimiento?.length) {
         setConVencimiento([

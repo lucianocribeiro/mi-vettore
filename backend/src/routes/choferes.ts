@@ -229,6 +229,7 @@ router.post("/", ...write, async (req, res) => {
           ? String(req.body.email).trim().toLowerCase()
           : null,
         esDuenoFlota: Boolean(req.body?.esDuenoFlota),
+        pideManipulacion: req.body?.pideManipulacion !== false,
         estado: estadoRaw as EstadoChofer,
       },
       include: includeAsignaciones,
@@ -325,6 +326,9 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
     }
     if (req.body?.esDuenoFlota !== undefined) {
       data.esDuenoFlota = Boolean(req.body.esDuenoFlota);
+    }
+    if (req.body?.pideManipulacion !== undefined) {
+      data.pideManipulacion = Boolean(req.body.pideManipulacion);
     }
     if (req.body?.estado !== undefined) {
       const s = String(req.body.estado).toUpperCase();

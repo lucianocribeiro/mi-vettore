@@ -169,6 +169,8 @@ export function M5FichaPage() {
   const [fEmailChofer, setFEmailChofer] = useState("");
   const [fVerMant, setFVerMant] = useState(false);
   const [fVerTaller, setFVerTaller] = useState(false);
+  const [fPideSenasa, setFPideSenasa] = useState(true);
+  const [fPideManipulacion, setFPideManipulacion] = useState(true);
   const [fEstadoChofer, setFEstadoChofer] = useState<EstadoEntidad>("ACTIVO");
   const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
@@ -393,6 +395,8 @@ export function M5FichaPage() {
     setFEmailChofer("");
     setFVerMant(false);
     setFVerTaller(false);
+    setFPideSenasa(true);
+    setFPideManipulacion(true);
     setFEstadoChofer("ACTIVO");
     setFCuit("");
     setFPasswordEmpresa("");
@@ -436,6 +440,7 @@ export function M5FichaPage() {
     setFCuil(item.cuil ?? "");
     setFTelefono(item.telefono ?? "");
     setFEmailChofer(item.email ?? "");
+    setFPideManipulacion(item.pideManipulacion !== false);
     setFEstadoChofer(item.estado);
     setForm({ kind: "chofer", item });
   }
@@ -447,6 +452,7 @@ export function M5FichaPage() {
     setFPasswordEmpresa("");
     setFVerMant(!!item.verMantenimiento);
     setFVerTaller(!!item.verTaller);
+    setFPideSenasa(item.pideSenasa !== false);
     setForm({ kind: "empresa", item });
   }
 
@@ -549,6 +555,7 @@ export function M5FichaPage() {
           cuil: fCuil || null,
           telefono: fTelefono || null,
           email: fEmailChofer || null,
+          pideManipulacion: fPideManipulacion,
           estado: fEstadoChofer,
         };
         if (form.item) {
@@ -592,6 +599,7 @@ export function M5FichaPage() {
           password: fPasswordEmpresa || undefined,
           verMantenimiento: fVerMant,
           verTaller: fVerTaller,
+          pideSenasa: fPideSenasa,
         };
         if (form.item) {
           const updated = await apiFetch<Empresa & { credencialTemporal?: string }>(
@@ -2035,6 +2043,16 @@ export function M5FichaPage() {
                   onChange={(e) => setFCuil(e.target.value)}
                 />
               </Field>
+              <Field label="Documentación que se pide">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fPideManipulacion}
+                    onChange={(e) => setFPideManipulacion(e.target.checked)}
+                  />
+                  Manipulación de alimentos
+                </label>
+              </Field>
               <Field label="Estado">
                 <select
                   className={inputClass}
@@ -2125,6 +2143,16 @@ export function M5FichaPage() {
                     onChange={(e) => setFVerTaller(e.target.checked)}
                   />
                   Taller
+                </label>
+              </Field>
+              <Field label="Documentación que se pide">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fPideSenasa}
+                    onChange={(e) => setFPideSenasa(e.target.checked)}
+                  />
+                  SENASA (en sus unidades)
                 </label>
               </Field>
               {!form.item && (

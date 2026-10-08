@@ -182,6 +182,7 @@ export async function runAlertasDocumentos() {
       vencimiento: { not: null, lte: lim },
       tipo: { not: "SENASA" },
       estadoValidacion: { not: "RECHAZADO" },
+      NOT: { tipo: "HABILITACION_MANIPULACION", chofer: { is: { pideManipulacion: false } } },
     },
     include: {
       chofer: true,
