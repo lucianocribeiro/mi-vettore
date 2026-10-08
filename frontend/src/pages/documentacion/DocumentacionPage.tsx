@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { DocumentUpload } from "../../components/DocumentUpload";
@@ -657,22 +657,23 @@ export function DocumentacionPage() {
                 const canVerPanel =
                   ops || !!user?.esDuenoFlota || c.id === user?.choferId;
                 return (
-                  <Fragment key={c.id}>
-                    {active && canVerPanel && (
-                      <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
-                        <DocumentUpload choferId={c.id} />
-                      </div>
-                    )}
+                  <div
+                    key={c.id}
+                    className={`grid gap-2 ${active && canVerPanel ? "lg:grid-cols-2" : ""}`}
+                  >
+                    <div
+                      className={`self-start rounded-xl border p-3 text-sm ${
+                        active
+                          ? "border-slate-900 dark:border-slate-100"
+                          : "border-[var(--vl-card-border)]"
+                      }`}
+                    >
                     <button
                       type="button"
                       onClick={() =>
                         setSelectedChofer((prev) => (prev === c.id ? null : c.id))
                       }
-                      className={`w-full rounded-xl border p-3 text-left text-sm ${
-                        active
-                          ? "border-slate-900 dark:border-slate-100"
-                          : "border-[var(--vl-card-border)]"
-                      }`}
+                      className="w-full text-left"
                     >
                       <div className="font-semibold text-[var(--vl-heading)]">
                         {ops
@@ -690,7 +691,7 @@ export function DocumentacionPage() {
                       )}
                     </button>
                     {esPerfilEmpresa && (
-                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--vl-card-border)] p-3">
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
                         <select
                           className="min-w-0 flex-1 rounded-md border border-[var(--vl-card-border)] bg-transparent px-2 py-1.5 text-xs"
                           value={draftUnidad[c.id] ?? unidadDeChofer(c.id)?.id ?? ""}
@@ -731,7 +732,13 @@ export function DocumentacionPage() {
                         </button>
                       </div>
                     )}
-                  </Fragment>
+                    </div>
+                    {active && canVerPanel && (
+                      <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
+                        <DocumentUpload choferId={c.id} />
+                      </div>
+                    )}
+                  </div>
                 );
               })
             )}
