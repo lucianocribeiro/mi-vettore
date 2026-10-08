@@ -1399,7 +1399,7 @@ export function M7TalleresPage() {
                 type="button"
                 disabled={busy}
                 onClick={() => setConfirmAvanzarSinGuardar(false)}
-                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-4 text-sm font-semibold sm:flex-none sm:min-w-[7.5rem]"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-center text-sm font-semibold"
               >
                 Cancelar
               </button>
