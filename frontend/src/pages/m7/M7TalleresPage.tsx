@@ -970,7 +970,7 @@ export function M7TalleresPage() {
                               <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
                                 {ocultarMontos
                                   ? "Comparación de presupuesto vs gasto (montos ocultos para chofer)."
-                                  : "Presupuesto original (fijo al seleccionar) vs presupuesto total general. Verde si el original supera el gasto; rojo al revés."}
+                                  : "Presupuesto original (fijo al seleccionar) vs gasto total. Verde si el original supera el gasto; rojo al revés."}
                               </p>
                               {!ocultarMontos && (
                                 <>
@@ -987,7 +987,7 @@ export function M7TalleresPage() {
                                     </div>
                                     <div className="rounded-md bg-slate-100/80 p-3 dark:bg-slate-900/50">
                                       <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">
-                                        Presupuesto total general
+                                        Gasto total
                                       </div>
                                       <div className="mt-1 text-lg font-bold">
                                         {totTildados > 0 ? money(totTildados) : "—"}
@@ -1083,13 +1083,13 @@ export function M7TalleresPage() {
                         {enSeleccion
                           ? "Suma de ítems tildados (importe bloqueado)"
                           : enAjuste
-                            ? "Fijo al salir de selección · abajo el total editado"
+                            ? "Fijo al salir de selección · abajo el gasto total"
                             : "Fijo al seleccionar · se compara con importes editados"}
                       </p>
                       {(enAjuste || enCierre) && (
                         <div className="mt-3 border-t border-[var(--vl-card-border)] pt-3">
                           <div className="text-sm font-semibold text-[var(--vl-heading)]">
-                            Presupuesto total general
+                            Gasto total
                           </div>
                           <div className="mt-1 text-xl font-bold tracking-tight text-[var(--vl-heading)]">
                             {totTildados > 0 ? money(totTildados) : "—"}
@@ -2113,7 +2113,7 @@ function AjusteImportesChecklist({
             <div className="rounded-lg border border-[var(--vl-card-border)] p-3 space-y-2">
               <div className="text-xs font-semibold">Ítem fuera de presupuesto</div>
               <p className="text-[11px] text-[var(--vl-text-muted)]">
-                Se suma al presupuesto total general (editado). No modifica el presupuesto original.
+                Se suma al gasto total. No modifica el presupuesto original.
               </p>
               <select
                 className="w-full rounded-md border p-2 text-sm"
@@ -2258,7 +2258,7 @@ function AjusteImportesChecklist({
       {itemsAdic.length > 0 && (
         <div className="mb-3 rounded-lg border border-dashed border-amber-400/50 p-3">
           <div className="mb-2 text-[10px] font-semibold uppercase text-amber-800 dark:text-amber-200">
-            Ítems fuera de presupuesto (suman al total general, no al original)
+            Ítems fuera de presupuesto (suman al gasto total, no al original)
           </div>
           {itemsAdic.map((i) => (
             <div key={i.id} className="mb-3 border-b border-[var(--vl-card-border)] pb-3 last:mb-0 last:border-0 last:pb-0">
@@ -2313,7 +2313,7 @@ function AjusteImportesChecklist({
 
       {!ocultarMontos && (
         <div className="mt-3 rounded-xl border border-[var(--vl-card-border)] p-3 text-right">
-          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Presupuesto total general</div>
+          <div className="text-[10px] uppercase text-[var(--vl-text-muted)]">Gasto total</div>
           <div className="text-xl font-bold tracking-tight">{total > 0 ? money(total) : "—"}</div>
         </div>
       )}
