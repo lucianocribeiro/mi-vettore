@@ -330,6 +330,7 @@ export type Camioneta = {
   empresaId?: string | null;
   empresa?: Empresa | null;
   datosTecnicos: string | null;
+  pideSenasaHomologacion?: boolean;
   km: number;
   kmActualizadoAt?: string | null;
   fechaUltimoAceite: string | null;

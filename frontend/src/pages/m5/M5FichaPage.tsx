@@ -181,6 +181,7 @@ export function M5FichaPage() {
   const [fVerTaller, setFVerTaller] = useState(false);
   const [fPideSenasa, setFPideSenasa] = useState(true);
   const [fPideManipulacion, setFPideManipulacion] = useState(true);
+  const [fPideSenasaHomol, setFPideSenasaHomol] = useState(true);
   const [fEstadoChofer, setFEstadoChofer] = useState<EstadoEntidad>("ACTIVO");
   const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
@@ -417,6 +418,7 @@ export function M5FichaPage() {
     setFModelo("");
     setFAnio("");
     setFEquipoFrio("");
+    setFPideSenasaHomol(true);
     setFCapacidadValor("");
     setFCapacidadUnidad("");
     setFTipoServicioId("");
@@ -473,6 +475,7 @@ export function M5FichaPage() {
     setFModelo(item.modelo ?? "");
     setFAnio(item.anio != null ? String(item.anio) : "");
     setFEquipoFrio(item.equipoFrio ?? "");
+    setFPideSenasaHomol(item.pideSenasaHomologacion !== false);
     setFCapacidadValor(
       item.capacidadValor != null ? String(item.capacidadValor) : ""
     );
@@ -658,6 +661,7 @@ export function M5FichaPage() {
           modelo: fModelo || null,
           anio: fAnio ? Number(fAnio) : null,
           equipoFrio: fEquipoFrio || null,
+          pideSenasaHomologacion: fPideSenasaHomol,
           capacidadValor: fCapacidadValor ? Number(fCapacidadValor) : null,
           capacidadUnidad: fCapacidadUnidad || null,
           tipoServicioId: fTipoServicioId || null,
@@ -2347,6 +2351,16 @@ export function M5FichaPage() {
                     Para {fEquipoFrio}: {tiposFrioPermitidos.join(", ")}
                   </p>
                 )}
+              </Field>
+              <Field label="Documentación que se pide">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fPideSenasaHomol}
+                    onChange={(e) => setFPideSenasaHomol(e.target.checked)}
+                  />
+                  SENASA y Homologación (opcionales)
+                </label>
               </Field>
               <Field label="Estado">
                 <select

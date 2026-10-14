@@ -1,0 +1,1 @@
+ALTER TABLE "Camioneta" ADD COLUMN IF NOT EXISTS "pideSenasaHomologacion" BOOLEAN NOT NULL DEFAULT true;

@@ -114,11 +114,23 @@ async function tiposOcultos(
   if (camionetaId) {
     const cam = await prisma.camioneta.findUnique({
       where: { id: camionetaId },
-      select: { empresa: { select: { pideSenasa: true } } },
+      select: {
+        pideSenasaHomologacion: true,
+        empresa: { select: { pideSenasa: true } },
+      },
     });
-    return cam && !cam.empresa.pideSenasa ? [TipoDocumento.SENASA] : [];
+    return cam ? ocultosUnidad(cam) : [];
   }
   return [];
+}
+
+function ocultosUnidad(c: {
+  pideSenasaHomologacion: boolean;
+  empresa: { pideSenasa: boolean };
+}): TipoDocumento[] {
+  if (!c.pideSenasaHomologacion)
+    return [TipoDocumento.SENASA, TipoDocumento.HOMOLOGACION];
+  return c.empresa.pideSenasa ? [] : [TipoDocumento.SENASA];
 }
 
 router.get("/meta", authenticate, async (req, res) => {
@@ -235,7 +247,11 @@ router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
       camionetaIds.length
         ? prisma.camioneta.findMany({
             where: { id: { in: camionetaIds } },
-            select: { id: true, empresa: { select: { pideSenasa: true } } },
+            select: {
+              id: true,
+              pideSenasaHomologacion: true,
+              empresa: { select: { pideSenasa: true } },
+            },
           })
         : Promise.resolve([]),
       choferIds.length
@@ -320,11 +336,7 @@ router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
 
     const unidades: Record<string, ResumenDocs> = {};
     for (const c of cams) {
-      unidades[c.id] = resumir(
-        c.id,
-        [...TIPOS_UNIDAD],
-        c.empresa.pideSenasa ? [] : [TipoDocumento.SENASA]
-      );
+      unidades[c.id] = resumir(c.id, [...TIPOS_UNIDAD], ocultosUnidad(c));
     }
     const choferes: Record<string, ResumenDocs> = {};
     for (const ch of chs) {

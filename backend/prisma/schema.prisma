@@ -280,6 +280,8 @@ model Camioneta {
   tipoTransporte         TipoTransporte?
   tipoServicioId         String?
   datosTecnicos          String?
+  /// Si false, SENASA y Homologación no se piden para esta unidad.
+  pideSenasaHomologacion Boolean          @default(true)
   km                     Int              @default(0)
   /// Última vez que se actualizó el kilometraje (recordatorio 10 días).
   kmActualizadoAt        DateTime?
