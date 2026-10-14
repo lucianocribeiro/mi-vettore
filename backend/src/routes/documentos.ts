@@ -8,7 +8,12 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
 import { MASTER_WRITE_ROLES } from "../lib/roles.js";
-import { choferPuedeEditarCamioneta, choferPuedeVerChofer } from "../lib/flota.js";
+import {
+  choferPuedeEditarCamioneta,
+  choferPuedeVerChofer,
+  empresaPuedeEditarCamioneta,
+  empresaPuedeEditarChofer,
+} from "../lib/flota.js";
 import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
 import {
   isSupabaseStorageConfigured,
@@ -447,7 +452,15 @@ router.post(
             return;
           }
         }
-      } else if (!isMaster && rol !== Role.OPERACIONES && rol !== Role.ADMINISTRADOR && rol !== Role.EMPRESA) {
+      } else if (rol === Role.EMPRESA) {
+        const ok = choferId
+          ? await empresaPuedeEditarChofer(req.user!.id, choferId)
+          : await empresaPuedeEditarCamioneta(req.user!.id, camionetaId!);
+        if (!ok) {
+          res.status(403).json({ error: "Sin permiso" });
+          return;
+        }
+      } else if (!isMaster && rol !== Role.OPERACIONES && rol !== Role.ADMINISTRADOR) {
         res.status(403).json({ error: "Sin permiso" });
         return;
       }

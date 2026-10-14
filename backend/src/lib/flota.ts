@@ -98,13 +98,45 @@ export async function choferPuedeVerChofer(
   // Empresa de transporte: siempre puede ver/cargar docs de choferes de su flota
   // (no depende del toggle Conductor/Empresa).
   if (!me.chofer?.esDuenoFlota) return false;
+  return empresaPuedeEditarChofer(userId, choferId);
+}
+
+/** Usuario EMPRESA o dueño de flota: el chofer es de su empresa o tiene asignación vigente en ella. */
+export async function empresaPuedeEditarChofer(
+  userId: string,
+  choferId: string
+): Promise<boolean> {
   const empresas = await empresaIdsDeDueno(userId);
   if (empresas.length === 0) return false;
+  const propio = await prisma.chofer.findFirst({
+    where: { id: choferId, empresaId: { in: empresas } },
+    select: { id: true },
+  });
+  if (propio) return true;
   const hit = await prisma.asignacionFlota.findFirst({
     where: {
       choferId,
       empresaId: { in: empresas },
       periodoHasta: null,
+    },
+    select: { id: true },
+  });
+  return !!hit;
+}
+
+export async function empresaPuedeEditarCamioneta(
+  userId: string,
+  camionetaId: string
+): Promise<boolean> {
+  const empresas = await empresaIdsDeDueno(userId);
+  if (empresas.length === 0) return false;
+  const hit = await prisma.camioneta.findFirst({
+    where: {
+      id: camionetaId,
+      OR: [
+        { empresaId: { in: empresas } },
+        { asignaciones: { some: { empresaId: { in: empresas }, periodoHasta: null } } },
+      ],
     },
     select: { id: true },
   });

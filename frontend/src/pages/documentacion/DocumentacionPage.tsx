@@ -271,6 +271,7 @@ export function DocumentacionPage() {
   const [adv, setAdv] = useState<AdvFilters>(EMPTY_ADV);
   const [resumenCam, setResumenCam] = useState<Record<string, ResumenDocs>>({});
   const [resumenCh, setResumenCh] = useState<Record<string, ResumenDocs>>({});
+  const [nuevoChofer, setNuevoChofer] = useState(false);
   const ops = isInternalOps(user?.rol);
   const esPerfilEmpresa =
     user?.rol === "EMPRESA" ||
@@ -877,6 +878,41 @@ export function DocumentacionPage() {
         );
       })()}
 
+      {tab === "choferes" && esPerfilEmpresa && (
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setNuevoChofer(true)}
+            className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-slate-100 dark:text-slate-900"
+          >
+            Nuevo chofer
+          </button>
+        </div>
+      )}
+
+      {nuevoChofer && (
+        <PanelLateral titulo="Nuevo chofer" onClose={() => setNuevoChofer(false)}>
+          <ChoferDatosForm
+            inicial={{ nombre: "", dni: "", cuil: "", telefono: "", email: "" }}
+            submitLabel="Crear chofer"
+            onSubmit={async (d) => {
+              const creado = await apiFetch<Chofer & { credencialTemporal?: string | null }>(
+                "/api/choferes",
+                { method: "POST", body: JSON.stringify(d) },
+                token
+              );
+              setNuevoChofer(false);
+              if (creado.credencialTemporal) {
+                window.alert(
+                  `Chofer creado. Ingresa con DNI ${creado.dni} y clave temporal ${creado.credencialTemporal}`
+                );
+              }
+              await load(true);
+            }}
+          />
+        </PanelLateral>
+      )}
+
       {tab === "choferes" &&
         (filteredChoferes.length === 0 ? (
           <p className="mt-4 rounded-xl border border-[var(--vl-card-border)] p-3 text-sm text-[var(--vl-text-muted)]">
@@ -936,7 +972,8 @@ export function DocumentacionPage() {
 
       {tab === "choferes" && panelChofer && (() => {
         const c = panelChofer;
-        const canVerDocs = ops || !!user?.esDuenoFlota || c.id === user?.choferId;
+        const canVerDocs =
+          ops || !!user?.esDuenoFlota || esPerfilEmpresa || c.id === user?.choferId;
         return (
           <PanelLateral
             titulo={nombreCompleto(c)}
@@ -948,6 +985,27 @@ export function DocumentacionPage() {
             subtitulo={unidadDeChofer(c.id)?.patente ?? "Sin unidad"}
             onClose={() => setSelectedChofer(null)}
           >
+                    {esPerfilEmpresa && (
+                      <ChoferDatosForm
+                        key={c.id}
+                        inicial={{
+                          nombre: nombreCompleto(c),
+                          dni: c.dni ?? "",
+                          cuil: c.cuil ?? "",
+                          telefono: c.telefono ?? "",
+                          email: c.email ?? "",
+                        }}
+                        submitLabel="Guardar datos"
+                        onSubmit={async (d) => {
+                          await apiFetch(
+                            `/api/choferes/${c.id}`,
+                            { method: "PUT", body: JSON.stringify({ ...d, apellido: "" }) },
+                            token
+                          );
+                          await load(true);
+                        }}
+                      />
+                    )}
                     {esPerfilEmpresa && (
                       <div className="mb-4 rounded-lg border border-[var(--vl-card-border)] p-3">
                         <div className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
@@ -1005,6 +1063,75 @@ export function DocumentacionPage() {
         );
       })()}
     </div>
+  );
+}
+
+type DatosChofer = {
+  nombre: string;
+  dni: string;
+  cuil: string;
+  telefono: string;
+  email: string;
+};
+
+const CAMPOS_CHOFER: [keyof DatosChofer, string][] = [
+  ["nombre", "Nombre y apellido"],
+  ["dni", "DNI"],
+  ["cuil", "CUIL"],
+  ["telefono", "Teléfono"],
+  ["email", "Email"],
+];
+
+function ChoferDatosForm({
+  inicial,
+  submitLabel,
+  onSubmit,
+}: {
+  inicial: DatosChofer;
+  submitLabel: string;
+  onSubmit: (d: DatosChofer) => Promise<void>;
+}) {
+  const [d, setD] = useState(inicial);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <form
+      className="mb-4 space-y-2 rounded-lg border border-[var(--vl-card-border)] p-3"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        setErr(null);
+        try {
+          await onSubmit(d);
+        } catch (ex) {
+          setErr(ex instanceof ApiError ? ex.message : "Error al guardar");
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
+      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+        Datos del chofer
+      </div>
+      {CAMPOS_CHOFER.map(([k, label]) => (
+        <label key={k} className="block text-xs">
+          <span className="text-[var(--vl-text-muted)]">{label}</span>
+          <input
+            value={d[k]}
+            onChange={(e) => setD((p) => ({ ...p, [k]: e.target.value }))}
+            className="mt-0.5 w-full rounded-md border border-[var(--vl-card-border)] bg-transparent px-2 py-1.5 text-sm"
+          />
+        </label>
+      ))}
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <button
+        type="submit"
+        disabled={saving || !d.nombre.trim() || !d.dni.trim()}
+        className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+      >
+        {saving ? "Guardando…" : submitLabel}
+      </button>
+    </form>
   );
 }
 

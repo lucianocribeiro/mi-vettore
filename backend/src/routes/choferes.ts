@@ -11,7 +11,11 @@ import { generateTempPassword } from "../lib/temp-password.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 import { parseDateOnly } from "../lib/date-only.js";
 import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
-import { empresaIdsDeDueno, choferPuedeVerChofer } from "../lib/flota.js";
+import {
+  empresaIdsDeDueno,
+  choferPuedeVerChofer,
+  empresaPuedeEditarChofer,
+} from "../lib/flota.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -193,8 +197,29 @@ router.patch("/:id/dni", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
-router.post("/", ...write, async (req, res) => {
+/** Empresas que el actor (usuario EMPRESA o dueño de flota) administra; vacío si no aplica. */
+async function empresasPropias(req: AuthedRequest): Promise<string[]> {
+  const rol = req.user!.rol;
+  if (rol !== "EMPRESA" && rol !== "CHOFER") return [];
+  return empresaIdsDeDueno(req.user!.id);
+}
+
+/** Campos que la empresa de transporte no puede tocar en sus choferes. */
+const CAMPOS_SOLO_INTERNOS = ["empresaId", "esDuenoFlota", "pideManipulacion", "estado"];
+
+router.post("/", authenticate, async (req: AuthedRequest, res) => {
   try {
+    const interno = isInternalOpsRole(req.user!.rol);
+    const propias = interno ? [] : await empresasPropias(req);
+    if (!interno && propias.length === 0) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    if (!interno) {
+      const pedida = String(req.body?.empresaId ?? "");
+      for (const k of CAMPOS_SOLO_INTERNOS) delete req.body?.[k];
+      req.body = { ...req.body, empresaId: propias.includes(pedida) ? pedida : propias[0] };
+    }
     const nombre = [req.body?.nombre, req.body?.apellido]
       .map((v) => String(v ?? "").trim())
       .filter(Boolean)
@@ -286,12 +311,23 @@ router.post("/", ...write, async (req, res) => {
   }
 });
 
-router.put("/:id", ...write, async (req: AuthedRequest, res) => {
+router.put("/:id", authenticate, async (req: AuthedRequest, res) => {
   try {
     const existing = await prisma.chofer.findUnique({ where: { id: req.params.id } });
     if (!existing) {
       res.status(404).json({ error: "Chofer no encontrado" });
       return;
+    }
+    if (!isInternalOpsRole(req.user!.rol)) {
+      const rol = req.user!.rol;
+      const ok =
+        (rol === "EMPRESA" || rol === "CHOFER") &&
+        (await empresaPuedeEditarChofer(req.user!.id, existing.id));
+      if (!ok) {
+        res.status(403).json({ error: "Sin permiso" });
+        return;
+      }
+      for (const k of CAMPOS_SOLO_INTERNOS) delete req.body?.[k];
     }
     const data: Record<string, unknown> = {};
     if (req.body?.nombre !== undefined) data.nombre = String(req.body.nombre).trim();
