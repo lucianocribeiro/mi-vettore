@@ -54,6 +54,7 @@ function publicUser(
     clienteId?: string | null;
     choferId?: string | null;
     dni?: string | null;
+    telefono?: string | null;
     loginIdentificador?: string | null;
     empresaId?: string | null;
     debeCambiarPassword?: boolean;
@@ -71,6 +72,7 @@ function publicUser(
     clienteId: user.clienteId ?? null,
     choferId: user.choferId ?? null,
     dni: user.dni ?? null,
+    telefono: user.telefono ?? null,
     loginIdentificador: user.loginIdentificador ?? null,
     empresaId: user.empresaId ?? null,
     debeCambiarPassword: user.debeCambiarPassword ?? false,

@@ -12,11 +12,13 @@ export async function ensureUsuarioForChofer(opts: {
   choferId: string;
   email: string | null | undefined;
   nombre: string;
+  telefono?: string | null;
   dni?: string | null;
   empresaId?: string | null;
   password?: string | null;
 }): Promise<{ tempPassword?: string }> {
   const email = (opts.email ?? "").trim().toLowerCase();
+  const telefono = opts.telefono ? String(opts.telefono).trim() : null;
   const dni = opts.dni ? String(opts.dni).replace(/\D/g, "") : null;
   if (!email && !dni) return {};
 
@@ -38,6 +40,7 @@ export async function ensureUsuarioForChofer(opts: {
       data: {
         ...(emailLibre ? { email } : {}),
         nombre: opts.nombre,
+        ...(telefono !== undefined ? { telefono } : {}),
         ...(dniLibre ? { dni, loginIdentificador: dni } : {}),
         ...(opts.empresaId ? { empresaId: opts.empresaId } : {}),
       },
@@ -54,6 +57,7 @@ export async function ensureUsuarioForChofer(opts: {
           data: {
             choferId: opts.choferId,
             nombre: opts.nombre || existingByEmail.nombre,
+            ...(telefono !== undefined ? { telefono } : {}),
             ...(dni ? { dni, loginIdentificador: dni } : {}),
             ...(opts.empresaId ? { empresaId: opts.empresaId } : {}),
           },
@@ -77,6 +81,7 @@ export async function ensureUsuarioForChofer(opts: {
       data: {
         choferId: opts.choferId,
         nombre: opts.nombre || huerfano.nombre,
+        ...(telefono !== undefined ? { telefono } : {}),
         ...(dni ? { dni, loginIdentificador: dni } : {}),
         ...(opts.empresaId ? { empresaId: opts.empresaId } : {}),
       },
@@ -91,6 +96,7 @@ export async function ensureUsuarioForChofer(opts: {
       email: email || `${login}@chofer.vettore.local`,
       passwordHash,
       nombre: opts.nombre,
+      telefono,
       rol: "CHOFER",
       choferId: opts.choferId,
       empresaId: opts.empresaId ?? null,

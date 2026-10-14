@@ -248,6 +248,7 @@ router.post("/", ...write, async (req, res) => {
       choferId: item.id,
       email: item.email,
       nombre: `${item.nombre} ${item.apellido}`.trim(),
+      telefono: item.telefono,
       dni: item.dni,
       empresaId: item.empresaId,
     });
@@ -357,6 +358,7 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
       choferId: item.id,
       email: item.email,
       nombre: item.nombre,
+      telefono: item.telefono,
     });
     res.json(item);
   } catch (err: unknown) {

@@ -38,6 +38,7 @@ type UsuarioConChofer = {
   email: string;
   rol: Role;
   nombre: string | null;
+  telefono: string | null;
   dni: string | null;
   estado: UserStatus;
   choferId: string | null;
@@ -71,7 +72,7 @@ function publicUser(u: UsuarioConChofer) {
     dni: u.dni,
     estado: u.estado,
     choferId: u.choferId ?? null,
-    telefono: u.chofer?.telefono ?? null,
+    telefono: u.telefono ?? u.chofer?.telefono ?? null,
     esDuenoFlota: u.chofer?.esDuenoFlota ?? false,
     empresaId: u.empresaId ?? u.empresa?.id ?? u.chofer?.empresaId ?? empresa?.id ?? null,
     empresaNombre: u.empresa?.nombre ?? empresa?.nombre ?? null,
@@ -198,6 +199,7 @@ router.post("/", ...write, async (req, res) => {
         passwordHash: await bcrypt.hash(plain, 10),
         rol: rolRaw as Role,
         nombre: req.body?.nombre ? String(req.body.nombre).trim() : null,
+        telefono: req.body?.telefono ? String(req.body.telefono).trim() : null,
         dni: rolRaw === "EMPRESA" ? null : dni,
         loginIdentificador,
         empresaId,
@@ -254,6 +256,9 @@ router.put("/:id", ...write, async (req, res) => {
     if (req.body?.nombre !== undefined) {
       data.nombre = req.body.nombre ? String(req.body.nombre).trim() : null;
     }
+    if (req.body?.telefono !== undefined) {
+      data.telefono = req.body.telefono ? String(req.body.telefono).trim() : null;
+    }
     if (req.body?.estado !== undefined) {
       const s = String(req.body.estado).toUpperCase();
       if (!(s in UserStatus)) {
@@ -281,13 +286,10 @@ router.put("/:id", ...write, async (req, res) => {
       include: includeChoferList,
     });
     if (req.body?.telefono !== undefined && item.choferId) {
-      const telefono = req.body.telefono
-        ? String(req.body.telefono).trim() || null
-        : null;
       await prisma.chofer.update({
         where: { id: item.choferId },
         data: {
-          telefono,
+          telefono: item.telefono,
           ...(req.body?.apellido !== undefined
             ? { apellido: String(req.body.apellido).trim() }
             : {}),

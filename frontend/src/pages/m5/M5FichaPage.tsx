@@ -2574,13 +2574,7 @@ export function M5FichaPage() {
                   value={fTelefono}
                   onChange={(e) => setFTelefono(e.target.value)}
                   placeholder="Ej: 11 5555-5555"
-                  disabled={!!form.item && !form.item.choferId}
                 />
-                {form.item && !form.item.choferId && (
-                  <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                    Solo se edita si el usuario está vinculado a un chofer.
-                  </p>
-                )}
               </Field>
               <Field label="Email">
                 <input

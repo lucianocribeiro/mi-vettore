@@ -139,6 +139,7 @@ model Usuario {
   rol          Role
   estado       UserStatus @default(ACTIVO)
   nombre       String?
+  telefono     String?
   clienteId    String?
   choferId     String?
   empresaId    String?

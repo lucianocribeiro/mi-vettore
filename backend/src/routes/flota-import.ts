@@ -247,6 +247,7 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
         choferId: chofer.id,
         email: chofer.email,
         nombre,
+        telefono: chofer.telefono,
         dni: chofer.dni,
         empresaId: chofer.empresaId,
       });
