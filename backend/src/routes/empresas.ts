@@ -9,6 +9,8 @@ import { estadoEntidadFrom } from "../lib/estado-entidad.js";
 import {
   cerrarInhabilitacionesDeEmpresa,
   datosInhabilitacionDe,
+  inhabilitarDependientesDeEmpresa,
+  reactivarDependientesDeEmpresa,
   sincronizarInhabilitacion,
 } from "../lib/inhabilitaciones.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
@@ -360,6 +362,11 @@ router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
           where: { empresaId: actual.id, estado: "INACTIVA" },
           data: { estado: "OPERATIVA", estadoDesde: null, estadoHasta: null },
         });
+      }
+      if (estado === "INHABILITADO") {
+        await inhabilitarDependientesDeEmpresa(tx, actual.id, datos);
+      } else if (actual.inhabilitada) {
+        await reactivarDependientesDeEmpresa(tx, actual.id, req.user?.id);
       }
       return tx.empresaTransporte.update({
         where: { id: actual.id },

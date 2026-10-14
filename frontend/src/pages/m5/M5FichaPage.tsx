@@ -823,7 +823,7 @@ export function M5FichaPage() {
   const CONFIRM_ESTADO: Record<"empresa" | "chofer" | "camioneta", Partial<Record<EstadoEntidad, string>>> = {
     empresa: {
       INHABILITADO:
-        "¿Inhabilitar esta empresa? Sigue visible, pero no se le asignan choferes/unidades ni puede pedir taller.",
+        "¿Inhabilitar esta empresa? Sus choferes y unidades activos también quedan inhabilitados (vuelven al reactivarla).",
       INACTIVO:
         "¿Inactivar esta empresa? Se conservan historial, choferes y unidades (quedan inactivos).",
     },

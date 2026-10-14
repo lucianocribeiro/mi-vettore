@@ -109,6 +109,73 @@ export async function sincronizarInhabilitacionUnidad(
   });
 }
 
+/** Marca las inhabilitaciones de choferes/unidades que vienen de inhabilitar su empresa. */
+const TIPO_POR_EMPRESA = "POR_EMPRESA";
+
+/** Inhabilitar empresa: choferes activos e unidades operativas quedan inhabilitados. */
+export async function inhabilitarDependientesDeEmpresa(
+  db: Db,
+  empresaId: string,
+  datos: DatosInhabilitacion
+): Promise<void> {
+  const motivo = `Empresa inhabilitada${datos.motivo ? `: ${datos.motivo}` : ""}`;
+  const desde = datos.desde ?? new Date();
+  const hasta = datos.hasta ?? null;
+  const choferes = await db.chofer.findMany({
+    where: { empresaId, estado: "ACTIVO" },
+    select: { id: true },
+  });
+  const unidades = await db.camioneta.findMany({
+    where: { empresaId, estado: "OPERATIVA" },
+    select: { id: true },
+  });
+  await db.chofer.updateMany({
+    where: { id: { in: choferes.map((c) => c.id) } },
+    data: { estado: "INHABILITADO" },
+  });
+  await db.camioneta.updateMany({
+    where: { id: { in: unidades.map((u) => u.id) } },
+    data: { estado: "FUERA_SERVICIO", estadoDesde: desde, estadoHasta: hasta },
+  });
+  const base = { tipo: TIPO_POR_EMPRESA, motivo, desde, hasta, creadoPorId: datos.userId ?? null };
+  await db.inhabilitacion.createMany({
+    data: [
+      ...choferes.map((c) => ({ ...base, entidad: "CHOFER" as const, choferId: c.id })),
+      ...unidades.map((u) => ({ ...base, entidad: "UNIDAD" as const, camionetaId: u.id })),
+    ],
+  });
+}
+
+/** Reactivar empresa inhabilitada: vuelve solo lo que se inhabilitó por la empresa. */
+export async function reactivarDependientesDeEmpresa(
+  db: Db,
+  empresaId: string,
+  userId: string | null | undefined
+): Promise<void> {
+  const abiertas = await db.inhabilitacion.findMany({
+    where: {
+      cerradaAt: null,
+      tipo: TIPO_POR_EMPRESA,
+      OR: [{ chofer: { empresaId } }, { camioneta: { empresaId } }],
+    },
+    select: { id: true, choferId: true, camionetaId: true },
+  });
+  const choferIds = abiertas.flatMap((a) => (a.choferId ? [a.choferId] : []));
+  const camIds = abiertas.flatMap((a) => (a.camionetaId ? [a.camionetaId] : []));
+  await db.chofer.updateMany({
+    where: { id: { in: choferIds }, estado: "INHABILITADO" },
+    data: { estado: "ACTIVO" },
+  });
+  await db.camioneta.updateMany({
+    where: { id: { in: camIds }, estado: "FUERA_SERVICIO" },
+    data: { estado: "OPERATIVA", estadoDesde: null, estadoHasta: null },
+  });
+  await db.inhabilitacion.updateMany({
+    where: { id: { in: abiertas.map((a) => a.id) } },
+    data: { cerradaAt: new Date(), cerradaPorId: userId ?? null },
+  });
+}
+
 /** Cierra las abiertas de choferes y unidades de una empresa (al inactivarla en cascada). */
 export async function cerrarInhabilitacionesDeEmpresa(
   db: Db,
