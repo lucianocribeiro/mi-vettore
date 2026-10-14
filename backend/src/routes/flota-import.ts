@@ -9,14 +9,12 @@ import {
   norm,
   parseCapacidadTexto,
   parseFlotaWorkbook,
-  resolverChofer,
   resolverEmpresa,
   sendFlotaExcel,
   type ImportError,
 } from "../lib/flota-import.js";
 import { ensureUsuarioForChofer } from "../lib/usuario-chofer.js";
 import { generateTempPassword } from "../lib/temp-password.js";
-import { reasignarChoferUnidad } from "../lib/asignacion-flota.js";
 import {
   sincronizarInhabilitacion,
   sincronizarInhabilitacionUnidad,
@@ -157,6 +155,7 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
             nombre: c.nombre,
             apellido: "",
             telefono: c.telefono || null,
+            ...(c.cuil ? { cuil: c.cuil } : {}),
             email: c.email || null,
             ...(c.estado ? { estado: c.estado } : {}),
           };
@@ -189,6 +188,7 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
           const datos: Prisma.CamionetaUncheckedUpdateInput = {};
           if (u.marca) datos.marca = u.marca;
           if (u.modelo) datos.modelo = u.modelo;
+          if (u.anio != null) datos.anio = u.anio;
           const equipo = u.equipoFrio
             ? equiposFrio.find((e) => norm(e.nombre) === norm(u.equipoFrio))
             : undefined;
@@ -233,23 +233,6 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
           else creados.unidades++;
           if (guardada.estado !== current?.estado) {
             await sincronizarInhabilitacionUnidad(tx, guardada, undefined, req.user?.id);
-          }
-
-          if (u.choferes.length) {
-            const deEmpresa = await tx.chofer.findMany({
-              where: { empresaId },
-              select: { id: true, dni: true, nombre: true, apellido: true },
-            });
-            const ids: string[] = [];
-            for (const ref of u.choferes) {
-              const ch = resolverChofer(ref, deEmpresa);
-              if (ch) ids.push(ch.id);
-              else avisos.push(`Unidad ${u.patente}: chofer "${ref}" no encontrado en la empresa`);
-            }
-            const estadoFinal = (datos.estado as EstadoCamioneta | undefined) ?? current?.estado;
-            if (ids.length && estadoFinal !== EstadoCamioneta.INACTIVA) {
-              await reasignarChoferUnidad({ camionetaId, choferIds: ids }, tx);
-            }
           }
         }
       },

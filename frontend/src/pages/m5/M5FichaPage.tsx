@@ -195,7 +195,6 @@ export function M5FichaPage() {
   const [fCapacidadValor, setFCapacidadValor] = useState("");
   const [fCapacidadUnidad, setFCapacidadUnidad] = useState("");
   const [fTipoServicioId, setFTipoServicioId] = useState("");
-  const [fKm, setFKm] = useState("0");
   const [fEstadoCam, setFEstadoCam] = useState<
     "OPERATIVA" | "EN_TALLER" | "DE_VACACIONES" | "FUERA_SERVICIO" | "INACTIVA"
   >("OPERATIVA");
@@ -421,7 +420,6 @@ export function M5FichaPage() {
     setFCapacidadValor("");
     setFCapacidadUnidad("");
     setFTipoServicioId("");
-    setFKm("0");
     setFEstadoCam("OPERATIVA");
     setFEstadoDesde("");
     setFEstadoHasta("");
@@ -480,7 +478,6 @@ export function M5FichaPage() {
     );
     setFCapacidadUnidad(item.capacidadUnidad ?? "");
     setFTipoServicioId(item.tipoServicioId ?? "");
-    setFKm(String(item.km));
     setFEstadoCam(item.estado);
     setFEstadoDesde(
       item.estadoDesde ? item.estadoDesde.slice(0, 10) : ""
@@ -664,7 +661,6 @@ export function M5FichaPage() {
           capacidadValor: fCapacidadValor ? Number(fCapacidadValor) : null,
           capacidadUnidad: fCapacidadUnidad || null,
           tipoServicioId: fTipoServicioId || null,
-          km: Number(fKm) || 0,
           estado: fEstadoCam,
           estadoDesde: fEstadoCam === "OPERATIVA" ? null : fEstadoDesde || null,
           estadoHasta: fEstadoCam === "OPERATIVA" ? null : fEstadoHasta || null,
@@ -1391,8 +1387,7 @@ export function M5FichaPage() {
                     <div className="text-xs text-[var(--vl-text-muted)]">
                       {c.empresa?.nombre ??
                         a?.empresa?.nombre ??
-                        "Sin empresa"}{" "}
-                      · {c.km.toLocaleString("es-AR")} km
+                        "Sin empresa"}
                     </div>
                     <div className="mt-2 font-semibold text-[var(--vl-heading)]">
                       {c.patente}
@@ -2352,14 +2347,6 @@ export function M5FichaPage() {
                     Para {fEquipoFrio}: {tiposFrioPermitidos.join(", ")}
                   </p>
                 )}
-              </Field>
-              <Field label="Kilometraje">
-                <input
-                  type="number"
-                  className={inputClass}
-                  value={fKm}
-                  onChange={(e) => setFKm(e.target.value)}
-                />
               </Field>
               <Field label="Estado">
                 <select

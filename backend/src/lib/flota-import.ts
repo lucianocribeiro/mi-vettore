@@ -33,6 +33,7 @@ export const FLOTA_COLUMNAS: Record<HojaFlota, Columna[]> = {
   choferes: [
     { header: "Nombre completo", key: "nombre", width: 30 },
     { header: "DNI", key: "dni", width: 14 },
+    { header: "CUIL", key: "cuil", width: 16 },
     { header: "Email", key: "email", width: 28 },
     { header: "Teléfono", key: "telefono", width: 16 },
     { header: "Estado", key: "estado", width: 12 },
@@ -42,11 +43,11 @@ export const FLOTA_COLUMNAS: Record<HojaFlota, Columna[]> = {
     { header: "Patente", key: "patente", width: 12 },
     { header: "Marca", key: "marca", width: 14 },
     { header: "Modelo", key: "modelo", width: 14 },
+    { header: "Año", key: "anio", width: 8 },
     { header: "Capacidad", key: "capacidad", width: 18 },
     { header: "Equipo de frío", key: "equipoFrio", width: 18 },
     { header: "Tipo servicio", key: "tipoServicio", width: 16 },
     { header: "Estado", key: "estado", width: 16 },
-    { header: "Chofer", key: "chofer", width: 26 },
     { header: "Empresa", key: "empresa", width: 26 },
   ],
 };
@@ -67,6 +68,7 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
   choferes: {
     nombre: "Ana Perez",
     dni: "30111222",
+    cuil: "27301112224",
     email: "ana@empresa.com",
     telefono: "2644000000",
     estado: "ACTIVO",
@@ -76,11 +78,11 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
     patente: "AB123CD",
     marca: "Fiat",
     modelo: "Fiorino Fire",
+    anio: 2020,
     capacidad: "350 kg",
     equipoFrio: "Carrier",
     tipoServicio: "Supercongelado",
     estado: "OPERATIVA",
-    chofer: "Ana Perez",
     empresa: EMPRESA_EJEMPLO,
   },
 };
@@ -97,7 +99,7 @@ const INSTRUCCIONES: Record<HojaFlota, string[]> = {
   ],
   unidades: [
     "Obligatorias: Patente y Empresa (nombre o CUIT de una empresa ya cargada).",
-    "Chofer: nombre completo (o DNI) de choferes ya cargados de esa empresa; varios separados por coma.",
+    "Año: 4 dígitos (ej. 2020).",
     "Capacidad: número y unidad (ej. 350 kg). Tipo servicio (tipo de frío): igual al catálogo (ej. Congelado, Seco).",
     "Equipo de frío: igual al ABM de equipos de frío; el tipo de frío tiene que ser uno de los que admite ese equipo.",
     "Estado: OPERATIVA, DE_VACACIONES, FUERA_SERVICIO o INACTIVA (EN_TALLER lo maneja Talleres).",
@@ -160,6 +162,7 @@ export type FilaChofer = {
   fila: number;
   nombre: string;
   dni: string;
+  cuil: string;
   email: string;
   telefono: string;
   estado: "ACTIVO" | "INHABILITADO" | "INACTIVO" | null;
@@ -171,11 +174,11 @@ export type FilaUnidad = {
   patente: string;
   marca: string;
   modelo: string;
+  anio: number | null;
   capacidad: string;
   equipoFrio: string;
   tipoServicio: string;
   estado: string;
-  choferes: string[];
   empresa: string;
 };
 
@@ -290,6 +293,7 @@ export async function parseFlotaWorkbook(
         fila: n,
         nombre,
         dni,
+        cuil: digits(txt(row, "cuil")),
         email: txt(row, "email").toLowerCase(),
         telefono: txt(row, "telefono"),
         estado: (estadoRaw || null) as FilaChofer["estado"],
@@ -309,19 +313,21 @@ export async function parseFlotaWorkbook(
       error(n, `Estado inválido: ${estado}`);
       return;
     }
+    const anioRaw = digits(txt(row, "anio"));
+    if (anioRaw && anioRaw.length !== 4) {
+      error(n, `Año inválido: ${txt(row, "anio")}`);
+      return;
+    }
     data.unidades.push({
       fila: n,
       patente,
       marca: txt(row, "marca"),
       modelo: txt(row, "modelo"),
+      anio: anioRaw ? Number(anioRaw) : null,
       capacidad: txt(row, "capacidad"),
       equipoFrio: txt(row, "equipoFrio"),
       tipoServicio: txt(row, "tipoServicio"),
       estado,
-      choferes: txt(row, "chofer")
-        .split(/[,;]+/)
-        .map((s) => s.trim())
-        .filter(Boolean),
       empresa,
     });
   });

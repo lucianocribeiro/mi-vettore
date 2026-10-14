@@ -116,6 +116,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       items.map((c) => ({
         nombre: `${c.nombre} ${c.apellido}`.trim(),
         dni: c.dni,
+        cuil: c.cuil ?? "",
         email: c.email ?? "",
         telefono: c.telefono ?? "",
         estado: c.estado,

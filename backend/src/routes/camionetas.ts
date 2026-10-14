@@ -165,13 +165,11 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
             patente: c.patente,
             marca: c.marca ?? "",
             modelo: c.modelo ?? "",
+            anio: c.anio ?? "",
             capacidad: formatCapacidad(c.capacidadValor, c.capacidadUnidad, c.capacidad),
             equipoFrio: c.equipoFrio ?? "",
             tipoServicio: c.tipoServicio?.nombre ?? c.tipoTransporte ?? "",
             estado: c.estado,
-            chofer: c.asignaciones
-              .map((a) => `${a.chofer.nombre} ${a.chofer.apellido}`.trim())
-              .join(", "),
             empresa: empresa?.nombre ?? "",
           };
         }),
