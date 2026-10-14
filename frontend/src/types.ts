@@ -134,7 +134,6 @@ export type EstadoValidacionDoc = "PENDIENTE" | "VALIDADO" | "RECHAZADO";
 export const TIPOS_DOCUMENTO_CON_VENCIMIENTO: TipoDocumento[] = [
   "LICENCIA",
   "LICENCIA_FRENTE",
-  "LICENCIA_DORSO",
   "HABILITACION_MANIPULACION",
   "VTV",
   "SENASA",

@@ -39,7 +39,6 @@ const upload = multer({
 const CON_VENCIMIENTO = new Set<TipoDocumento>([
   TipoDocumento.LICENCIA,
   TipoDocumento.LICENCIA_FRENTE,
-  TipoDocumento.LICENCIA_DORSO,
   TipoDocumento.HABILITACION_MANIPULACION,
   TipoDocumento.VTV,
   TipoDocumento.SENASA,
