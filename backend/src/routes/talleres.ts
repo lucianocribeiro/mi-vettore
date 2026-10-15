@@ -31,7 +31,10 @@ import {
   diagnosticoPathFromId,
 } from "../lib/diagnostico-path.js";
 import { queryHistorialReparaciones } from "../lib/historial-reparaciones.js";
-import { syncMantenimientoDesdeOt } from "../lib/sync-mantenimiento-ot.js";
+import {
+  resyncMantenimientoDeOt,
+  syncMantenimientoDesdeOt,
+} from "../lib/sync-mantenimiento-ot.js";
 import {
   canAdvanceFromStep,
   canCerrarOt,
@@ -1172,6 +1175,7 @@ router.post(
                   },
                 });
               }
+              await resyncMantenimientoDeOt(tx, otNum.id);
             });
             actualizadas++;
             continue;
@@ -1240,6 +1244,7 @@ router.post(
                   });
                 }
               }
+              await resyncMantenimientoDeOt(tx, existente.id);
             });
             actualizadas++;
             continue;
@@ -1290,6 +1295,7 @@ router.post(
               },
             });
           }
+          await resyncMantenimientoDeOt(tx, ot.id);
         });
         creadas++;
       }
@@ -2860,7 +2866,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         numeroOT: ot.numeroOT,
         tallerNombre:
           ot.tallerAsignado ?? ot.tallerProveedor?.razonSocial ?? null,
-        kmActual: ot.solicitud.camioneta.km ?? null,
+        kmActual: ot.kmAlMomento ?? ot.solicitud.camioneta.km ?? null,
         itemCategoriaIds: ot.items.map((i) => i.categoriaDiagnosticoId),
         fecha: new Date(),
       });

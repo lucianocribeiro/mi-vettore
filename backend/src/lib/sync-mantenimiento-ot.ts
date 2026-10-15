@@ -52,16 +52,31 @@ export async function syncMantenimientoDesdeOt(
     return;
   }
 
-  const data: Prisma.CamionetaUpdateInput = {};
-  if (flags.aceite) data.fechaUltimoAceite = fecha;
-  if (flags.correa) data.fechaCambioCorrea = fecha;
-  if (flags.neumaticos) data.fechaCambioNeumaticos = fecha;
-  if (flags.bateria) data.fechaCambioBateria = fecha;
-
-  await tx.camioneta.update({
+  const actual = await tx.camioneta.findUnique({
     where: { id: opts.camionetaId },
-    data,
+    select: {
+      fechaUltimoAceite: true,
+      fechaCambioCorrea: true,
+      fechaCambioNeumaticos: true,
+      fechaCambioBateria: true,
+    },
   });
+  // Una OT con fecha vieja no pisa una fecha de mantenimiento más nueva.
+  const masNueva = (prev: Date | null | undefined) => !prev || fecha >= prev;
+  const data: Prisma.CamionetaUpdateInput = {};
+  if (flags.aceite && masNueva(actual?.fechaUltimoAceite)) data.fechaUltimoAceite = fecha;
+  if (flags.correa && masNueva(actual?.fechaCambioCorrea)) data.fechaCambioCorrea = fecha;
+  if (flags.neumaticos && masNueva(actual?.fechaCambioNeumaticos)) {
+    data.fechaCambioNeumaticos = fecha;
+  }
+  if (flags.bateria && masNueva(actual?.fechaCambioBateria)) data.fechaCambioBateria = fecha;
+
+  if (Object.keys(data).length > 0) {
+    await tx.camioneta.update({
+      where: { id: opts.camionetaId },
+      data,
+    });
+  }
 
   const registros: {
     tipo: string;
@@ -87,6 +102,29 @@ export async function syncMantenimientoDesdeOt(
       },
     });
   }
+}
+
+/** Rehace los registros de mantenimiento de una OT cerrada (p. ej. tras importar/actualizar historial). */
+export async function resyncMantenimientoDeOt(tx: Tx, otId: string) {
+  const ot = await tx.ordenTrabajo.findUnique({
+    where: { id: otId },
+    include: {
+      solicitud: { select: { camionetaId: true } },
+      tallerProveedor: { select: { razonSocial: true } },
+      items: { select: { categoriaDiagnosticoId: true } },
+    },
+  });
+  if (!ot?.cerradaAt) return;
+  await tx.registroMantenimiento.deleteMany({ where: { otId } });
+  await syncMantenimientoDesdeOt(tx, {
+    camionetaId: ot.solicitud.camionetaId,
+    otId: ot.id,
+    numeroOT: ot.numeroOT,
+    tallerNombre: ot.tallerAsignado ?? ot.tallerProveedor?.razonSocial ?? null,
+    kmActual: ot.kmAlMomento,
+    itemCategoriaIds: ot.items.map((i) => i.categoriaDiagnosticoId),
+    fecha: ot.cerradaAt,
+  });
 }
 
 /** Helper no-tx for callers outside transactions. */
