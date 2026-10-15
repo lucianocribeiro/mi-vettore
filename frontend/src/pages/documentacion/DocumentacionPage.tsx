@@ -758,7 +758,6 @@ export function DocumentacionPage() {
           <div className="mt-4 grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {filteredCams.map((c) => {
               const active = selectedCam === c.id;
-              const actual = currentAsignacion(c);
               const resumen = resumenCam[c.id];
               const nivel: NivelDocs = resumen?.nivel ?? "ok";
               return (
@@ -791,9 +790,6 @@ export function DocumentacionPage() {
                     </Badge>
                   </div>
                   <DocChecklist r={resumen} grupos={GRUPOS_UNIDAD} />
-                  <div className="mt-auto pt-2 text-[11px] leading-snug text-[var(--vl-text-muted)]">
-                    {actual?.chofer ? `Chofer: ${actual.chofer.nombre}` : "Sin chofer"}
-                  </div>
                 </button>
               );
             })}
@@ -924,7 +920,6 @@ export function DocumentacionPage() {
               const active = selectedChofer === c.id;
               const resumen = resumenCh[c.id];
               const nivel: NivelDocs = resumen?.nivel ?? "ok";
-              const unidad = unidadDeChofer(c.id);
               const empresa = currentChoferAsignacion(c)?.empresa?.nombre;
               const abrible = puedeAbrirChofer(c.id);
               return (
@@ -961,9 +956,6 @@ export function DocumentacionPage() {
                     )}
                   </div>
                   <DocChecklist r={resumen} grupos={GRUPOS_CHOFER} />
-                  <div className="mt-auto pt-2 text-[11px] leading-snug text-[var(--vl-text-muted)]">
-                    {unidad ? `Unidad: ${unidad.patente}` : "Sin unidad"}
-                  </div>
                 </button>
               );
             })}
@@ -982,7 +974,6 @@ export function DocumentacionPage() {
                 <Badge className={ESTADO_CHOFER_STYLE[c.estado]}>{c.estado.toLowerCase()}</Badge>
               ) : null
             }
-            subtitulo={unidadDeChofer(c.id)?.patente ?? "Sin unidad"}
             onClose={() => setSelectedChofer(null)}
           >
                     {esPerfilEmpresa && (
