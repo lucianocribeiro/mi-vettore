@@ -38,7 +38,6 @@ import {
   type User,
 } from "../../types";
 import { FichaDrawer } from "./FichaDrawer";
-import { compressImageIfNeeded } from "../../components/DocumentUpload";
 import { Field, FormModal, inputClass } from "./FormModal";
 import { NoticeDialog } from "../../components/NoticeDialog";
 import { EquiposFrioAbmPanel, type EquipoFrio } from "./EquiposFrioAbmPanel";
@@ -120,14 +119,6 @@ function whatsappDigits(raw: string | null | undefined): string | null {
 }
 
 /** Comprime la foto (va dentro del JSON del alta) y la entrega como data URL. */
-async function leerFotoCedula(file: File | undefined, set: (v: string) => void) {
-  if (!file) return;
-  const blob = await compressImageIfNeeded(file);
-  const reader = new FileReader();
-  reader.onload = () => set(String(reader.result ?? ""));
-  reader.readAsDataURL(blob);
-}
-
 export function M5FichaPage() {
   const { token, user } = useAuth();
   const location = useLocation();
@@ -189,8 +180,6 @@ export function M5FichaPage() {
   const [fEstadoChofer, setFEstadoChofer] = useState<EstadoEntidad>("ACTIVO");
   const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
-  const [fCedulaFoto, setFCedulaFoto] = useState("");
-  const [fCedulaDorso, setFCedulaDorso] = useState("");
   const [fCuit, setFCuit] = useState("");
   const [fPatente, setFPatente] = useState("");
   const [fMarca, setFMarca] = useState("");
@@ -415,8 +404,6 @@ export function M5FichaPage() {
     setFEstadoChofer("ACTIVO");
     setFCuit("");
     setFPasswordEmpresa("");
-    setFCedulaFoto("");
-    setFCedulaDorso("");
     setFPatente("");
     setFMarca("");
     setFModelo("");
@@ -673,8 +660,6 @@ export function M5FichaPage() {
           estadoDesde: fEstadoCam === "OPERATIVA" ? null : fEstadoDesde || null,
           estadoHasta: fEstadoCam === "OPERATIVA" ? null : fEstadoHasta || null,
           empresaId: fEmpresaId || null,
-          cedulaFoto: fCedulaFoto || undefined,
-          cedulaDorsoFoto: fCedulaDorso || undefined,
         };
         if (form.item) {
           const updated = await apiFetch<Camioneta>(
@@ -2437,26 +2422,6 @@ export function M5FichaPage() {
                     ))}
                 </select>
               </Field>
-              {!form.item && (
-                <>
-                  <Field label="Cédula frente (obligatoria)">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className={inputClass}
-                      onChange={(e) => void leerFotoCedula(e.target.files?.[0], setFCedulaFoto)}
-                    />
-                  </Field>
-                  <Field label="Cédula dorso">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className={inputClass}
-                      onChange={(e) => void leerFotoCedula(e.target.files?.[0], setFCedulaDorso)}
-                    />
-                  </Field>
-                </>
-              )}
             </>
           )}
 

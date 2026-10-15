@@ -948,10 +948,6 @@ router.post("/", ...write, async (req, res) => {
       return;
     }
     const cedulaFoto = String(req.body?.cedulaFoto ?? "");
-    if (!req.body?.omitirCedula && !cedulaFoto.startsWith("data:image/")) {
-      res.status(400).json({ error: "La cédula requiere una foto" });
-      return;
-    }
     const item = await prisma.camioneta.create({
       data: {
         patente,
