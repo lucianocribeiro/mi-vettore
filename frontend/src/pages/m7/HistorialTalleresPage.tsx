@@ -248,17 +248,13 @@ export function HistorialTalleresPage() {
     try {
       if (importModo === "nuevos") {
         await descargarPlantilla();
-      } else if (vista === "conceptos") {
-        const q = buildQs(filtrosConceptos);
-        await apiDownload(
-          `/api/talleres/historial/reparaciones/export${q}`,
-          token,
-          "historial_reparaciones.xlsx"
-        );
       } else {
-        const qs = busqueda.trim()
-          ? `?q=${encodeURIComponent(busqueda.trim())}`
-          : "";
+        const qs =
+          vista === "conceptos"
+            ? buildQs(filtrosConceptos)
+            : busqueda.trim()
+              ? `?q=${encodeURIComponent(busqueda.trim())}`
+              : "";
         await apiDownload(
           `/api/talleres/historial/export${qs}`,
           token,

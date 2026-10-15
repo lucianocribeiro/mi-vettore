@@ -27,6 +27,7 @@ import { authenticate, type AuthedRequest } from "../middleware/auth.js";
 import { ensureUploadDirs } from "../lib/uploads.js";
 import { isInternalOpsRole } from "../lib/roles.js";
 import {
+  categoriaEnRama,
   diagnosticoPathFromId,
 } from "../lib/diagnostico-path.js";
 import { queryHistorialReparaciones } from "../lib/historial-reparaciones.js";
@@ -742,6 +743,14 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
       return;
     }
     const q = String(req.query?.q ?? "").trim().toLowerCase();
+    const filtroRama = {
+      nivel1: String(req.query?.nivel1 ?? "").trim(),
+      nivel2: String(req.query?.nivel2 ?? "").trim(),
+      nivel3: String(req.query?.nivel3 ?? "").trim(),
+    };
+    const tallerQ = String(req.query?.taller ?? "").trim().toLowerCase();
+    const desde = req.query?.desde ? String(req.query.desde) : "";
+    const hasta = req.query?.hasta ? String(req.query.hasta) : "";
     const [ots, cats] = await Promise.all([
       prisma.ordenTrabajo.findMany({
         include: {
@@ -763,9 +772,6 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
 
     for (const ot of ots) {
       const patente = ot.solicitud.camioneta.patente;
-      if (q && !patente.toLowerCase().includes(q) && !ot.numeroOT.toLowerCase().includes(q)) {
-        continue;
-      }
       const gasto = ot.items.filter((i) => i.tipo === "FACTURA" || i.tipo === "RENDICION");
       const fuente = gasto.length
         ? gasto
@@ -783,10 +789,37 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
               },
             ];
       for (const it of items) {
-        const nivel = diagnosticoPathFromId(
-          cats,
-          "categoriaDiagnosticoId" in it ? it.categoriaDiagnosticoId : null
-        );
+        const catId = "categoriaDiagnosticoId" in it ? it.categoriaDiagnosticoId : null;
+        if (!categoriaEnRama(cats, catId, filtroRama)) continue;
+        const nivel = diagnosticoPathFromId(cats, catId);
+        const taller =
+          ("tallerNombre" in it && it.tallerNombre) ||
+          ot.tallerProveedor?.razonSocial ||
+          ot.tallerAsignado ||
+          "";
+        if (tallerQ && !taller.toLowerCase().includes(tallerQ)) continue;
+        const fecha = (it.fecha ?? ot.createdAt).toISOString().slice(0, 10);
+        if (desde && fecha < desde) continue;
+        if (hasta && fecha > hasta) continue;
+        if (
+          q &&
+          ![
+            patente,
+            ot.numeroOT,
+            ot.solicitud.falla,
+            taller,
+            it.descripcion,
+            ot.solicitud.chofer?.nombre ?? "",
+            nivel.nivel1 ?? "",
+            nivel.nivel2 ?? "",
+            nivel.nivel3 ?? "",
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(q)
+        ) {
+          continue;
+        }
         sheet.addRow({
           n1: nivel.nivel1 ?? "",
           n2: nivel.nivel2 ?? "",
@@ -799,15 +832,11 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
           falla: ot.solicitud.falla,
           detalle: ot.solicitud.detalle,
           chofer: ot.solicitud.chofer?.nombre ?? "",
-          taller:
-            ("tallerNombre" in it && it.tallerNombre) ||
-            ot.tallerProveedor?.razonSocial ||
-            ot.tallerAsignado ||
-            "",
+          taller,
           descripcion: it.descripcion,
           importe: it.importe,
           tipo: it.tipo,
-          fecha: (it.fecha ?? ot.createdAt).toISOString().slice(0, 10),
+          fecha,
           cerrada: ot.cerradaAt ? ot.cerradaAt.toISOString().slice(0, 10) : "",
         });
       }
