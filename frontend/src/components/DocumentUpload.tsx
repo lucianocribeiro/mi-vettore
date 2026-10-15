@@ -284,16 +284,33 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
           const needs = conVencimiento.includes(t);
           const esObligatorio = obligatorios.includes(t);
           const venc = vencByTipo[t] ?? "";
+          const rechazado = latest?.estadoValidacion === "RECHAZADO";
+          const cargado = max ? archivos.length > 0 : !!latest && !rechazado;
+          const bloqueClass = cargado
+            ? "border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/30"
+            : rechazado
+              ? "border-red-500/60 bg-red-50 dark:bg-red-950/30"
+              : "border-[var(--vl-card-border)] bg-slate-50 dark:bg-slate-900/50";
           return (
             <div
               key={t}
-              className="flex flex-col gap-2.5 rounded-lg border border-[var(--vl-card-border)] bg-slate-50 p-3 dark:bg-slate-900/50"
+              className={`flex flex-col gap-2.5 rounded-lg border p-3 ${bloqueClass}`}
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-sm font-semibold text-[var(--vl-heading)]">
                     {TIPO_DOCUMENTO_LABEL[t] ?? t}
                   </span>
+                  {cargado && (
+                    <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                      ✓ Cargado
+                    </span>
+                  )}
+                  {rechazado && (
+                    <span className="text-[10px] font-semibold text-red-700 dark:text-red-300">
+                      Rechazado: volver a subir
+                    </span>
+                  )}
                   <span
                     className={`text-[10px] font-medium ${
                       esObligatorio
@@ -367,8 +384,12 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
                     : max
                       ? `Agregar foto (${archivos.length + 1}/${max})`
                       : TIPOS_FOTO_VEHICULO.includes(t)
-                        ? "Sacar foto"
-                        : "Foto / PDF"}
+                        ? latest
+                          ? "Cambiar foto"
+                          : "Sacar foto"
+                        : latest
+                          ? "Cambiar archivo"
+                          : "Subir archivo"}
                   <input
                     type="file"
                     accept={
