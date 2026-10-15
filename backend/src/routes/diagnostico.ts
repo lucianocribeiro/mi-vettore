@@ -1,22 +1,105 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { authenticate, type AuthedRequest } from "../middleware/auth.js";
+import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { assertRoleOrOverride, parseOverrideComentario } from "../lib/ot-override.js";
 import { Role } from "@prisma/client";
 
 const router = Router();
 
-router.get("/categorias", authenticate, async (_req, res) => {
+const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
+
+router.get("/categorias", authenticate, async (req, res) => {
   try {
+    const todas = String(req.query.todas ?? "") === "1";
     const items = await prisma.categoriaDiagnostico.findMany({
-      where: { activo: true },
+      where: todas ? undefined : { activo: true },
       orderBy: [{ nivel: "asc" }, { orden: "asc" }, { nombre: "asc" }],
     });
     res.json(items);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al listar categorías de diagnóstico" });
+  }
+});
+
+router.post("/categorias", ...write, async (req, res) => {
+  try {
+    const nombre = String(req.body?.nombre ?? "").trim();
+    const padreId = req.body?.padreId ? String(req.body.padreId) : null;
+    if (!nombre) {
+      res.status(400).json({ error: "Indicá el nombre" });
+      return;
+    }
+    let nivel = 1;
+    if (padreId) {
+      const padre = await prisma.categoriaDiagnostico.findUnique({ where: { id: padreId } });
+      if (!padre) {
+        res.status(400).json({ error: "Concepto padre inválido" });
+        return;
+      }
+      if (padre.nivel >= 3) {
+        res.status(400).json({ error: "El nivel 3 no admite subconceptos" });
+        return;
+      }
+      nivel = padre.nivel + 1;
+    }
+    const orden = await prisma.categoriaDiagnostico.count({ where: { padreId } });
+    const item = await prisma.categoriaDiagnostico.create({
+      data: { nombre, padreId, nivel, orden },
+    });
+    res.status(201).json(item);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al crear concepto" });
+  }
+});
+
+router.put("/categorias/:id", ...write, async (req, res) => {
+  try {
+    const data: { nombre?: string; activo?: boolean; orden?: number } = {};
+    if (req.body?.nombre !== undefined) {
+      const nombre = String(req.body.nombre).trim();
+      if (!nombre) {
+        res.status(400).json({ error: "Indicá el nombre" });
+        return;
+      }
+      data.nombre = nombre;
+    }
+    if (typeof req.body?.activo === "boolean") data.activo = req.body.activo;
+    if (Number.isInteger(req.body?.orden)) data.orden = req.body.orden;
+    const item = await prisma.categoriaDiagnostico.update({
+      where: { id: req.params.id },
+      data,
+    });
+    res.json(item);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al actualizar concepto" });
+  }
+});
+
+router.delete("/categorias/:id", ...write, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const [hijos, ots, items] = await Promise.all([
+      prisma.categoriaDiagnostico.count({ where: { padreId: id } }),
+      prisma.ordenTrabajoDiagnostico.count({ where: { categoriaId: id } }),
+      prisma.otItem.count({ where: { categoriaDiagnosticoId: id } }),
+    ]);
+    if (hijos > 0) {
+      res.status(400).json({ error: "Tiene subconceptos: eliminalos o desactivalo" });
+      return;
+    }
+    if (ots > 0 || items > 0) {
+      res.status(400).json({ error: "Está en uso en OT: desactivalo" });
+      return;
+    }
+    await prisma.categoriaDiagnostico.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al eliminar concepto" });
   }
 });
 

@@ -42,6 +42,7 @@ import { compressImageIfNeeded } from "../../components/DocumentUpload";
 import { Field, FormModal, inputClass } from "./FormModal";
 import { NoticeDialog } from "../../components/NoticeDialog";
 import { EquiposFrioAbmPanel, type EquipoFrio } from "./EquiposFrioAbmPanel";
+import { ConceptosAbmPanel } from "./ConceptosAbmPanel";
 import { InhabilitarDialog, type DatosInhabilitar } from "./InhabilitarDialog";
 import {
   MarcasModelosAbmPanel,
@@ -56,6 +57,7 @@ type Tab =
   | "tiposServicio"
   | "marcasModelos"
   | "equiposFrio"
+  | "conceptos"
   | "talleres"
   | "asignacion";
 
@@ -86,6 +88,7 @@ const CREATE_KIND_BY_TAB: Record<Tab, CreateKind | null> = {
   tiposServicio: "tipoServicio",
   marcasModelos: null,
   equiposFrio: null,
+  conceptos: null,
   talleres: "taller",
   asignacion: null,
 };
@@ -98,6 +101,7 @@ const CREATE_LABEL_BY_TAB: Record<Tab, string> = {
   tiposServicio: "tipo de frío",
   marcasModelos: "",
   equiposFrio: "equipo de frío",
+  conceptos: "",
   talleres: "taller",
   asignacion: "",
 };
@@ -938,6 +942,7 @@ export function M5FichaPage() {
         },
         marcasModelos: null,
         equiposFrio: null,
+        conceptos: null,
         talleres: {
           url: "/api/talleres-proveedores",
           file: "talleres.json",
@@ -966,6 +971,7 @@ export function M5FichaPage() {
     { id: "tiposServicio", label: "Tipos de frío" },
     { id: "marcasModelos", label: "Marcas y modelos" },
     { id: "equiposFrio", label: "Equipo de frío" },
+    { id: "conceptos", label: "Conceptos" },
   ];
 
   const empresaNombrePorId = useMemo(
@@ -1319,7 +1325,9 @@ export function M5FichaPage() {
                             ? "Buscar marca o modelo…"
                             : tab === "equiposFrio"
                               ? "Buscar equipo de frío…"
-                              : "Buscar…"
+                              : tab === "conceptos"
+                                ? "Buscar concepto…"
+                                : "Buscar…"
               }
               autoComplete="off"
               className="min-h-11 w-full min-w-0 flex-1 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080] sm:max-w-md"
@@ -1887,6 +1895,10 @@ export function M5FichaPage() {
 
       {!loading && !error && tab === "equiposFrio" && (
         <EquiposFrioAbmPanel query={abmQuery} />
+      )}
+
+      {!loading && !error && tab === "conceptos" && (
+        <ConceptosAbmPanel query={abmQuery} />
       )}
 
       {!loading && !error && tab === "marcasModelos" && (
