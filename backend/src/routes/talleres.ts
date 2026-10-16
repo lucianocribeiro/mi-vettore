@@ -418,8 +418,8 @@ async function maxNumeroConPrefijo(prefijo: string): Promise<number> {
   return max;
 }
 
-/** Hasta OT-0211 ya se emitieron números antes del borrado del historial (oct 2026): no reutilizar. */
-const ULTIMO_NUMERO_OT_EMITIDO = 211;
+/** Hasta OT-1478 del histórico Kairos (oct 2026): no reutilizar. */
+const ULTIMO_NUMERO_OT_EMITIDO = 1478;
 
 /** Correlativo por máximo existente (no por cantidad): los números borrados no se reutilizan. */
 async function nextNumeroOT(): Promise<string> {
@@ -1251,7 +1251,9 @@ router.post(
           }
         }
 
-        const numeroOT = esExterno ? await nextNumeroOTE() : await nextNumeroOT();
+        const numeroOT =
+          numeroOtFila ||
+          (esExterno ? await nextNumeroOTE() : await nextNumeroOT());
         await prisma.$transaction(async (tx) => {
           const solicitud = await tx.solicitudTaller.create({
             data: {
