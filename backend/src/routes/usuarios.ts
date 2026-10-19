@@ -81,6 +81,44 @@ function publicUser(u: UsuarioConChofer) {
   };
 }
 
+/** Si el email está ocupado, genera alias tipo local+ops@dominio (login es por DNI). */
+async function resolveEmailUnico(
+  email: string,
+  excludeUserId?: string
+): Promise<{ email: string; ajustado: boolean }> {
+  const taken = async (e: string) => {
+    const u = await prisma.usuario.findUnique({ where: { email: e } });
+    return !!u && u.id !== excludeUserId;
+  };
+  if (!(await taken(email))) return { email, ajustado: false };
+  const at = email.indexOf("@");
+  if (at < 1) return { email, ajustado: false };
+  const local = email.slice(0, at);
+  const domain = email.slice(at);
+  for (let i = 0; i < 50; i++) {
+    const tag = i === 0 ? "ops" : `ops${i + 1}`;
+    const candidate = `${local}+${tag}${domain}`;
+    if (!(await taken(candidate))) return { email: candidate, ajustado: true };
+  }
+  return {
+    email: `${local}+ops${Date.now()}${domain}`,
+    ajustado: true,
+  };
+}
+
+function mensajeP2002(err: unknown): string {
+  const target = (
+    err as { meta?: { target?: string | string[] } }
+  )?.meta?.target;
+  const fields = Array.isArray(target) ? target.join(",") : String(target ?? "");
+  if (/dni/i.test(fields)) return "Ya existe un usuario con ese DNI";
+  if (/loginIdentificador/i.test(fields)) {
+    return "Ya existe un usuario con ese identificador de acceso";
+  }
+  if (/email/i.test(fields)) return "El email ya está registrado";
+  return "Ya existe un usuario con esos datos";
+}
+
 router.get("/", authenticate, async (_req, res) => {
   try {
     const items = await prisma.usuario.findMany({
@@ -152,7 +190,7 @@ router.get("/:id", authenticate, async (req, res) => {
 
 router.post("/", ...write, async (req, res) => {
   try {
-    const email = String(req.body?.email ?? "")
+    const emailRaw = String(req.body?.email ?? "")
       .trim()
       .toLowerCase();
     const rolRaw = String(req.body?.rol ?? "").toUpperCase();
@@ -162,7 +200,7 @@ router.post("/", ...write, async (req, res) => {
       res.status(400).json({ error: "Rol inválido" });
       return;
     }
-    if (!email) {
+    if (!emailRaw) {
       res.status(400).json({ error: "Email de contacto obligatorio" });
       return;
     }
@@ -174,6 +212,18 @@ router.post("/", ...write, async (req, res) => {
       res.status(400).json({ error: "Todo usuario se asigna a una empresa en el alta" });
       return;
     }
+    if (rolRaw !== "EMPRESA" && dni) {
+      const porDni = await prisma.usuario.findFirst({
+        where: { OR: [{ dni }, { loginIdentificador: dni }] },
+      });
+      if (porDni) {
+        res.status(409).json({
+          error: `Ya existe un usuario con ese DNI (rol ${porDni.rol}). Editá ese usuario.`,
+        });
+        return;
+      }
+    }
+    const { email, ajustado } = await resolveEmailUnico(emailRaw);
     let choferId: string | null = null;
     if (rolRaw === "CHOFER") {
       if (!empresaId) {
@@ -212,7 +262,13 @@ router.post("/", ...write, async (req, res) => {
       },
       include: includeChoferList,
     });
-    res.status(201).json({ ...publicUser(item), credencialTemporal: plain });
+    res.status(201).json({
+      ...publicUser(item),
+      credencialTemporal: plain,
+      ...(ajustado
+        ? { aviso: `Email ya en uso; se guardó como ${email}` }
+        : {}),
+    });
   } catch (err: unknown) {
     if (
       typeof err === "object" &&
@@ -220,7 +276,7 @@ router.post("/", ...write, async (req, res) => {
       "code" in err &&
       (err as { code: string }).code === "P2002"
     ) {
-      res.status(409).json({ error: "El email ya está registrado" });
+      res.status(409).json({ error: mensajeP2002(err) });
       return;
     }
     console.error(err);
@@ -238,8 +294,12 @@ router.put("/:id", ...write, async (req, res) => {
       return;
     }
     const data: Prisma.UsuarioUncheckedUpdateInput = {};
+    let emailAviso: string | undefined;
     if (req.body?.email !== undefined) {
-      data.email = String(req.body.email).trim().toLowerCase();
+      const emailRaw = String(req.body.email).trim().toLowerCase();
+      const { email, ajustado } = await resolveEmailUnico(emailRaw, existing.id);
+      data.email = email;
+      if (ajustado) emailAviso = `Email ya en uso; se guardó como ${email}`;
     }
     if (req.body?.password) {
       data.passwordHash = await bcrypt.hash(String(req.body.password), 10);
@@ -305,7 +365,10 @@ router.put("/:id", ...write, async (req, res) => {
       where: { id: item.id },
       include: includeChoferList,
     });
-    res.json(publicUser(refreshed!));
+    res.json({
+      ...publicUser(refreshed!),
+      ...(emailAviso ? { aviso: emailAviso } : {}),
+    });
   } catch (err: unknown) {
     if (
       typeof err === "object" &&
@@ -313,7 +376,7 @@ router.put("/:id", ...write, async (req, res) => {
       "code" in err &&
       (err as { code: string }).code === "P2002"
     ) {
-      res.status(409).json({ error: "El email ya está registrado" });
+      res.status(409).json({ error: mensajeP2002(err) });
       return;
     }
     console.error(err);
