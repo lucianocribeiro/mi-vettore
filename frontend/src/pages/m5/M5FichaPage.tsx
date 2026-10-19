@@ -761,7 +761,7 @@ export function M5FichaPage() {
         };
         if (fPassword) body.password = fPassword;
         if (form.item) {
-          const updated = await apiFetch<User & { aviso?: string }>(
+          const updated = await apiFetch<User>(
             `/api/usuarios/${form.item.id}`,
             { method: "PUT", body: JSON.stringify(body) },
             token
@@ -778,31 +778,14 @@ export function M5FichaPage() {
               )
             );
           }
-          if (updated.aviso) {
-            setNotice({
-              title: "Usuario actualizado",
-              message: updated.aviso,
-              variant: "success",
-              confirmLabel: "Listo",
-            });
-          }
         } else {
-          const created = await apiFetch<
-            User & { credencialTemporal?: string; aviso?: string }
-          >("/api/usuarios", { method: "POST", body: JSON.stringify(body) }, token);
+          const created = await apiFetch<User & { credencialTemporal?: string }>(
+            "/api/usuarios",
+            { method: "POST", body: JSON.stringify(body) },
+            token
+          );
           if (created.credencialTemporal) {
-            showPasswordNotice(
-              created.credencialTemporal,
-              "Usuario creado",
-              created.aviso
-            );
-          } else if (created.aviso) {
-            setNotice({
-              title: "Usuario creado",
-              message: created.aviso,
-              variant: "success",
-              confirmLabel: "Listo",
-            });
+            showPasswordNotice(created.credencialTemporal, "Usuario creado");
           }
           setUsuarios((prev) =>
             [...prev, created].sort((a, b) => a.email.localeCompare(b.email))

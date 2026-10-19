@@ -243,10 +243,14 @@ router.post("/register", async (req, res) => {
       return;
     }
 
-    const existing = await prisma.usuario.findUnique({ where: { email } });
-    if (existing) {
-      res.status(409).json({ error: "El email ya está registrado" });
-      return;
+    // Email de contacto puede repetirse; el loginIdentificador sí debe ser único.
+    let loginIdentificador = email;
+    const loginTomado = await prisma.usuario.findFirst({
+      where: { loginIdentificador },
+      select: { id: true },
+    });
+    if (loginTomado) {
+      loginIdentificador = `${email.split("@")[0]}+${Date.now()}@${email.split("@").slice(1).join("@") || "vettore.local"}`;
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -256,7 +260,7 @@ router.post("/register", async (req, res) => {
         passwordHash,
         rol: rolRaw as Role,
         nombre,
-        loginIdentificador: email,
+        loginIdentificador,
       },
     });
 

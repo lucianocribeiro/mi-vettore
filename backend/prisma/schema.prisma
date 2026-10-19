@@ -129,7 +129,8 @@ enum EstadoValidacionDoc {
 
 model Usuario {
   id           String     @id @default(cuid())
-  email        String     @unique
+  /// Contacto; puede repetirse entre usuarios (login es por DNI/CUIT).
+  email        String
   /// DNI de personas (admin, operaciones, chofer). Único cuando existe.
   dni          String?    @unique
   /// Identificador de login: DNI (personas) o CUIT (empresa). Legado puede ser email hasta cargar DNI.
