@@ -61,6 +61,7 @@ import {
   parseOverrideComentario,
 } from "../lib/ot-override.js";
 import { applyKmUpdate } from "../lib/km.js";
+import { canAdminCorregir } from "../lib/correccion-admin.js";
 import { avisarChoferReparacion } from "../lib/aviso-chofer.js";
 import {
   totalFacturado,
@@ -1949,7 +1950,8 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
       res.status(404).json({ error: "Camioneta no encontrada" });
       return;
     }
-    if (kmReportado < camioneta.km) {
+    const puedeCorregirKm = canAdminCorregir(rol);
+    if (kmReportado < camioneta.km && !puedeCorregirKm) {
       res.status(400).json({
         error: `El kilometraje no puede ser menor al actual (${camioneta.km} km)`,
       });
@@ -2017,14 +2019,23 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
         });
       }
 
-      if (kmReportado > camioneta.km) {
-        await applyKmUpdate(tx, {
+      if (kmReportado !== camioneta.km) {
+        const applied = await applyKmUpdate(tx, {
           camionetaId,
           existingKm: camioneta.km,
           nextKm: kmReportado,
           userId: req.user!.id,
-          allowDecrease: false,
+          allowDecrease: puedeCorregirKm,
+          motivo:
+            kmReportado < camioneta.km
+              ? "Corrección al cargar solicitud de taller"
+              : null,
         });
+        if (!applied.ok) {
+          throw Object.assign(new Error(applied.error), {
+            status: applied.status,
+          });
+        }
         await tx.camioneta.update({
           where: { id: camionetaId },
           data: { km: kmReportado, kmActualizadoAt: new Date() },
@@ -2138,7 +2149,20 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
     }
 
     res.status(201).json(sanitizeOtForViewer(ot, rol));
-  } catch (err) {
+  } catch (err: unknown) {
+    const status =
+      typeof err === "object" &&
+      err &&
+      "status" in err &&
+      typeof (err as { status: unknown }).status === "number"
+        ? (err as { status: number }).status
+        : null;
+    if (status && status >= 400 && status < 500) {
+      res.status(status).json({
+        error: err instanceof Error ? err.message : "Error al crear solicitud",
+      });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "Error al crear solicitud" });
   }

@@ -2732,7 +2732,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
       setErr("Indicá el kilometraje actual de la patente");
       return;
     }
-    if (selected && km < selected.km) {
+    if (selected && km < selected.km && !opsInterno) {
       setErr(`El km no puede ser menor al registrado (${selected.km})`);
       return;
     }
@@ -2770,7 +2770,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
     !!(esChofer ? detalle.trim() : falla === "Otros" ? detalle.trim() : falla) &&
     Number.isFinite(Number(kmDraft)) &&
     Number(kmDraft) >= 0 &&
-    (!selected || Number(kmDraft) >= selected.km) &&
+    (!selected || opsInterno || Number(kmDraft) >= selected.km) &&
     (!habilitadaCircular || esUrgente !== null);
 
   return (
@@ -2842,13 +2842,15 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
           Kilometraje actual (obligatorio)
           <input
             type="number"
-            min={selected?.km ?? 0}
+            min={opsInterno ? 0 : selected?.km ?? 0}
             inputMode="numeric"
             className={`mt-1 mb-1 w-full rounded-md border bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)] ${
               selected &&
               Number.isFinite(Number(kmDraft)) &&
               Number(kmDraft) < selected.km
-                ? "border-red-500"
+                ? opsInterno
+                  ? "border-amber-500"
+                  : "border-red-500"
                 : "border-[var(--vl-card-border)]"
             }`}
             value={kmDraft}
@@ -2858,18 +2860,27 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
         </label>
         {selected &&
           Number.isFinite(Number(kmDraft)) &&
-          Number(kmDraft) < selected.km && (
-          <p className="mb-3 text-sm font-bold text-red-600">
-            El kilometraje no puede ser menor al registrado ({selected.km.toLocaleString("es-AR")} km).
-          </p>
-        )}
+          Number(kmDraft) < selected.km &&
+          (opsInterno ? (
+            <p className="mb-3 text-sm text-amber-700 dark:text-amber-400">
+              Vas a corregir el km registrado (
+              {selected.km.toLocaleString("es-AR")} →{" "}
+              {Number(kmDraft).toLocaleString("es-AR")} km).
+            </p>
+          ) : (
+            <p className="mb-3 text-sm font-bold text-red-600">
+              El kilometraje no puede ser menor al registrado (
+              {selected.km.toLocaleString("es-AR")} km).
+            </p>
+          ))}
         {selected &&
           !(
             Number.isFinite(Number(kmDraft)) &&
             Number(kmDraft) < selected.km
           ) && (
           <p className="mb-3 text-[11px] text-[var(--vl-text-muted)]">
-            Registrado: {selected.km.toLocaleString("es-AR")} km. No puede ser menor.
+            Registrado: {selected.km.toLocaleString("es-AR")} km
+            {!opsInterno ? ". No puede ser menor." : "."}
           </p>
         )}
 
