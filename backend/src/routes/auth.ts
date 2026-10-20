@@ -135,9 +135,9 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Email u otros identificadores.
+    // Email u otros identificadores (el email puede repetirse: probar claves).
     if (!user) {
-      user = await prisma.usuario.findFirst({
+      const candidatos = await prisma.usuario.findMany({
         where: {
           OR: [
             { loginIdentificador: identificador },
@@ -149,6 +149,20 @@ router.post("/login", async (req, res) => {
         },
         include: includeLogin,
       });
+      const preferencia = (rol: Role) => {
+        if (rol === Role.ADMINISTRADOR) return 0;
+        if (rol === Role.OPERACIONES) return 1;
+        if (rol === Role.EMPRESA) return 2;
+        return 3;
+      };
+      const matches: typeof candidatos = [];
+      for (const c of candidatos) {
+        if (c.estado !== UserStatus.ACTIVO) continue;
+        if (c.rol === Role.CLIENTE) continue;
+        if (await bcrypt.compare(password, c.passwordHash)) matches.push(c);
+      }
+      matches.sort((a, b) => preferencia(a.rol) - preferencia(b.rol));
+      user = matches[0] ?? null;
     }
     if (!user) {
       res.status(401).json({ error: "Credenciales inválidas" });
@@ -165,8 +179,8 @@ router.post("/login", async (req, res) => {
       return;
     }
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) {
+    // Si vino por DNI/CUIT (un solo candidato), validar password acá.
+    if (!(await bcrypt.compare(password, user.passwordHash))) {
       res.status(401).json({ error: "Credenciales inválidas" });
       return;
     }
