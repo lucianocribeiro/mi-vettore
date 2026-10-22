@@ -1104,6 +1104,17 @@ export function M5FichaPage() {
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [choferes, asigEmpresaId]);
 
+  /** Asignaciones abiertas solo de choferes que se pueden elegir en el panel. */
+  const asignacionesVisibles = useCallback(
+    (c: Camioneta) => {
+      const ids = new Set(choferesDeEmpresaAsig.map((ch) => ch.id));
+      return currentAsignaciones(c).filter(
+        (a) => !!a?.choferId && ids.has(a.choferId)
+      );
+    },
+    [choferesDeEmpresaAsig]
+  );
+
   useEffect(() => {
     if (!asigEmpresaId) {
       setAsigChoferByUnit({});
@@ -1111,12 +1122,10 @@ export function M5FichaPage() {
     }
     const next: Record<string, string[]> = {};
     for (const c of unidadesDeEmpresaAsig) {
-      next[c.id] = currentAsignaciones(c)
-        .map((a) => a.choferId)
-        .filter(Boolean);
+      next[c.id] = asignacionesVisibles(c).map((a) => a.choferId);
     }
     setAsigChoferByUnit(next);
-  }, [asigEmpresaId, unidadesDeEmpresaAsig]);
+  }, [asigEmpresaId, unidadesDeEmpresaAsig, asignacionesVisibles]);
 
   function toggleAsigChofer(camionetaId: string, choferId: string) {
     setAsigChoferByUnit((prev) => {
@@ -1576,7 +1585,7 @@ export function M5FichaPage() {
                 </thead>
                 <tbody>
                   {unidadesDeEmpresaAsig.map((c) => {
-                    const abiertas = currentAsignaciones(c);
+                    const abiertas = asignacionesVisibles(c);
                     const selected = asigChoferByUnit[c.id] ?? [];
                     const sameSet =
                       selected.length === abiertas.length &&
