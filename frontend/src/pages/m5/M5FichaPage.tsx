@@ -1084,6 +1084,11 @@ export function M5FichaPage() {
     [empresas, asigEmpresaId]
   );
 
+  const camionetaPorId = useMemo(
+    () => new Map(camionetas.map((c) => [c.id, c])),
+    [camionetas]
+  );
+
   /** Cuántas unidades de esta empresa tiene cada chofer (asignación abierta). */
   const unidadesPorChoferAsig = useMemo(() => {
     const map = new Map<string, number>();
@@ -1705,9 +1710,23 @@ export function M5FichaPage() {
               ),
               unidadesEmp.length ? (
                 <ul key={`un-${e.id}`} className="space-y-0.5">
-                  {unidadesEmp.map((u) => (
-                    <li key={u.id}>{u.patente}</li>
-                  ))}
+                  {unidadesEmp.map((u) => {
+                    const cam = camionetaPorId.get(u.id);
+                    const nombres = (cam?.asignaciones ?? [])
+                      .filter((a) => !a.periodoHasta && a.chofer)
+                      .map((a) => `${a.chofer!.nombre} ${a.chofer!.apellido ?? ""}`.trim());
+                    return (
+                      <li key={u.id}>
+                        {u.patente}
+                        {cam && (
+                          <span className="text-[var(--vl-text-muted)]">
+                            {" — "}
+                            {nombres.length ? nombres.join(", ") : "Sin chofer"}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 "Sin patentes"
