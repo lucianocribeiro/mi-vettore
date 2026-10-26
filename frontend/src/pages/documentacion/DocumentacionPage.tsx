@@ -7,11 +7,7 @@ import {
   ESTADO_CHOFER_STYLE,
 } from "../../components/Badge";
 import { DocumentUpload } from "../../components/DocumentUpload";
-import {
-  ESTADOS_CAMIONETA,
-  type TipoFiltroTransporte,
-  TIPOS_TRANSPORTE,
-} from "../../components/FlotaUnitFilterBar";
+import { ESTADOS_CAMIONETA } from "../../components/FlotaUnitFilterBar";
 import { ChevronDown, Search, X } from "../../components/icons";
 import { apiFetch, ApiError } from "../../lib/api";
 import {
@@ -25,6 +21,7 @@ import {
   type Chofer,
   type EstadoCamioneta,
   type TipoDocumento,
+  type TipoServicio,
 } from "../../types";
 
 type NivelDocs = "ok" | "warn" | "danger";
@@ -202,7 +199,8 @@ function toggleInArray<T>(arr: T[], value: T): T[] {
 
 type AdvFilters = {
   estados: EstadoCamioneta[];
-  tipos: TipoFiltroTransporte[];
+  /** Ids de tipo de servicio (ABM), o "SIN_TIPO" para unidades sin clasificar. */
+  tipos: string[];
   empresa: string;
   empresaId: string;
   patenteId: string;
@@ -260,6 +258,7 @@ export function DocumentacionPage() {
   const query = searchParams.get("q") ?? "";
   const [tab, setTab] = useState<"unidades" | "choferes">("unidades");
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);
+  const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([]);
   const [choferes, setChoferes] = useState<Chofer[]>([]);
   const [selectedCam, setSelectedCam] = useState<string | null>(null);
   const [selectedChofer, setSelectedChofer] = useState<string | null>(null);
@@ -314,6 +313,15 @@ export function DocumentacionPage() {
     try {
       const cams = await apiFetch<Camioneta[]>("/api/camionetas", {}, token);
       setCamionetas(cams);
+      apiFetch<TipoServicio[]>("/api/tipos-servicio", {}, token)
+        .then((ts) =>
+          setTiposServicio(
+            (Array.isArray(ts) ? ts : [])
+              .filter((x) => x.activo)
+              .sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre))
+          )
+        )
+        .catch(() => setTiposServicio([]));
       let chIds: string[] = [];
       if (ops || user?.esDuenoFlota || user?.rol === "EMPRESA") {
         const ch = await apiFetch<Chofer[]>("/api/choferes", {}, token);
@@ -405,7 +413,7 @@ export function DocumentacionPage() {
       if (adv.estados.length > 0 && !adv.estados.includes(c.estado)) return false;
       if (adv.tipos.length > 0) {
         const matchTipo = adv.tipos.some((t) =>
-          t === "SIN_TIPO" ? !c.tipoTransporte : c.tipoTransporte === t
+          t === "SIN_TIPO" ? !c.tipoServicioId : c.tipoServicioId === t
         );
         if (!matchTipo) return false;
       }
@@ -437,6 +445,7 @@ export function DocumentacionPage() {
           c.modelo,
           c.estado,
           c.tipoTransporte,
+          c.tipoServicio?.nombre,
           asg?.empresa?.nombre,
         ],
         query
@@ -657,7 +666,12 @@ export function DocumentacionPage() {
                     Clasificación
                   </legend>
                   <div className="flex flex-col gap-1">
-                    {TIPOS_TRANSPORTE.map((t) => (
+                    {[
+                      ...tiposServicio.map((ts) => ({ value: ts.id, label: ts.nombre })),
+                      ...(camionetas.some((c) => !c.tipoServicioId)
+                        ? [{ value: "SIN_TIPO", label: "Sin clasificar" }]
+                        : []),
+                    ].map((t) => (
                       <label
                         key={t.value}
                         className="flex items-center gap-2 text-xs text-[var(--vl-text)]"
