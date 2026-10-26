@@ -36,7 +36,7 @@ export async function camionetasParaUsuarioChofer(
     if (empresaIds.length === 0) return [];
     return prisma.camioneta.findMany({
       where: {
-        estado: { notIn: ["INACTIVA", "FUERA_SERVICIO"] },
+        estado: { not: "INACTIVA" },
         OR: [
           { empresaId: { in: empresaIds } },
           {

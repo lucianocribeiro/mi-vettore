@@ -107,7 +107,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
         contextoAccesoFromReq(req)
       );
       if (!incluirBajas) {
-        items = items.filter((c) => c.estado !== "FUERA_SERVICIO" && c.estado !== "INACTIVA");
+        items = items.filter((c) => c.estado !== "INACTIVA");
       }
       res.json(await withMantKm(items));
       return;
@@ -116,7 +116,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       const items = await prisma.camioneta.findMany({
         where: {
           empresaId: me.empresaId ?? "",
-          ...(incluirBajas ? {} : { estado: { notIn: ["FUERA_SERVICIO" as const, "INACTIVA" as const] } }),
+          ...(incluirBajas ? {} : { estado: { not: "INACTIVA" as const } }),
         },
         orderBy: { patente: "asc" },
         include: includeAsignaciones,
@@ -127,7 +127,7 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
 
     const incluirInactivas = String(req.query.incluirInactivas ?? "") === "1" || incluirBajas;
     const items = await prisma.camioneta.findMany({
-      where: incluirInactivas ? undefined : { estado: { notIn: ["FUERA_SERVICIO", "INACTIVA"] } },
+      where: incluirInactivas ? undefined : { estado: { not: "INACTIVA" } },
       orderBy: { patente: "asc" },
       include: includeAsignaciones,
     });
