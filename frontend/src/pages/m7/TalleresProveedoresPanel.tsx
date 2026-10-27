@@ -69,12 +69,24 @@ function fechaPagoMs(m: { fechaPago: string | null }) {
   return m.fechaPago ? new Date(m.fechaPago).getTime() : 0;
 }
 
+function otNum(m: { ot?: { numeroOT: string } | null }) {
+  const n = Number(String(m.ot?.numeroOT ?? "").replace(/\D/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Más reciente primero; a igual fecha de pago, la OT más nueva primero. */
+function compararPagoDesc(
+  a: Saldo["movimientos"][number],
+  b: Saldo["movimientos"][number]
+) {
+  return fechaPagoMs(b) - fechaPagoMs(a) || otNum(b) - otNum(a);
+}
+
 /** Último pago del proveedor (para ordenar el historial). */
-function ultimoPagoMs(s: Saldo) {
-  return s.movimientos.reduce(
-    (max, m) => (m.estado === "PAGADO" ? Math.max(max, fechaPagoMs(m)) : max),
-    0
-  );
+function ultimoPago(s: Saldo) {
+  return s.movimientos
+    .filter((m) => m.estado === "PAGADO")
+    .sort(compararPagoDesc)[0];
 }
 
 function whatsappDigits(raw: string | null | undefined): string | null {
@@ -683,9 +695,13 @@ export function TalleresProveedoresPanel({
           {saldos
             .filter((s) => (ccVista === "pendiente" ? s.pendiente > 0 : s.pagado > 0))
             .filter((s) => !ccProveedor || s.id === ccProveedor)
-            .sort((a, b) =>
-              ccVista === "pagado" ? ultimoPagoMs(b) - ultimoPagoMs(a) : 0
-            )
+            .sort((a, b) => {
+              if (ccVista !== "pagado") return 0;
+              const ua = ultimoPago(a);
+              const ub = ultimoPago(b);
+              if (!ua || !ub) return ua ? -1 : ub ? 1 : 0;
+              return compararPagoDesc(ua, ub);
+            })
             .map((s) => {
               const pendientes = s.movimientos.filter((m) => m.estado === "PENDIENTE");
               const selected = selMovs[s.id] ?? [];
@@ -751,7 +767,7 @@ export function TalleresProveedoresPanel({
                     ccVista === "pendiente" ? m.estado === "PENDIENTE" : m.estado === "PAGADO"
                   )
                   .sort((a, b) =>
-                    ccVista === "pagado" ? fechaPagoMs(b) - fechaPagoMs(a) : 0
+                    ccVista === "pagado" ? compararPagoDesc(a, b) : 0
                   )
                   .map((m) => (
                   <li
