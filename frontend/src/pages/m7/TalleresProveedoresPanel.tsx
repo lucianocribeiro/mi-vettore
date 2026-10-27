@@ -498,6 +498,21 @@ export function TalleresProveedoresPanel({
     }
   }
 
+  async function anularPendiente(tallerId: string, movId: string) {
+    if (!token) return;
+    if (!confirm("¿Anular este ítem pendiente? Se borra de la cuenta corriente.")) return;
+    try {
+      await apiFetch(
+        `/api/talleres-proveedores/${tallerId}/movimientos/${movId}`,
+        { method: "DELETE" },
+        token
+      );
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo anular");
+    }
+  }
+
   async function revertirPago(tallerId: string, movId: string) {
     if (!token) return;
     await apiFetch(
@@ -899,13 +914,22 @@ export function TalleresProveedoresPanel({
                       </div>
                     </div>
                     {m.estado === "PENDIENTE" ? (
-                      <button
-                        type="button"
-                        className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500"
-                        onClick={() => openPago(s.id, [m.id])}
-                      >
-                        Marcar pagado
-                      </button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--vl-card-border)] px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                          onClick={() => void anularPendiente(s.id, m.id)}
+                        >
+                          Anular
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex min-h-10 items-center justify-center rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500"
+                          onClick={() => openPago(s.id, [m.id])}
+                        >
+                          Marcar pagado
+                        </button>
+                      </div>
                     ) : (
                       <button
                         type="button"

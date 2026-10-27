@@ -506,6 +506,38 @@ router.post(
   }
 );
 
+/** Anula (borra) un ítem PENDIENTE cargado por error o duplicado. Lo pagado no se toca. */
+router.delete(
+  "/:id/movimientos/:movId",
+  authenticate,
+  async (req: AuthedRequest, res) => {
+    try {
+      if (!isInternalOpsRole(req.user!.rol)) {
+        res.status(403).json({ error: "Sin permiso" });
+        return;
+      }
+      const mov = await prisma.tallerMovimiento.findFirst({
+        where: { id: req.params.movId, tallerProveedorId: req.params.id },
+      });
+      if (!mov) {
+        res.status(404).json({ error: "Movimiento no encontrado" });
+        return;
+      }
+      if (mov.estado !== "PENDIENTE") {
+        res.status(400).json({
+          error: "Solo se pueden anular ítems pendientes. Si está pagado, revertí el pago primero.",
+        });
+        return;
+      }
+      await prisma.tallerMovimiento.delete({ where: { id: mov.id } });
+      res.status(204).send();
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al anular el ítem" });
+    }
+  }
+);
+
 router.patch(
   "/:id/movimientos/:movId",
   authenticate,
