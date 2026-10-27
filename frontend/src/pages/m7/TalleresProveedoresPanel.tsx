@@ -65,6 +65,18 @@ function roundMoney(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+function fechaPagoMs(m: { fechaPago: string | null }) {
+  return m.fechaPago ? new Date(m.fechaPago).getTime() : 0;
+}
+
+/** Último pago del proveedor (para ordenar el historial). */
+function ultimoPagoMs(s: Saldo) {
+  return s.movimientos.reduce(
+    (max, m) => (m.estado === "PAGADO" ? Math.max(max, fechaPagoMs(m)) : max),
+    0
+  );
+}
+
 function whatsappDigits(raw: string | null | undefined): string | null {
   if (!raw) return null;
   let digits = String(raw).replace(/\D/g, "");
@@ -114,6 +126,7 @@ export function TalleresProveedoresPanel({
   const tab = vista ?? tabInternal;
   const setTab = setTabInternal;
   const [ccVista, setCcVista] = useState<"pendiente" | "pagado">("pendiente");
+  const [ccProveedor, setCcProveedor] = useState("");
   const [items, setItems] = useState<TallerProveedor[]>([]);
   const [saldos, setSaldos] = useState<Saldo[]>([]);
   const [tipos, setTipos] = useState<TipoTaller[]>([]);
@@ -650,8 +663,29 @@ export function TalleresProveedoresPanel({
               ? "Marcá varios ítems del mismo proveedor y usá “Pagar seleccionados”, o pagá de a uno."
               : "Historial de pagos. Podés revertir un cobro si se cargó mal."}
           </p>
+          <label className="block text-xs text-[var(--vl-text-muted)]">
+            Proveedor
+            <select
+              className={`${input} mt-1 w-full sm:w-auto sm:min-w-[16rem]`}
+              value={ccProveedor}
+              onChange={(e) => setCcProveedor(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {[...saldos]
+                .sort((a, b) => a.razonSocial.localeCompare(b.razonSocial))
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.razonSocial}
+                  </option>
+                ))}
+            </select>
+          </label>
           {saldos
             .filter((s) => (ccVista === "pendiente" ? s.pendiente > 0 : s.pagado > 0))
+            .filter((s) => !ccProveedor || s.id === ccProveedor)
+            .sort((a, b) =>
+              ccVista === "pagado" ? ultimoPagoMs(b) - ultimoPagoMs(a) : 0
+            )
             .map((s) => {
               const pendientes = s.movimientos.filter((m) => m.estado === "PENDIENTE");
               const selected = selMovs[s.id] ?? [];
@@ -715,6 +749,9 @@ export function TalleresProveedoresPanel({
                 {s.movimientos
                   .filter((m) =>
                     ccVista === "pendiente" ? m.estado === "PENDIENTE" : m.estado === "PAGADO"
+                  )
+                  .sort((a, b) =>
+                    ccVista === "pagado" ? fechaPagoMs(b) - fechaPagoMs(a) : 0
                   )
                   .map((m) => (
                   <li
@@ -783,8 +820,10 @@ export function TalleresProveedoresPanel({
             </div>
               );
             })}
-          {saldos.filter((s) =>
-            ccVista === "pendiente" ? s.pendiente > 0 : s.pagado > 0
+          {saldos.filter(
+            (s) =>
+              (ccVista === "pendiente" ? s.pendiente > 0 : s.pagado > 0) &&
+              (!ccProveedor || s.id === ccProveedor)
           ).length === 0 && (
             <p className="text-sm text-[var(--vl-text-muted)]">
               {ccVista === "pendiente"
