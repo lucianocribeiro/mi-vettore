@@ -134,6 +134,8 @@ type OrdenTrabajo = {
   trabajoDescripcion: string | null;
   sinPresupuesto?: boolean;
   cerradaAt: string | null;
+  /** Solo los pagos ya registrados (PAGADO) de la OT. */
+  movimientos?: { id: string }[];
   solicitud: {
     id: string;
     falla: string;
@@ -1320,7 +1322,13 @@ export function M7TalleresPage() {
                     </button>
                   )}
 
-                  {ot.cerradaAt && canReabrirOt(rol) && (
+                  {ot.cerradaAt && canReabrirOt(rol) && (ot.movimientos?.length ?? 0) > 0 && (
+                    <p className="mt-5 text-xs text-[var(--vl-text-muted)]">
+                      La OT ya tiene pagos registrados: no se puede reabrir. Si
+                      el pago se cargó mal, revertilo primero en Cuenta corriente.
+                    </p>
+                  )}
+                  {ot.cerradaAt && canReabrirOt(rol) && !(ot.movimientos?.length) && (
                     <div className="mt-5">
                       <button
                         type="button"

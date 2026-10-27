@@ -222,6 +222,10 @@ function includeOTFor(_viewerUserId?: string) {
       include: { categoria: true },
       orderBy: { createdAt: "asc" as const },
     },
+    movimientos: {
+      where: { estado: "PAGADO" as const },
+      select: { id: true },
+    },
     auditorias: {
       orderBy: { createdAt: "desc" as const },
       take: 30,
@@ -2949,6 +2953,16 @@ router.post("/:id/reabrir", authenticate, async (req: AuthedRequest, res) => {
     }
     if (!ot.cerradaAt) {
       res.status(400).json({ error: "La OT no está cerrada" });
+      return;
+    }
+    const pagos = await prisma.tallerMovimiento.count({
+      where: { otId: ot.id, estado: "PAGADO" },
+    });
+    if (pagos > 0) {
+      res.status(400).json({
+        error:
+          "La OT ya tiene pagos registrados: no se puede reabrir. Si el pago se cargó mal, revertilo primero en Cuenta corriente.",
+      });
       return;
     }
     const scope = await choferScope(req.user!.id);

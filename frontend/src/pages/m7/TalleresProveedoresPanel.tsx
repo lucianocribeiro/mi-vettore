@@ -159,9 +159,12 @@ export function TalleresProveedoresPanel({
   /** Selección multi por proveedor (solo PENDIENTE). */
   const [selMovs, setSelMovs] = useState<Record<string, string[]>>({});
   const [pagoModal, setPagoModal] = useState<{
-    tallerId: string;
+    /** Null = pago que junta ítems de varios proveedores. */
+    tallerId: string | null;
     movIds: string[];
     totalAdeudado: number;
+    /** Subtotal por proveedor (solo en pago de varios proveedores). */
+    detalle?: { razonSocial: string; total: number; items: number }[];
   } | null>(null);
   const [pagoFecha, setPagoFecha] = useState(() =>
     new Date().toISOString().slice(0, 10)
@@ -262,6 +265,40 @@ export function TalleresProveedoresPanel({
         .reduce((a, m) => a + m.montoFacturado, 0)
     );
     setPagoModal({ tallerId, movIds, totalAdeudado });
+    resetPagoForm(totalAdeudado);
+  }
+
+  /** Lo marcado en todos los proveedores (solo ítems que siguen pendientes). */
+  function seleccionGlobal() {
+    return saldos
+      .map((s) => {
+        const ids = selMovs[s.id] ?? [];
+        const movs = s.movimientos.filter(
+          (m) => m.estado === "PENDIENTE" && ids.includes(m.id)
+        );
+        return {
+          razonSocial: s.razonSocial,
+          movIds: movs.map((m) => m.id),
+          total: roundMoney(movs.reduce((a, m) => a + m.montoFacturado, 0)),
+        };
+      })
+      .filter((g) => g.movIds.length > 0);
+  }
+
+  function openPagoMultiple() {
+    const grupos = seleccionGlobal();
+    if (!grupos.length) return;
+    const totalAdeudado = roundMoney(grupos.reduce((a, g) => a + g.total, 0));
+    setPagoModal({
+      tallerId: null,
+      movIds: grupos.flatMap((g) => g.movIds),
+      totalAdeudado,
+      detalle: grupos.map((g) => ({
+        razonSocial: g.razonSocial,
+        total: g.total,
+        items: g.movIds.length,
+      })),
+    });
     resetPagoForm(totalAdeudado);
   }
 
@@ -427,7 +464,16 @@ export function TalleresProveedoresPanel({
     setPagoError(null);
     try {
       const body = buildPagoBody();
-      if (pagoModal.movIds.length === 1) {
+      if (!pagoModal.tallerId) {
+        await apiFetch(
+          `/api/talleres-proveedores/pagar-multiple`,
+          {
+            method: "POST",
+            body: JSON.stringify({ ...body, movimientoIds: pagoModal.movIds }),
+          },
+          token
+        );
+      } else if (pagoModal.movIds.length === 1) {
         await apiFetch(
           `/api/talleres-proveedores/${pagoModal.tallerId}/movimientos/${pagoModal.movIds[0]}/pagar`,
           { method: "POST", body: JSON.stringify(body) },
@@ -692,6 +738,45 @@ export function TalleresProveedoresPanel({
                 ))}
             </select>
           </label>
+          {ccVista === "pendiente" &&
+            (() => {
+              const grupos = seleccionGlobal();
+              if (!grupos.length) return null;
+              const items = grupos.reduce((a, g) => a + g.movIds.length, 0);
+              const total = roundMoney(grupos.reduce((a, g) => a + g.total, 0));
+              return (
+                <div className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-600/40 bg-[var(--vl-card)] px-4 py-3 shadow-sm">
+                  <div className="text-sm">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-[var(--vl-text-muted)]">
+                      Total de pago
+                    </div>
+                    <div className="font-bold text-[var(--vl-heading)]">
+                      {money(total)}
+                    </div>
+                    <div className="text-[11px] text-[var(--vl-text-muted)]">
+                      {items} {items === 1 ? "ítem" : "ítems"} de {grupos.length}{" "}
+                      {grupos.length === 1 ? "proveedor" : "proveedores"}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex min-h-9 items-center rounded-lg border border-[var(--vl-card-border)] px-3 text-xs font-semibold text-[var(--vl-text-muted)]"
+                      onClick={() => setSelMovs({})}
+                    >
+                      Limpiar
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-9 items-center rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500"
+                      onClick={openPagoMultiple}
+                    >
+                      Pagar total ({money(total)})
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           {saldos
             .filter((s) => (ccVista === "pendiente" ? s.pendiente > 0 : s.pagado > 0))
             .filter((s) => !ccProveedor || s.id === ccProveedor)
@@ -968,6 +1053,18 @@ export function TalleresProveedoresPanel({
               <p className="text-lg font-bold text-[var(--vl-heading)]">
                 {money(pagoModal.totalAdeudado)}
               </p>
+              {pagoModal.detalle && (
+                <ul className="mt-2 space-y-0.5 border-t border-[var(--vl-card-border)] pt-2 text-[11px] text-[var(--vl-text-muted)]">
+                  {pagoModal.detalle.map((d) => (
+                    <li key={d.razonSocial} className="flex justify-between gap-2">
+                      <span className="truncate">
+                        {d.razonSocial} ({d.items})
+                      </span>
+                      <span className="shrink-0">{money(d.total)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <label className="mb-3 block text-xs">
               Monto a pagar

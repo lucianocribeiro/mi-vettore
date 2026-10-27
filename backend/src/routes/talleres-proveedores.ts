@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { MetodoPagoTaller, TipoTaller, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
@@ -362,96 +362,111 @@ router.post(
   }
 );
 
+async function pagarLote(
+  req: AuthedRequest,
+  res: Response,
+  tallerProveedorId: string | null
+) {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const ids = Array.isArray(req.body?.movimientoIds)
+      ? req.body.movimientoIds.map(String).filter(Boolean)
+      : [];
+    if (!ids.length) {
+      res.status(400).json({ error: "Seleccioná al menos un ítem pendiente" });
+      return;
+    }
+    const parsed = parsePagoBody(req.body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+
+    const items = await prisma.tallerMovimiento.findMany({
+      where: {
+        id: { in: ids },
+        ...(tallerProveedorId ? { tallerProveedorId } : {}),
+        estado: "PENDIENTE",
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!items.length) {
+      res.status(400).json({ error: "No hay ítems pendientes en la selección" });
+      return;
+    }
+    if (items.length !== ids.length) {
+      res.status(400).json({
+        error: tallerProveedorId
+          ? "Algunos ítems ya no están pendientes o no pertenecen al proveedor"
+          : "Algunos ítems ya no están pendientes",
+      });
+      return;
+    }
+
+    const totalAdeudado = items.reduce((a, m) => a + m.montoFacturado, 0);
+    const montoPagado = parsed.montoPagado ?? totalAdeudado;
+    if (montoPagado <= 0) {
+      res.status(400).json({ error: "Monto a pagar inválido" });
+      return;
+    }
+    if (montoPagado > totalAdeudado + 0.009) {
+      res.status(400).json({
+        error: `El monto no puede superar lo adeudado (${totalAdeudado})`,
+      });
+      return;
+    }
+
+    const shares = repartirMonto(
+      items.map((m) => m.montoFacturado),
+      montoPagado
+    );
+    const esParcial = montoPagado < totalAdeudado - 0.009;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const pagados = [];
+      let saldoPendiente = 0;
+      for (let i = 0; i < items.length; i++) {
+        const share = shares[i];
+        if (share <= 0.009) continue;
+        const pagoItem = escalarPagoData(parsed.data, share, montoPagado);
+        const { pagado, resto } = await aplicarPagoMovimiento(
+          tx,
+          items[i],
+          share,
+          pagoItem
+        );
+        pagados.push(pagado);
+        saldoPendiente += resto;
+      }
+      return {
+        actualizados: pagados.length,
+        parcial: esParcial,
+        saldoPendiente: Math.round(saldoPendiente * 100) / 100,
+        montoAplicado: montoPagado,
+      };
+    });
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al pagar el lote" });
+  }
+}
+
 /** Paga varios ítems pendientes del mismo proveedor. Si el monto es menor al total, reparte proporcional y deja saldos PENDIENTE. */
 router.post(
   "/:id/movimientos/pagar-lote",
   authenticate,
-  async (req: AuthedRequest, res) => {
-    try {
-      if (!isInternalOpsRole(req.user!.rol)) {
-        res.status(403).json({ error: "Sin permiso" });
-        return;
-      }
-      const ids = Array.isArray(req.body?.movimientoIds)
-        ? req.body.movimientoIds.map(String).filter(Boolean)
-        : [];
-      if (!ids.length) {
-        res.status(400).json({ error: "Seleccioná al menos un ítem pendiente" });
-        return;
-      }
-      const parsed = parsePagoBody(req.body);
-      if (!parsed.ok) {
-        res.status(400).json({ error: parsed.error });
-        return;
-      }
+  (req: AuthedRequest, res) => pagarLote(req, res, req.params.id)
+);
 
-      const items = await prisma.tallerMovimiento.findMany({
-        where: {
-          id: { in: ids },
-          tallerProveedorId: req.params.id,
-          estado: "PENDIENTE",
-        },
-        orderBy: { createdAt: "asc" },
-      });
-      if (!items.length) {
-        res.status(400).json({ error: "No hay ítems pendientes en la selección" });
-        return;
-      }
-      if (items.length !== ids.length) {
-        res.status(400).json({
-          error: "Algunos ítems ya no están pendientes o no pertenecen al proveedor",
-        });
-        return;
-      }
-
-      const totalAdeudado = items.reduce((a, m) => a + m.montoFacturado, 0);
-      const montoPagado = parsed.montoPagado ?? totalAdeudado;
-      if (montoPagado <= 0) {
-        res.status(400).json({ error: "Monto a pagar inválido" });
-        return;
-      }
-      if (montoPagado > totalAdeudado + 0.009) {
-        res.status(400).json({
-          error: `El monto no puede superar lo adeudado (${totalAdeudado})`,
-        });
-        return;
-      }
-
-      const shares = repartirMonto(
-        items.map((m) => m.montoFacturado),
-        montoPagado
-      );
-      const esParcial = montoPagado < totalAdeudado - 0.009;
-
-      const result = await prisma.$transaction(async (tx) => {
-        const pagados = [];
-        let saldoPendiente = 0;
-        for (let i = 0; i < items.length; i++) {
-          const share = shares[i];
-          if (share <= 0.009) continue;
-          const pagoItem = escalarPagoData(parsed.data, share, montoPagado);
-          const { pagado, resto } = await aplicarPagoMovimiento(
-            tx,
-            items[i],
-            share,
-            pagoItem
-          );
-          pagados.push(pagado);
-          saldoPendiente += resto;
-        }
-        return {
-          actualizados: pagados.length,
-          parcial: esParcial,
-          saldoPendiente: Math.round(saldoPendiente * 100) / 100,
-          montoAplicado: montoPagado,
-        };
-      });
-      res.json(result);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Error al pagar el lote" });
-    }
-  }
+/** Un solo pago que cubre ítems de varios proveedores (mismo reparto proporcional). */
+router.post(
+  "/pagar-multiple",
+  authenticate,
+  (req: AuthedRequest, res) => pagarLote(req, res, null)
 );
 
 router.post(
