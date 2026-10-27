@@ -2878,13 +2878,26 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
           monto: tot.facturado,
         });
       }
+      // Si la OT se reabrió y se vuelve a cerrar, lo ya cargado (pagado) no se vuelve a generar.
+      const yaCargado = new Map<string, number>();
+      for (const m of await tx.tallerMovimiento.findMany({
+        where: { otId: ot.id },
+        select: { tallerProveedorId: true, montoFacturado: true },
+      })) {
+        yaCargado.set(
+          m.tallerProveedorId,
+          (yaCargado.get(m.tallerProveedorId) ?? 0) + m.montoFacturado
+        );
+      }
       for (const p of porProveedor.values()) {
-        if (!p.id || p.monto <= 0) continue;
+        if (!p.id) continue;
+        const monto = Math.round((p.monto - (yaCargado.get(p.id) ?? 0)) * 100) / 100;
+        if (monto <= 0.009) continue;
         await tx.tallerMovimiento.create({
           data: {
             tallerProveedorId: p.id,
             otId: ot.id,
-            montoFacturado: p.monto,
+            montoFacturado: monto,
             estado: "PENDIENTE" as EstadoTallerMovimiento,
           },
         });
