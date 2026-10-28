@@ -2854,22 +2854,39 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         data: { estado: EstadoCamioneta.OPERATIVA },
       });
 
-      const porProveedor = new Map<string, { id: string | null; nombre: string; monto: number }>();
-      const itemsFactura = ot.items.filter(
-        (i) => i.tipo === "FACTURA" || i.tipo === "RENDICION"
-      );
-      const itemsCc =
-        itemsFactura.length > 0
-          ? itemsFactura
-          : ot.items.filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado);
-      for (const it of itemsCc) {
+      // CC por proveedor: FACTURA/RENDICION; si un proveedor no tiene factura,
+      // se usa su PRESUPUESTO aprobado (incluye adicionales fuera de presupuesto).
+      const porProveedor = new Map<
+        string,
+        { id: string | null; nombre: string; monto: number }
+      >();
+      const addCc = (
+        it: (typeof ot.items)[number],
+        monto: number
+      ) => {
+        if (monto <= 0) return;
         const key = it.tallerProveedorId || it.tallerNombre || "sin-proveedor";
         const prev = porProveedor.get(key);
         porProveedor.set(key, {
           id: it.tallerProveedorId,
           nombre: it.tallerNombre,
-          monto: (prev?.monto ?? 0) + it.importe,
+          monto: (prev?.monto ?? 0) + monto,
         });
+      };
+      const itemsFactura = ot.items.filter(
+        (i) => i.tipo === "FACTURA" || i.tipo === "RENDICION"
+      );
+      for (const it of itemsFactura) addCc(it, it.importe);
+      const proveedoresConFactura = new Set(
+        itemsFactura
+          .map((i) => i.tallerProveedorId || i.tallerNombre || "sin-proveedor")
+          .filter(Boolean)
+      );
+      for (const it of ot.items) {
+        if (it.tipo !== "PRESUPUESTO" || !it.aprobado) continue;
+        const key = it.tallerProveedorId || it.tallerNombre || "sin-proveedor";
+        if (proveedoresConFactura.has(key)) continue;
+        addCc(it, it.importe);
       }
       if (porProveedor.size === 0 && ot.tallerProveedorId && tot.facturado > 0) {
         porProveedor.set(ot.tallerProveedorId, {
