@@ -96,21 +96,24 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
             omitidos.push(`Empresa ${e.nombre} (${e.cuit}) ya existe`);
             continue;
           }
+          const email = e.email
+            ? e.email.trim().toLowerCase()
+            : null;
           const saved = current
             ? await tx.empresaTransporte.update({
                 where: { id: current.id },
                 data: {
                   nombre: e.nombre,
                   contacto: e.contacto || current.contacto,
-                  ...(e.tipo ? { tipo: e.tipo } : {}),
+                  ...(email ? { email } : {}),
                 },
               })
             : await tx.empresaTransporte.create({
                 data: {
                   nombre: e.nombre,
                   cuit: e.cuit,
+                  email,
                   contacto: e.contacto || null,
-                  ...(e.tipo ? { tipo: e.tipo } : {}),
                 },
               });
           if (current) {
@@ -128,7 +131,7 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
           const password = generateTempPassword();
           await tx.usuario.create({
             data: {
-              email: `empresa-${e.cuit}@acceso.vettore.local`,
+              email: email || `empresa-${e.cuit}@acceso.vettore.local`,
               loginIdentificador: e.cuit,
               passwordHash: await bcrypt.hash(password, 10),
               rol: "EMPRESA",

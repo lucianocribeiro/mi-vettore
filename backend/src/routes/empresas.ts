@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { Role, TipoEmpresa } from "@prisma/client";
+import { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { generateTempPassword } from "../lib/temp-password.js";
 import { prisma } from "../lib/prisma.js";
@@ -58,8 +58,8 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       items.map((e) => ({
         nombre: e.nombre,
         cuit: e.cuit ?? "",
+        email: e.email ?? "",
         contacto: e.contacto ?? "",
-        tipo: e.tipo,
       })),
       `empresas_${new Date().toISOString().slice(0, 10)}.xlsx`
     );
@@ -97,18 +97,16 @@ router.post("/", ...write, async (req, res) => {
       res.status(400).json({ error: "Nombre y CUIT (11 dígitos) son obligatorios" });
       return;
     }
-    const tipoRaw = String(req.body?.tipo ?? "PROPIA").toUpperCase();
-    if (!(tipoRaw in TipoEmpresa)) {
-      res.status(400).json({ error: "Tipo inválido" });
-      return;
-    }
+    const email = req.body?.email
+      ? String(req.body.email).trim().toLowerCase()
+      : "";
     const password = String(req.body?.password ?? "") || generateTempPassword();
     const item = await prisma.$transaction(async (tx) => {
       const empresa = await tx.empresaTransporte.create({
       data: {
         nombre,
-        tipo: tipoRaw as TipoEmpresa,
         cuit,
+        email: email || null,
         contacto: req.body?.contacto
           ? String(req.body.contacto).trim()
           : null,
@@ -123,7 +121,7 @@ router.post("/", ...write, async (req, res) => {
     });
       await tx.usuario.create({
         data: {
-          email: `empresa-${cuit}@acceso.vettore.local`,
+          email: email || `empresa-${cuit}@acceso.vettore.local`,
           loginIdentificador: cuit,
           passwordHash: await bcrypt.hash(password, 10),
           rol: Role.EMPRESA,
@@ -161,9 +159,9 @@ router.put("/:id", ...write, async (req, res) => {
     }
     const data: {
       nombre?: string;
-      tipo?: TipoEmpresa;
       cuit?: string;
       activo?: boolean;
+      email?: string | null;
       contacto?: string | null;
       permiteMultiCamioneta?: boolean;
       verMantenimiento?: boolean;
@@ -178,6 +176,11 @@ router.put("/:id", ...write, async (req, res) => {
         return;
       }
       data.cuit = cuit;
+    }
+    if (req.body?.email !== undefined) {
+      data.email = req.body.email
+        ? String(req.body.email).trim().toLowerCase()
+        : null;
     }
     if (req.body?.contacto !== undefined) {
       data.contacto = req.body.contacto
@@ -196,18 +199,18 @@ router.put("/:id", ...write, async (req, res) => {
     if (req.body?.pideSenasa !== undefined) {
       data.pideSenasa = Boolean(req.body.pideSenasa);
     }
-    if (req.body?.tipo !== undefined) {
-      const t = String(req.body.tipo).toUpperCase();
-      if (!(t in TipoEmpresa)) {
-        res.status(400).json({ error: "Tipo inválido" });
-        return;
-      }
-      data.tipo = t as TipoEmpresa;
-    }
     const item = await prisma.empresaTransporte.update({
       where: { id: req.params.id },
       data,
     });
+    if (data.email !== undefined) {
+      await prisma.usuario.updateMany({
+        where: { empresaId: item.id, rol: Role.EMPRESA },
+        data: {
+          email: data.email || `empresa-${item.cuit.replace(/\D/g, "")}@acceso.vettore.local`,
+        },
+      });
+    }
     if (req.body?.password) {
       const password = String(req.body.password) || generateTempPassword();
       const hash = await bcrypt.hash(password, 10);

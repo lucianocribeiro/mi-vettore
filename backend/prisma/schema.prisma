@@ -317,7 +317,11 @@ model EmpresaTransporte {
   id                     String           @id @default(cuid())
   nombre                 String
   cuit                   String           @unique
+  /// Teléfono / WhatsApp de contacto.
   contacto               String?
+  /// Mail de contacto de la empresa.
+  email                  String?
+  /// Legado PROPIA/ALIADA: ya no se usa en ABM (se mantiene por compat).
   tipo                   TipoEmpresa      @default(ALIADA)
   /// Si true, un mismo chofer puede tener varias camionetas activas de esta empresa.
   permiteMultiCamioneta  Boolean          @default(true)

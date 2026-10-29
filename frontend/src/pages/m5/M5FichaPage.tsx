@@ -181,6 +181,7 @@ export function M5FichaPage() {
   const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
   const [fCuit, setFCuit] = useState("");
+  const [fEmailEmpresa, setFEmailEmpresa] = useState("");
   const [fPatente, setFPatente] = useState("");
   const [fMarca, setFMarca] = useState("");
   const [fModelo, setFModelo] = useState("");
@@ -403,6 +404,7 @@ export function M5FichaPage() {
     setFPideManipulacion(true);
     setFEstadoChofer("ACTIVO");
     setFCuit("");
+    setFEmailEmpresa("");
     setFPasswordEmpresa("");
     setFPatente("");
     setFMarca("");
@@ -452,6 +454,7 @@ export function M5FichaPage() {
     setFormError(null);
     setFNombre(item.nombre);
     setFCuit(item.cuit ?? "");
+    setFEmailEmpresa(item.email ?? "");
     setFPasswordEmpresa("");
     setFVerMant(!!item.verMantenimiento);
     setFVerTaller(!!item.verTaller);
@@ -599,6 +602,7 @@ export function M5FichaPage() {
         const body = {
           nombre: fNombre,
           cuit: fCuit || null,
+          email: fEmailEmpresa.trim() || null,
           password: fPasswordEmpresa || undefined,
           verMantenimiento: fVerMant,
           verTaller: fVerTaller,
@@ -1002,7 +1006,7 @@ export function M5FichaPage() {
         .filter((u) => u.estado !== "INACTIVA")
         .map((u) => u.patente)
         .join(" ");
-      const hay = [e.nombre, e.cuit, e.contacto, choferesTxt, patentesTxt]
+      const hay = [e.nombre, e.cuit, e.email, e.contacto, choferesTxt, patentesTxt]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -1689,7 +1693,7 @@ export function M5FichaPage() {
           </p>
         </div>
         <EntityTable
-          headers={["Nombre", "CUIT", "Estado", "Choferes", "Patentes", ""]}
+          headers={["Nombre", "CUIT", "Mail", "Estado", "Choferes", "Patentes", ""]}
           rows={empresasFiltradas.map((e) => {
             const wa = whatsappDigits(e.contacto);
             const choferesEmp = (e.choferes ?? []).filter((c) => c.estado !== "INACTIVO");
@@ -1698,6 +1702,7 @@ export function M5FichaPage() {
             return [
               e.nombre,
               e.cuit || "—",
+              e.email || "—",
               <EstadoBadge key={`est-${e.id}`} estado={estadoEmp} />,
               choferesEmp.length ? (
                 <ul key={`ch-${e.id}`} className="space-y-0.5">
@@ -2137,6 +2142,15 @@ export function M5FichaPage() {
                   value={fCuit}
                   onChange={(e) => setFCuit(e.target.value)}
                   required
+                />
+              </Field>
+              <Field label="Mail">
+                <input
+                  type="email"
+                  className={inputClass}
+                  value={fEmailEmpresa}
+                  onChange={(e) => setFEmailEmpresa(e.target.value)}
+                  placeholder="contacto@empresa.com"
                 />
               </Field>
               <Field label="Módulos">

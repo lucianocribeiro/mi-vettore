@@ -84,6 +84,7 @@ export type EstadoCamioneta =
   | "DE_VACACIONES"
   | "FUERA_SERVICIO"
   | "INACTIVA";
+/** @deprecated Ya no se usa en ABM (legado DB). */
 export type TipoEmpresa = "PROPIA" | "ALIADA";
 export type TipoTransporte =
   | "CONGELADO"
@@ -260,8 +261,10 @@ export type Empresa = {
   id: string;
   nombre: string;
   cuit: string | null;
+  email?: string | null;
   contacto: string | null;
-  tipo: TipoEmpresa;
+  /** Legado; no se edita en ABM. */
+  tipo?: TipoEmpresa;
   /** Si true, un mismo chofer puede tener varias camionetas activas de esta empresa. */
   permiteMultiCamioneta?: boolean;
   activo?: boolean;

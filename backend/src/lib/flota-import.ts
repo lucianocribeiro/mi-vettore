@@ -27,8 +27,8 @@ export const FLOTA_COLUMNAS: Record<HojaFlota, Columna[]> = {
   empresas: [
     { header: "Nombre", key: "nombre", width: 28 },
     { header: "CUIT", key: "cuit", width: 16 },
-    { header: "Contacto", key: "contacto", width: 28 },
-    { header: "Tipo", key: "tipo", width: 12 },
+    { header: "Email", key: "email", width: 28 },
+    { header: "Contacto", key: "contacto", width: 18 },
   ],
   choferes: [
     { header: "Nombre completo", key: "nombre", width: 30 },
@@ -62,8 +62,8 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
   empresas: {
     nombre: EMPRESA_EJEMPLO,
     cuit: CUIT_EJEMPLO,
-    contacto: "contacto@empresa.com",
-    tipo: "ALIADA",
+    email: "contacto@empresa.com",
+    contacto: "2644000000",
   },
   choferes: {
     nombre: "Ana Perez",
@@ -90,7 +90,7 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
 const INSTRUCCIONES: Record<HojaFlota, string[]> = {
   empresas: [
     "Obligatorias: Nombre y CUIT (11 dígitos). Se genera usuario de acceso con el CUIT.",
-    "Tipo: ALIADA o PROPIA (si se deja vacío queda ALIADA).",
+    "Email: mail de contacto (opcional). Contacto: teléfono / WhatsApp (opcional).",
   ],
   choferes: [
     "Obligatorias: Nombre completo, DNI y Empresa (nombre o CUIT de una empresa ya cargada).",
@@ -154,8 +154,8 @@ export type FilaEmpresa = {
   fila: number;
   nombre: string;
   cuit: string;
+  email: string;
   contacto: string;
-  tipo: "PROPIA" | "ALIADA" | null;
 };
 
 export type FilaChofer = {
@@ -253,17 +253,12 @@ export async function parseFlotaWorkbook(
         error(n, "Nombre y CUIT (11 dígitos) son obligatorios");
         return;
       }
-      const tipoRaw = txt(row, "tipo").toUpperCase();
-      if (tipoRaw && tipoRaw !== "PROPIA" && tipoRaw !== "ALIADA") {
-        error(n, "Tipo debe ser ALIADA o PROPIA");
-        return;
-      }
       data.empresas.push({
         fila: n,
         nombre,
         cuit,
-        contacto: txt(row, "contacto"),
-        tipo: (tipoRaw || null) as FilaEmpresa["tipo"],
+        email: txt(row, "email") || txt(row, "mail"),
+        contacto: txt(row, "contacto") || txt(row, "telefono"),
       });
       return;
     }
