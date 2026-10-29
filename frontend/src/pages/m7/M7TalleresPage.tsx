@@ -1120,38 +1120,11 @@ export function M7TalleresPage() {
                               )}
                             </div>
                           )}
-                          {!ot.sinPresupuesto && (
-                            <div>
-                              <div className="mb-1 text-xs font-semibold">Ítems aprobados</div>
-                              {itemsPresupuesto.filter((i) => i.aprobado).length === 0 ? (
-                                <p className="text-xs text-[var(--vl-text-muted)]">
-                                  No hay ítems aprobados.
-                                </p>
-                              ) : (
-                                <ul className="space-y-1 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
-                                  {itemsPresupuesto
-                                    .filter((i) => i.aprobado)
-                                    .map((i) => (
-                                      <li
-                                        key={i.id}
-                                        className="flex justify-between gap-2 border-b border-[var(--vl-card-border)] py-1 last:border-0"
-                                      >
-                                        <span>
-                                          {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
-                                          {i.descripcion}
-                                          {i.adicionalAjuste ? " · adicional" : ""}
-                                        </span>
-                                        {!ocultarMontos && (
-                                          <span className="shrink-0 font-medium">
-                                            {money(i.importe)}
-                                          </span>
-                                        )}
-                                      </li>
-                                    ))}
-                                </ul>
-                              )}
-                            </div>
-                          )}
+                          <CierreConceptosResumen
+                            ot={ot}
+                            token={token!}
+                            ocultarMontos={ocultarMontos}
+                          />
                         </div>
                         )
                       )}
@@ -1596,6 +1569,12 @@ export function M7TalleresPage() {
                     : ""}
                   . Después de guardar no se puede editar ni volver a etapas anteriores.
                 </p>
+                <CierreConceptosResumen
+                  ot={ot}
+                  token={token!}
+                  compact
+                  className="mt-3"
+                />
               </div>
             </div>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -1612,6 +1591,20 @@ export function M7TalleresPage() {
                 disabled={busy}
                 onClick={() => {
                   void (async () => {
+                    const faltan = (ot.items ?? []).filter((i) => {
+                      const esGasto =
+                        i.tipo === "FACTURA" || i.tipo === "RENDICION";
+                      const esAprobado =
+                        i.tipo === "PRESUPUESTO" && i.aprobado;
+                      return (esGasto || esAprobado) && !i.categoriaDiagnosticoId;
+                    });
+                    if (faltan.length > 0) {
+                      setError(
+                        "Nivel 1, 2 y 3 obligatorio: completá el concepto en ajuste antes de cerrar."
+                      );
+                      setConfirmCerrar(false);
+                      return;
+                    }
                     await call(`/api/talleres/${ot.id}/cerrar`, {
                       method: "POST",
                       body: "{}",
@@ -1873,14 +1866,112 @@ type CatDiag = {
   padreId: string | null;
 };
 
+function pathConcepto(
+  cats: CatDiag[],
+  categoriaId: string | null | undefined
+): string {
+  if (!categoriaId) return "";
+  const byId = new Map(cats.map((c) => [c.id, c]));
+  const chain: string[] = [];
+  let cur = byId.get(categoriaId);
+  while (cur) {
+    chain.unshift(cur.nombre);
+    cur = cur.padreId ? byId.get(cur.padreId) : undefined;
+  }
+  return chain.join(" › ");
+}
+
+/** Resumen de niveles 1-2-3 al cerrar / confirmar cierre. */
+function CierreConceptosResumen({
+  ot,
+  token,
+  ocultarMontos,
+  compact,
+  className,
+}: {
+  ot: OrdenTrabajo;
+  token: string;
+  ocultarMontos?: boolean;
+  compact?: boolean;
+  className?: string;
+}) {
+  const [cats, setCats] = useState<CatDiag[]>([]);
+  useEffect(() => {
+    void apiFetch<CatDiag[]>("/api/diagnostico/categorias", {}, token)
+      .then(setCats)
+      .catch(() => setCats([]));
+  }, [token]);
+
+  const items = (ot.items ?? []).filter((i) => {
+    if (i.tipo === "FACTURA" || i.tipo === "RENDICION") return true;
+    return i.tipo === "PRESUPUESTO" && !!i.aprobado;
+  });
+  const faltan = items.filter((i) => !i.categoriaDiagnosticoId);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className={className}>
+      <div className="mb-1 text-xs font-semibold text-[var(--vl-heading)]">
+        Niveles 1 / 2 / 3
+      </div>
+      {faltan.length > 0 && (
+        <p className="mb-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+          Falta cargar concepto en {faltan.length} ítem
+          {faltan.length === 1 ? "" : "s"}. Volvé a ajuste de importes.
+        </p>
+      )}
+      <ul
+        className={`space-y-1.5 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs ${
+          compact ? "max-h-40 overflow-y-auto" : ""
+        }`}
+      >
+        {items.map((i) => {
+          const path =
+            pathConcepto(cats, i.categoriaDiagnosticoId) ||
+            (i.categoriaDiagnostico
+              ? i.categoriaDiagnostico.nombre
+              : "Sin nivel cargado");
+          return (
+            <li
+              key={i.id}
+              className="border-b border-[var(--vl-card-border)] pb-1.5 last:border-0 last:pb-0"
+            >
+              <div className="font-medium text-[var(--vl-heading)]">
+                {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
+                {i.descripcion}
+                {i.adicionalAjuste ? " · adicional" : ""}
+              </div>
+              <div
+                className={
+                  i.categoriaDiagnosticoId
+                    ? "text-[var(--vl-text-muted)]"
+                    : "font-medium text-amber-700 dark:text-amber-400"
+                }
+              >
+                {path}
+              </div>
+              {!ocultarMontos && !compact && (
+                <div className="mt-0.5 font-medium">{money(i.importe)}</div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function ConceptoCascada({
   cats,
   valueId,
   onPick,
+  required,
 }: {
   cats: CatDiag[];
   valueId: string | null | undefined;
   onPick: (leafId: string | null) => void;
+  required?: boolean;
 }) {
   const selected = valueId ? cats.find((c) => c.id === valueId) : null;
   const l3 = selected?.nivel === 3 ? selected : null;
@@ -1909,53 +2000,70 @@ function ConceptoCascada({
   const nivel2 = cats.filter((c) => c.nivel === 2 && c.padreId === n1);
   const nivel3 = cats.filter((c) => c.nivel === 3 && c.padreId === n2);
 
+  const incomplete = required && !l3;
+  const selClass = `rounded border bg-[var(--vl-page)] px-1.5 py-1 text-[11px] ${
+    incomplete
+      ? "border-amber-500"
+      : "border-[var(--vl-card-border)]"
+  }`;
+
   return (
-    <div className="mt-1 grid gap-1 sm:grid-cols-3">
-      <select
-        className="rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-1.5 py-1 text-[11px]"
-        value={n1}
-        onChange={(e) => {
-          setN1(e.target.value);
-          setN2("");
-          setN3("");
-          onPick(null);
-        }}
-      >
-        <option value="">Seleccionar…</option>
-        {nivel1.map((c) => (
-          <option key={c.id} value={c.id}>{c.nombre}</option>
-        ))}
-      </select>
-      <select
-        className="rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-1.5 py-1 text-[11px]"
-        value={n2}
-        disabled={!n1}
-        onChange={(e) => {
-          setN2(e.target.value);
-          setN3("");
-          onPick(null);
-        }}
-      >
-        <option value="">Seleccionar…</option>
-        {nivel2.map((c) => (
-          <option key={c.id} value={c.id}>{c.nombre}</option>
-        ))}
-      </select>
-      <select
-        className="rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-1.5 py-1 text-[11px]"
-        value={n3}
-        disabled={!n2}
-        onChange={(e) => {
-          const id = e.target.value;
-          setN3(id);
-          onPick(id || null);
-        }}
-      >
-        <option value="">Seleccionar…</option>
-        {nivel3.map((c) => (
-          <option key={c.id} value={c.id}>{c.nombre}</option>
-        ))}
-      </select>
+    <div className="mt-1 space-y-1">
+      <div className="grid gap-1 sm:grid-cols-3">
+        <select
+          className={selClass}
+          value={n1}
+          required={required}
+          onChange={(e) => {
+            setN1(e.target.value);
+            setN2("");
+            setN3("");
+            onPick(null);
+          }}
+        >
+          <option value="">Nivel 1…</option>
+          {nivel1.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+        </select>
+        <select
+          className={selClass}
+          value={n2}
+          disabled={!n1}
+          required={required}
+          onChange={(e) => {
+            setN2(e.target.value);
+            setN3("");
+            onPick(null);
+          }}
+        >
+          <option value="">Nivel 2…</option>
+          {nivel2.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+        </select>
+        <select
+          className={selClass}
+          value={n3}
+          disabled={!n2}
+          required={required}
+          onChange={(e) => {
+            const id = e.target.value;
+            setN3(id);
+            onPick(id || null);
+          }}
+        >
+          <option value="">Nivel 3…</option>
+          {nivel3.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+        </select>
+      </div>
+      {incomplete && (
+        <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
+          Obligatorio: completá los 3 niveles
+        </p>
+      )}
     </div>
   );
 }
@@ -2217,12 +2325,13 @@ function AjusteImportesChecklist({
               />
               <div>
                 <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
-                  Nivel (por defecto = general; editable)
+                  Nivel 1 / 2 / 3 (obligatorio)
                 </div>
                 <ConceptoCascada
                   cats={cats}
                   valueId={adicConceptoId ?? sharedConceptoId}
                   onPick={setAdicConceptoId}
+                  required
                 />
               </div>
               <div className="flex gap-2">
@@ -2250,11 +2359,12 @@ function AjusteImportesChecklist({
       {!ocultarMontos && (
         <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] p-3">
           <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
-            Concepto general (todas las cotizaciones)
+            Concepto general · Nivel 1 / 2 / 3 (obligatorio)
           </div>
           <ConceptoCascada
             cats={cats}
             valueId={sharedConceptoId}
+            required
             onPick={(leafId) => {
               if (!readOnly) setConceptoTodos(leafId);
             }}
@@ -2372,11 +2482,12 @@ function AjusteImportesChecklist({
               {!ocultarMontos && (
                 <div className="mt-2">
                   <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
-                    Nivel (esta reparación)
+                    Nivel 1 / 2 / 3 (obligatorio)
                   </div>
                   <ConceptoCascada
                     cats={cats}
                     valueId={conceptoActual(i)}
+                    required
                     onPick={(leafId) => {
                       if (!readOnly) setConceptoItem(i.id, leafId);
                     }}

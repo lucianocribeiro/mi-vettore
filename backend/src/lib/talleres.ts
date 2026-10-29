@@ -167,6 +167,44 @@ export function canCerrarOt(rol: Role): boolean {
   return canEditTalleres(rol);
 }
 
+/** Ítems de gasto/presupuesto que deben tener nivel 1-2-3 (concepto) antes del cierre. */
+export function itemsQueRequierenConcepto<
+  T extends {
+    tipo: string;
+    aprobado?: boolean | null;
+    categoriaDiagnosticoId?: string | null;
+    descripcion?: string | null;
+  }
+>(items: T[]): T[] {
+  const list = items ?? [];
+  const gasto = list.filter((i) => i.tipo === "FACTURA" || i.tipo === "RENDICION");
+  if (gasto.length > 0) return gasto;
+  const aprobados = list.filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado);
+  if (aprobados.length > 0) return aprobados;
+  return list.filter((i) => i.tipo === "PRESUPUESTO");
+}
+
+/** null si OK; mensaje de error si faltan niveles. */
+export function errorConceptosObligatorios(
+  items: {
+    tipo: string;
+    aprobado?: boolean | null;
+    categoriaDiagnosticoId?: string | null;
+    descripcion?: string | null;
+  }[]
+): string | null {
+  const faltan = itemsQueRequierenConcepto(items).filter(
+    (i) => !i.categoriaDiagnosticoId
+  );
+  if (faltan.length === 0) return null;
+  const nombres = faltan
+    .map((i) => i.descripcion?.trim() || "sin descripción")
+    .slice(0, 3)
+    .join("; ");
+  const mas = faltan.length > 3 ? ` (+${faltan.length - 3})` : "";
+  return `Nivel 1, 2 y 3 obligatorio en cada ítem. Falta en: ${nombres}${mas}`;
+}
+
 /** Aviso al crear la solicitud: Pablo y Silvina (notif automática, reunión 12/08). */
 export const NOTIF_OPS_ROLES: Role[] = [Role.OPERACIONES, Role.ADMINISTRADOR];
 

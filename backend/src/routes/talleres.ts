@@ -54,6 +54,7 @@ import {
   isIncrementoStep,
   isCierreStep,
   migrateLegacyOtStep,
+  errorConceptosObligatorios,
 } from "../lib/talleres.js";
 import {
   assertRoleOrOverride,
@@ -2828,6 +2829,11 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
 
     // 3 Ajuste → 4 Comparación/cierre.
     if (isAjusteStep(ot.currentStep)) {
+      const errConcepto = errorConceptosObligatorios(ot.items ?? []);
+      if (errConcepto) {
+        res.status(400).json({ error: errConcepto });
+        return;
+      }
       const tot = otTotales(ot);
       if (ot.sinPresupuesto) {
         // Gasto cargado (factura/rendición); sin comparar contra presupuesto 0.
@@ -2893,6 +2899,12 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
     });
     if (!gate.ok) {
       res.status(gate.status).json({ error: gate.error });
+      return;
+    }
+
+    const errConcepto = errorConceptosObligatorios(ot.items ?? []);
+    if (errConcepto) {
+      res.status(400).json({ error: errConcepto });
       return;
     }
 
