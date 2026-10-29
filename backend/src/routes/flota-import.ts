@@ -106,6 +106,8 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
                   nombre: e.nombre,
                   contacto: e.contacto || current.contacto,
                   ...(email ? { email } : {}),
+                  verMantenimiento: e.verMantenimiento,
+                  verTaller: e.verTaller,
                 },
               })
             : await tx.empresaTransporte.create({
@@ -114,6 +116,8 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
                   cuit: e.cuit,
                   email,
                   contacto: e.contacto || null,
+                  verMantenimiento: e.verMantenimiento,
+                  verTaller: e.verTaller,
                 },
               });
           if (current) {

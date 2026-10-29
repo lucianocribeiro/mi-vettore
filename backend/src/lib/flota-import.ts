@@ -29,6 +29,8 @@ export const FLOTA_COLUMNAS: Record<HojaFlota, Columna[]> = {
     { header: "CUIT", key: "cuit", width: 16 },
     { header: "Email", key: "email", width: 28 },
     { header: "Contacto", key: "contacto", width: 18 },
+    { header: "Mantenimiento", key: "mantenimiento", width: 14 },
+    { header: "Taller", key: "taller", width: 10 },
   ],
   choferes: [
     { header: "Nombre completo", key: "nombre", width: 30 },
@@ -64,6 +66,8 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
     cuit: CUIT_EJEMPLO,
     email: "contacto@empresa.com",
     contacto: "2644000000",
+    mantenimiento: "SI",
+    taller: "SI",
   },
   choferes: {
     nombre: "Ana Perez",
@@ -91,6 +95,7 @@ const INSTRUCCIONES: Record<HojaFlota, string[]> = {
   empresas: [
     "Obligatorias: Nombre y CUIT (11 dígitos). Se genera usuario de acceso con el CUIT.",
     "Email: mail de contacto (opcional). Contacto: teléfono / WhatsApp (opcional).",
+    "Mantenimiento y Taller: SI o NO (módulos habilitados; vacío = NO).",
   ],
   choferes: [
     "Obligatorias: Nombre completo, DNI y Empresa (nombre o CUIT de una empresa ya cargada).",
@@ -156,7 +161,15 @@ export type FilaEmpresa = {
   cuit: string;
   email: string;
   contacto: string;
+  verMantenimiento: boolean;
+  verTaller: boolean;
 };
+
+/** SI / NO / true / 1 / X → true */
+export function parseSiNo(raw: string): boolean {
+  const v = raw.trim().toLowerCase();
+  return ["si", "sí", "s", "true", "1", "x", "yes"].includes(v);
+}
 
 export type FilaChofer = {
   fila: number;
@@ -259,6 +272,10 @@ export async function parseFlotaWorkbook(
         cuit,
         email: txt(row, "email") || txt(row, "mail"),
         contacto: txt(row, "contacto") || txt(row, "telefono"),
+        verMantenimiento: parseSiNo(
+          txt(row, "mantenimiento") || txt(row, "vermantenimiento")
+        ),
+        verTaller: parseSiNo(txt(row, "taller") || txt(row, "vertaller")),
       });
       return;
     }

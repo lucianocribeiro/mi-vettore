@@ -60,6 +60,8 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
         cuit: e.cuit ?? "",
         email: e.email ?? "",
         contacto: e.contacto ?? "",
+        mantenimiento: e.verMantenimiento ? "SI" : "NO",
+        taller: e.verTaller ? "SI" : "NO",
       })),
       `empresas_${new Date().toISOString().slice(0, 10)}.xlsx`
     );
