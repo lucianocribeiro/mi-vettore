@@ -63,6 +63,28 @@ function VettoreOpsGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Empresa/chofer: respeta tildes de módulos de la empresa. */
+function ModuloEmpresaGate({
+  modulo,
+  children,
+}: {
+  modulo: "taller" | "mantenimiento";
+  children: ReactNode;
+}) {
+  const { user } = useAuth();
+  if (isInternalOps(user?.rol) || user?.rol === "SUGERENCIAS") {
+    return <>{children}</>;
+  }
+  const ok =
+    modulo === "taller"
+      ? user?.verTaller !== false
+      : user?.verMantenimiento !== false;
+  if (!ok) {
+    return <Navigate to={user ? homePathForUser(user) : "/login"} replace />;
+  }
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -118,7 +140,9 @@ export default function App() {
               path="/m6"
               element={
                 <SugerenciasOnlyGate>
-                  <M6MantenimientoPage />
+                  <ModuloEmpresaGate modulo="mantenimiento">
+                    <M6MantenimientoPage />
+                  </ModuloEmpresaGate>
                 </SugerenciasOnlyGate>
               }
             />
@@ -134,7 +158,9 @@ export default function App() {
               path="/m7"
               element={
                 <SugerenciasOnlyGate>
-                  <M7TalleresPage />
+                  <ModuloEmpresaGate modulo="taller">
+                    <M7TalleresPage />
+                  </ModuloEmpresaGate>
                 </SugerenciasOnlyGate>
               }
             />
@@ -142,7 +168,9 @@ export default function App() {
               path="/m7/externos"
               element={
                 <SugerenciasOnlyGate>
-                  <TallerExternoPage />
+                  <ModuloEmpresaGate modulo="taller">
+                    <TallerExternoPage />
+                  </ModuloEmpresaGate>
                 </SugerenciasOnlyGate>
               }
             />

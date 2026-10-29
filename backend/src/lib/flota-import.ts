@@ -266,12 +266,18 @@ export async function parseFlotaWorkbook(
         error(n, "Nombre y CUIT (11 dígitos) son obligatorios");
         return;
       }
+      const contactoRaw = txt(row, "contacto") || txt(row, "telefono");
+      let email = (txt(row, "email") || txt(row, "mail")).toLowerCase();
+      // Excel viejo: el mail iba en Contacto.
+      if (!email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactoRaw)) {
+        email = contactoRaw.toLowerCase();
+      }
       data.empresas.push({
         fila: n,
         nombre,
         cuit,
-        email: txt(row, "email") || txt(row, "mail"),
-        contacto: txt(row, "contacto") || txt(row, "telefono"),
+        email,
+        contacto: email && contactoRaw.toLowerCase() === email ? "" : contactoRaw,
         verMantenimiento: parseSiNo(
           txt(row, "mantenimiento") || txt(row, "vermantenimiento")
         ),

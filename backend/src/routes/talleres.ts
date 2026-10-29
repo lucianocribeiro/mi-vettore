@@ -1943,6 +1943,7 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
     const camioneta = await prisma.camioneta.findUnique({
       where: { id: camionetaId },
       include: {
+        empresa: { select: { id: true, verTaller: true, nombre: true } },
         asignaciones: {
           where: { periodoHasta: null },
           take: 1,
@@ -1952,6 +1953,18 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
     });
     if (!camioneta) {
       res.status(404).json({ error: "Camioneta no encontrada" });
+      return;
+    }
+    // Empresa/chofer: si el módulo Taller está destildado, no pueden cargar OT.
+    if (
+      (rol === "CHOFER" || rol === "EMPRESA") &&
+      camioneta.empresa &&
+      !camioneta.empresa.verTaller
+    ) {
+      res.status(403).json({
+        error:
+          "Tu empresa no tiene habilitado el módulo Taller: no podés cargar órdenes de trabajo",
+      });
       return;
     }
     const puedeCorregirKm = canAdminCorregir(rol);
