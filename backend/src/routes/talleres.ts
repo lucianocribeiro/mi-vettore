@@ -1876,6 +1876,56 @@ router.delete("/externos/:id", authenticate, async (req: AuthedRequest, res) => 
   }
 });
 
+/** Elimina una OT interna (carga errónea). No se puede si ya hay pagos. */
+router.delete("/:id", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.status(403).json({ error: "Sin permiso para eliminar OT" });
+      return;
+    }
+    const ot = await prisma.ordenTrabajo.findUnique({
+      where: { id: req.params.id },
+      include: {
+        movimientos: { select: { id: true, estado: true } },
+      },
+    });
+    if (!ot || ot.externo) {
+      res.status(404).json({ error: "OT no encontrada" });
+      return;
+    }
+    const pagados = ot.movimientos.filter((m) => m.estado === "PAGADO");
+    if (pagados.length > 0) {
+      res.status(400).json({
+        error:
+          "La OT ya tiene pagos en cuenta corriente. Revertí los pagos antes de eliminarla.",
+      });
+      return;
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.tallerMovimiento.deleteMany({ where: { otId: ot.id } });
+      await tx.avisoInterno.deleteMany({ where: { otId: ot.id } });
+      await tx.registroMantenimiento.deleteMany({ where: { otId: ot.id } });
+      await tx.otComentario.deleteMany({ where: { otId: ot.id } });
+      await tx.otAuditoria.deleteMany({ where: { otId: ot.id } });
+      await tx.ordenTrabajoDiagnostico.deleteMany({ where: { otId: ot.id } });
+      await tx.otFactura.deleteMany({ where: { otId: ot.id } });
+      await tx.otItem.deleteMany({ where: { otId: ot.id } });
+      // Romper FK presupuestoElegido antes de borrar presupuestos.
+      await tx.ordenTrabajo.update({
+        where: { id: ot.id },
+        data: { presupuestoElegidoId: null },
+      });
+      await tx.presupuestoOt.deleteMany({ where: { otId: ot.id } });
+      await tx.ordenTrabajo.delete({ where: { id: ot.id } });
+      await tx.solicitudTaller.delete({ where: { id: ot.solicitudTallerId } });
+    });
+    res.json({ ok: true, numeroOT: ot.numeroOT });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al eliminar la OT" });
+  }
+});
+
 router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.ordenTrabajo.findUnique({

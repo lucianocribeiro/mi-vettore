@@ -238,6 +238,9 @@ export function M7TalleresPage() {
   const [importeDrafts, setImporteDrafts] = useState<Record<string, number>>({});
   const [aprobadoDrafts, setAprobadoDrafts] = useState<Record<string, boolean>>({});
   const [confirmCerrar, setConfirmCerrar] = useState(false);
+  const [confirmEliminarOt, setConfirmEliminarOt] = useState<OrdenTrabajo | null>(
+    null
+  );
   const [confirmSinPresupuesto, setConfirmSinPresupuesto] = useState(false);
   const [confirmAvanzarSinGuardar, setConfirmAvanzarSinGuardar] = useState(false);
   const puedeEditarTaller = isOps(rol);
@@ -510,6 +513,24 @@ export function M7TalleresPage() {
     }
   }
 
+  async function eliminarOtConfirmada() {
+    if (!token || !confirmEliminarOt) return;
+    const id = confirmEliminarOt.id;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/talleres/${id}`, { method: "DELETE" }, token);
+      setOts((prev) => prev.filter((o) => o.id !== id));
+      if (selectedId === id) setSelectedId(null);
+      setConfirmEliminarOt(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo eliminar la OT");
+      setConfirmEliminarOt(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const itemsAll = ot?.items ?? [];
   const itemsPresupuesto = itemsAll.filter((i) => i.tipo === "PRESUPUESTO");
   /** Solo ítems tildados (aprobado) — cambia al marcar / editar. */
@@ -724,22 +745,43 @@ export function M7TalleresPage() {
                   </p>
                 )}
                 {visibleOts.map((o) => (
-                  <button key={o.id} type="button" onClick={() => setSelectedId(o.id)} className={`w-full rounded-xl border p-3 text-left ${selectedId === o.id ? "border-slate-900 dark:border-slate-100" : "border-[var(--vl-card-border)]"}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-bold text-[var(--vl-heading)]">{o.numeroOT}</span>
-                      <Badge className="border-slate-200 bg-slate-100 text-slate-600">{o.solicitud.camioneta.patente}</Badge>
-                    </div>
-                    <div className="mt-1 text-xs text-[var(--vl-text-muted)]">{o.solicitud.falla}</div>
-                    {isOps(rol) && (
-                      <div className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
-                        {[otEmpresaNombre(o), otTallerNombre(o)].filter(Boolean).join(" · ") || "—"}
+                  <div
+                    key={o.id}
+                    className={`rounded-xl border p-3 ${selectedId === o.id ? "border-slate-900 dark:border-slate-100" : "border-[var(--vl-card-border)]"}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(o.id)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-bold text-[var(--vl-heading)]">{o.numeroOT}</span>
+                        <Badge className="border-slate-200 bg-slate-100 text-slate-600">{o.solicitud.camioneta.patente}</Badge>
                       </div>
+                      <div className="mt-1 text-xs text-[var(--vl-text-muted)]">{o.solicitud.falla}</div>
+                      {isOps(rol) && (
+                        <div className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
+                          {[otEmpresaNombre(o), otTallerNombre(o)].filter(Boolean).join(" · ") || "—"}
+                        </div>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                        <span>{o.cerradaAt ? "Cerrada" : OT_STEPS[o.currentStep]?.label}</span>
+                        {o.urgente && <span className="rounded bg-red-100 px-1.5 text-red-800 dark:bg-red-950 dark:text-red-200">Urgente</span>}
+                      </div>
+                    </button>
+                    {isOps(rol) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmEliminarOt(o);
+                        }}
+                        className="mt-2 text-[11px] font-medium text-red-700 underline dark:text-red-300"
+                      >
+                        Eliminar OT
+                      </button>
                     )}
-                    <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                      <span>{o.cerradaAt ? "Cerrada" : OT_STEPS[o.currentStep]?.label}</span>
-                      {o.urgente && <span className="rounded bg-red-100 px-1.5 text-red-800 dark:bg-red-950 dark:text-red-200">Urgente</span>}
-                    </div>
-                  </button>
+                  </div>
                 ))}
               </div>
 
@@ -1532,6 +1574,56 @@ export function M7TalleresPage() {
                 className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-amber-600 bg-amber-600 px-4 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none sm:min-w-[10rem]"
               >
                 {busy ? "Avanzando…" : "Sí, sin presupuesto"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmEliminarOt && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="eliminar-ot-title"
+          onClick={() => !busy && setConfirmEliminarOt(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="eliminar-ot-title"
+              className="text-base font-bold text-[var(--vl-heading)]"
+            >
+              ¿Deseás realmente eliminarla?
+            </h3>
+            <p className="mt-2 text-sm text-[var(--vl-text-muted)]">
+              Se va a borrar{" "}
+              <strong className="text-[var(--vl-heading)]">
+                {confirmEliminarOt.numeroOT}
+              </strong>
+              {confirmEliminarOt.solicitud?.camioneta?.patente
+                ? ` · ${confirmEliminarOt.solicitud.camioneta.patente}`
+                : ""}
+              . Esta acción no se puede deshacer.
+            </p>
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirmEliminarOt(null)}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-[var(--vl-card-border)] bg-[var(--vl-page)] px-4 text-sm font-semibold text-[var(--vl-heading)] disabled:opacity-50 sm:flex-none sm:min-w-[7.5rem]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void eliminarOtConfirmada()}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-red-600 bg-red-600 px-4 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none sm:min-w-[7.5rem]"
+              >
+                {busy ? "Eliminando…" : "Sí, eliminar"}
               </button>
             </div>
           </div>
