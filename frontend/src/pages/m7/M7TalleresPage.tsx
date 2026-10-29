@@ -229,6 +229,8 @@ export function M7TalleresPage() {
   const [filtroPatente, setFiltroPatente] = useState("");
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroTaller, setFiltroTaller] = useState("");
+  const [filtroDesde, setFiltroDesde] = useState("");
+  const [filtroHasta, setFiltroHasta] = useState("");
   const [talleres, setTalleres] = useState<TallerProveedor[]>([]);
   const [exportando, setExportando] = useState(false);
   const [comentarioTexto, setComentarioTexto] = useState("");
@@ -491,7 +493,18 @@ export function M7TalleresPage() {
     if (!token) return;
     setExportando(true);
     try {
-      await apiDownload("/api/talleres/export", token, "talleres_ot.xlsx");
+      const qs = new URLSearchParams();
+      if (filtroDesde) qs.set("desde", filtroDesde);
+      if (filtroHasta) qs.set("hasta", filtroHasta);
+      if (filtroEmpresa.trim()) qs.set("empresa", filtroEmpresa.trim());
+      if (filtroPatente.trim()) qs.set("patente", filtroPatente.trim());
+      if (filtroEstado !== "todas") qs.set("estado", filtroEstado);
+      const q = qs.toString();
+      await apiDownload(
+        `/api/talleres/export${q ? `?${q}` : ""}`,
+        token,
+        "talleres_ot.xlsx"
+      );
     } finally {
       setExportando(false);
     }
@@ -652,7 +665,33 @@ export function M7TalleresPage() {
                         className="w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
                       />
                     )}
-                    {(filtroPatente || filtroEmpresa || filtroTaller) && (
+                    {isOps(rol) && (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <label className="block text-[10px] text-[var(--vl-text-muted)]">
+                          Desde (Excel)
+                          <input
+                            type="date"
+                            value={filtroDesde}
+                            onChange={(e) => setFiltroDesde(e.target.value)}
+                            className="mt-0.5 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                          />
+                        </label>
+                        <label className="block text-[10px] text-[var(--vl-text-muted)]">
+                          Hasta (Excel)
+                          <input
+                            type="date"
+                            value={filtroHasta}
+                            onChange={(e) => setFiltroHasta(e.target.value)}
+                            className="mt-0.5 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-xs"
+                          />
+                        </label>
+                      </div>
+                    )}
+                    {(filtroPatente ||
+                      filtroEmpresa ||
+                      filtroTaller ||
+                      filtroDesde ||
+                      filtroHasta) && (
                       <p className="text-[10px] text-[var(--vl-text-muted)]">
                         {visibleOts.length} resultado{visibleOts.length === 1 ? "" : "s"}
                         {" · "}
@@ -663,6 +702,8 @@ export function M7TalleresPage() {
                             setFiltroPatente("");
                             setFiltroEmpresa("");
                             setFiltroTaller("");
+                            setFiltroDesde("");
+                            setFiltroHasta("");
                           }}
                         >
                           Limpiar

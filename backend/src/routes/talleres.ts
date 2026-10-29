@@ -535,6 +535,12 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       res.status(403).json({ error: "Sin permiso para exportar" });
       return;
     }
+    const desde = String(req.query?.desde ?? "").trim();
+    const hasta = String(req.query?.hasta ?? "").trim();
+    const empresaQ = String(req.query?.empresa ?? "").trim().toLowerCase();
+    const patenteQ = String(req.query?.patente ?? "").trim().toLowerCase();
+    const estadoQ = String(req.query?.estado ?? "").trim().toLowerCase();
+
     const items = await prisma.ordenTrabajo.findMany({
       where: { externo: false },
       include: includeOTFor(req.user!.id),
@@ -545,15 +551,16 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
     const sheet = workbook.addWorksheet("Ordenes de trabajo");
     sheet.columns = [
       { header: "OT", key: "ot", width: 12 },
+      { header: "Fecha de reparación", key: "fechaReparacion", width: 16 },
       { header: "Patente", key: "patente", width: 12 },
+      { header: "Empresa", key: "empresa", width: 24 },
       { header: "Estado unidad", key: "estadoUnidad", width: 16 },
       { header: "Falla", key: "falla", width: 28 },
       { header: "Etapa", key: "etapa", width: 18 },
       { header: "Paso", key: "paso", width: 8 },
       { header: "Estado OT", key: "estadoOt", width: 12 },
-      { header: "Taller", key: "taller", width: 22 },
+      { header: "Proveedor", key: "taller", width: 22 },
       { header: "Chofer", key: "chofer", width: 22 },
-      { header: "Empresa", key: "empresa", width: 24 },
       { header: "Presupuesto", key: "presupuesto", width: 14 },
       { header: "Facturado", key: "facturado", width: 14 },
       { header: "Creada", key: "creada", width: 12 },
@@ -564,19 +571,43 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
     for (const ot of items) {
       const cam = ot.solicitud.camioneta;
       const asig = cam.asignaciones?.[0];
+      const empresa =
+        asig?.empresa?.nombre ??
+        (cam as { empresa?: { nombre?: string } }).empresa?.nombre ??
+        "";
+      const patente = cam.patente;
+      if (patenteQ && !patente.toLowerCase().includes(patenteQ)) continue;
+      if (empresaQ && !empresa.toLowerCase().includes(empresaQ)) continue;
+      if (estadoQ === "abierta" && ot.cerradaAt) continue;
+      if (estadoQ === "cerrada" && !ot.cerradaAt) continue;
+
+      const fechaReparacion = (
+        ot.cerradaAt ??
+        ot.items
+          ?.map((i) => i.fecha)
+          .filter((d): d is Date => !!d)
+          .sort((a, b) => b.getTime() - a.getTime())[0] ??
+        ot.createdAt
+      )
+        .toISOString()
+        .slice(0, 10);
+      if (desde && fechaReparacion < desde) continue;
+      if (hasta && fechaReparacion > hasta) continue;
+
       const stepLabel = OT_STEPS[ot.currentStep]?.label ?? String(ot.currentStep);
       const tot = otTotales(ot);
       sheet.addRow({
         ot: ot.numeroOT,
-        patente: cam.patente,
+        fechaReparacion,
+        patente,
+        empresa,
         estadoUnidad: cam.estado,
         falla: ot.solicitud.falla,
         etapa: stepLabel,
         paso: `${ot.currentStep + 1}/${OT_STEPS.length}`,
         estadoOt: ot.cerradaAt ? "Cerrada" : "Abierta",
-        taller: ot.tallerAsignado ?? "",
+        taller: ot.tallerAsignado ?? ot.tallerProveedor?.razonSocial ?? "",
         chofer: ot.solicitud.chofer?.nombre ?? asig?.chofer?.nombre ?? "",
-        empresa: asig?.empresa?.nombre ?? "",
         presupuesto: tot.presupuesto || "",
         facturado: tot.facturado || "",
         creada: ot.createdAt.toISOString().slice(0, 10),
@@ -724,11 +755,14 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
 
 /** Formato del Excel exportado del historial; la plantilla y el import usan el mismo. */
 const HISTORIAL_COLUMNAS = [
-  { header: "Patente", key: "patente", width: 12 },
   { header: "OT", key: "ot", width: 12 },
   { header: "Tipo OT", key: "tipoOt", width: 16 },
+  { header: "Fecha de reparación", key: "fecha", width: 16 },
+  { header: "Patente", key: "patente", width: 12 },
+  { header: "Empresa de Transporte", key: "empresa", width: 24 },
   { header: "Km", key: "km", width: 10 },
   { header: "Fecha solicitud", key: "fechaSolicitud", width: 14 },
+  { header: "Cerrada", key: "cerrada", width: 12 },
   { header: "Falla", key: "falla", width: 28 },
   { header: "Detalle", key: "detalle", width: 32 },
   { header: "Chofer", key: "chofer", width: 22 },
@@ -736,8 +770,6 @@ const HISTORIAL_COLUMNAS = [
   { header: "Descripcion", key: "descripcion", width: 32 },
   { header: "Importe", key: "importe", width: 12 },
   { header: "Tipo", key: "tipo", width: 12 },
-  { header: "Fecha ítem", key: "fecha", width: 12 },
-  { header: "Cerrada", key: "cerrada", width: 12 },
   { header: "Nivel 1", key: "n1", width: 18 },
   { header: "Nivel 2", key: "n2", width: 18 },
   { header: "Nivel 3", key: "n3", width: 20 },
@@ -757,12 +789,19 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
       nivel3: String(req.query?.nivel3 ?? "").trim(),
     };
     const tallerQ = String(req.query?.taller ?? "").trim().toLowerCase();
+    const empresaQ = String(req.query?.empresa ?? "").trim().toLowerCase();
+    const patenteQ = String(req.query?.patente ?? "").trim().toLowerCase();
     const desde = req.query?.desde ? String(req.query.desde) : "";
     const hasta = req.query?.hasta ? String(req.query.hasta) : "";
     const [ots, cats] = await Promise.all([
       prisma.ordenTrabajo.findMany({
         include: {
-          solicitud: { include: { camioneta: true, chofer: true } },
+          solicitud: {
+            include: {
+              camioneta: { include: { empresa: true } },
+              chofer: true,
+            },
+          },
           tallerProveedor: true,
           items: { orderBy: { createdAt: "asc" } },
         },
@@ -780,6 +819,9 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
 
     for (const ot of ots) {
       const patente = ot.solicitud.camioneta.patente;
+      const empresa = ot.solicitud.camioneta.empresa?.nombre ?? "";
+      if (patenteQ && !patente.toLowerCase().includes(patenteQ)) continue;
+      if (empresaQ && !empresa.toLowerCase().includes(empresaQ)) continue;
       const gasto = ot.items.filter((i) => i.tipo === "FACTURA" || i.tipo === "RENDICION");
       const fuente = gasto.length
         ? gasto
@@ -806,13 +848,21 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
           ot.tallerAsignado ||
           "";
         if (tallerQ && !taller.toLowerCase().includes(tallerQ)) continue;
-        const fecha = (it.fecha ?? ot.createdAt).toISOString().slice(0, 10);
+        // Fecha de reparación: ítem o cierre (la más importante para el filtro).
+        const fecha = (
+          it.fecha ??
+          ot.cerradaAt ??
+          ot.createdAt
+        )
+          .toISOString()
+          .slice(0, 10);
         if (desde && fecha < desde) continue;
         if (hasta && fecha > hasta) continue;
         if (
           q &&
           ![
             patente,
+            empresa,
             ot.numeroOT,
             ot.solicitud.falla,
             taller,
@@ -833,6 +883,7 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
           n2: nivel.nivel2 ?? "",
           n3: nivel.nivel3 ?? "",
           patente,
+          empresa,
           ot: ot.numeroOT,
           tipoOt: ot.externo ? "Taller externo" : "OT",
           km: ot.kmAlMomento ?? "",

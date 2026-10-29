@@ -94,6 +94,8 @@ export function HistorialTalleresPage() {
   const [arbol, setArbol] = useState<CatArbol[]>([]);
   const [tipoTaller, setTipoTaller] = useState<TipoTaller>("todos");
   const [taller, setTaller] = useState("");
+  const [empresaFiltro, setEmpresaFiltro] = useState("");
+  const [patenteFiltro, setPatenteFiltro] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [loading, setLoading] = useState(true);
@@ -126,10 +128,12 @@ export function HistorialTalleresPage() {
       nivel2,
       nivel3,
       taller,
+      empresa: empresaFiltro,
+      patente: patenteFiltro,
       desde,
       hasta,
     }),
-    [busqueda, nivel1, nivel2, nivel3, taller, desde, hasta]
+    [busqueda, nivel1, nivel2, nivel3, taller, empresaFiltro, patenteFiltro, desde, hasta]
   );
 
   const hayFiltros =
@@ -138,6 +142,8 @@ export function HistorialTalleresPage() {
     !!nivel2 ||
     !!nivel3 ||
     !!taller ||
+    !!empresaFiltro.trim() ||
+    !!patenteFiltro.trim() ||
     !!desde ||
     !!hasta ||
     tipoTaller !== "todos";
@@ -225,6 +231,8 @@ export function HistorialTalleresPage() {
     setNivel3("");
     setTipoTaller("todos");
     setTaller("");
+    setEmpresaFiltro("");
+    setPatenteFiltro("");
     setDesde("");
     setHasta("");
   }
@@ -249,12 +257,12 @@ export function HistorialTalleresPage() {
       if (importModo === "nuevos") {
         await descargarPlantilla();
       } else {
-        const qs =
-          vista === "conceptos"
-            ? buildQs(filtrosConceptos)
-            : busqueda.trim()
-              ? `?q=${encodeURIComponent(busqueda.trim())}`
-              : "";
+        const qs = buildQs({
+          ...filtrosConceptos,
+          ...(vista !== "conceptos" && busqueda.trim()
+            ? { q: busqueda.trim() }
+            : {}),
+        });
         await apiDownload(
           `/api/talleres/historial/export${qs}`,
           token,
@@ -532,6 +540,26 @@ export function HistorialTalleresPage() {
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="block text-xs text-[var(--vl-text-muted)]">
+              Empresa
+              <input
+                type="search"
+                className={inputCls}
+                value={empresaFiltro}
+                onChange={(e) => setEmpresaFiltro(e.target.value)}
+                placeholder="Empresa de transporte…"
+              />
+            </label>
+            <label className="block text-xs text-[var(--vl-text-muted)]">
+              Patente
+              <input
+                type="search"
+                className={inputCls}
+                value={patenteFiltro}
+                onChange={(e) => setPatenteFiltro(e.target.value)}
+                placeholder="Patente…"
+              />
             </label>
             <label className="block text-xs text-[var(--vl-text-muted)]">
               Desde
