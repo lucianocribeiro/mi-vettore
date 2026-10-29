@@ -3571,6 +3571,14 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       (wantsCategoria || wantsOtherEdit) &&
       isAjusteStep(ot.currentStep) &&
       (canEditTalleres(rol));
+    /** Completar niveles 1-2-3 en OT ya cerradas (historial sin concepto). */
+    const conceptoCerradaAllowed =
+      wantsCategoria &&
+      !!ot.cerradaAt &&
+      canEditTalleres(rol) &&
+      !wantsOtherEdit &&
+      !wantsAprobado &&
+      !wantsSugerido;
     const cargaImporteAllowed =
       wantsOtherEdit &&
       isAsignacionOPresupuestoStep(ot.currentStep) &&
@@ -3583,6 +3591,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
         sugeridoAllowed ||
         seleccionAllowed ||
         ajusteAllowed ||
+        conceptoCerradaAllowed ||
         cargaImporteAllowed ||
         (silvinaEdit && wantsSugerido),
       userId: req.user!.id,
@@ -3688,7 +3697,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       data.aprobado = Boolean(req.body.aprobado);
     }
     if (wantsCategoria) {
-      if (!isAjusteStep(ot.currentStep)) {
+      if (!isAjusteStep(ot.currentStep) && !ot.cerradaAt) {
         res.status(400).json({
           error: "El concepto se asigna en el ajuste de importes",
         });
@@ -3717,6 +3726,11 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       where: { id: req.params.itemId },
       data,
     });
+    if (wantsCategoria && ot.cerradaAt) {
+      await prisma.$transaction(async (tx) => {
+        await resyncMantenimientoDeOt(tx, ot.id);
+      });
+    }
     // En selección: actualizar presupuesto aprobado (suma tildados) sin tocar importes.
     // En carga: actualizar presupuestoMonto (todos).
     // En ajuste: NO tocar valorAprobado (queda congelado al salir de selección).

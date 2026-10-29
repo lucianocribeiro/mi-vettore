@@ -9,6 +9,10 @@ type Repuesto = {
   importe: number;
   taller: string;
   tipo: string;
+  reparacion?: string | null;
+  reparacionNivel1?: string | null;
+  reparacionNivel2?: string | null;
+  reparacionNivel3?: string | null;
 };
 
 type HistorialRow = {
@@ -759,15 +763,30 @@ export function HistorialTalleresPage() {
               )}
               {!row.externo && row.repuestos.length > 0 && (
                 <ul className="mt-2 space-y-1 border-t border-[var(--vl-card-border)] pt-2 text-xs">
-                  {row.repuestos.map((r, i) => (
-                    <li key={`${row.id}-${i}`} className="flex justify-between gap-2">
-                      <span>
-                        {r.descripcion}
-                        {r.taller ? ` · ${r.taller}` : ""}
-                      </span>
-                      <span className="shrink-0 font-medium">{money(r.importe)}</span>
-                    </li>
-                  ))}
+                  {row.repuestos.map((r, i) => {
+                    const niveles =
+                      [r.reparacionNivel1, r.reparacionNivel2, r.reparacionNivel3]
+                        .filter(Boolean)
+                        .join(" › ") || r.reparacion || null;
+                    return (
+                      <li key={`${row.id}-${i}`} className="flex justify-between gap-2">
+                        <span>
+                          {r.descripcion}
+                          {r.taller ? ` · ${r.taller}` : ""}
+                          {niveles ? (
+                            <span className="mt-0.5 block text-[10px] text-[var(--vl-text-muted)]">
+                              {niveles}
+                            </span>
+                          ) : (
+                            <span className="mt-0.5 block text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                              Sin nivel 1 / 2 / 3
+                            </span>
+                          )}
+                        </span>
+                        <span className="shrink-0 font-medium">{money(r.importe)}</span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </article>

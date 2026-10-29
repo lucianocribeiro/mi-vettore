@@ -797,6 +797,18 @@ export function M7TalleresPage() {
                   <p className="text-sm text-[var(--vl-text)]">{ot.solicitud.falla}</p>
                   <p className="mt-1 text-xs text-[var(--vl-text-muted)]">{ot.solicitud.detalle}</p>
 
+                  {isOps(rol) && token && (
+                    <CierreConceptosResumen
+                      ot={ot}
+                      token={token}
+                      ocultarMontos={ocultarMontos}
+                      editable={!!ot.cerradaAt && puedeEditarTaller}
+                      onSaved={replaceOt}
+                      onError={setError}
+                      className="mt-3"
+                    />
+                  )}
+
                   <div className="my-5 flex items-center">
                     {OT_STEPS.map((s, i) => {
                       const reached = ot.cerradaAt || i <= furthestStep;
@@ -1162,11 +1174,6 @@ export function M7TalleresPage() {
                               )}
                             </div>
                           )}
-                          <CierreConceptosResumen
-                            ot={ot}
-                            token={token!}
-                            ocultarMontos={ocultarMontos}
-                          />
                         </div>
                         )
                       )}
@@ -1973,21 +1980,29 @@ function pathConcepto(
   return chain.join(" › ");
 }
 
-/** Resumen de niveles 1-2-3 al cerrar / confirmar cierre. */
+/** Resumen de niveles 1-2-3 (siempre visible en la OT; editable si la OT ya está cerrada). */
 function CierreConceptosResumen({
   ot,
   token,
   ocultarMontos,
   compact,
+  editable,
+  onSaved,
+  onError,
   className,
 }: {
   ot: OrdenTrabajo;
   token: string;
   ocultarMontos?: boolean;
   compact?: boolean;
+  editable?: boolean;
+  onSaved?: (ot: OrdenTrabajo) => void;
+  onError?: (msg: string | null) => void;
   className?: string;
 }) {
   const [cats, setCats] = useState<CatDiag[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string | null>>({});
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     void apiFetch<CatDiag[]>("/api/diagnostico/categorias", {}, token)
       .then(setCats)
@@ -1998,19 +2013,78 @@ function CierreConceptosResumen({
     if (i.tipo === "FACTURA" || i.tipo === "RENDICION") return true;
     return i.tipo === "PRESUPUESTO" && !!i.aprobado;
   });
-  const faltan = items.filter((i) => !i.categoriaDiagnosticoId);
+  const faltan = items.filter((i) => {
+    const draft = drafts[i.id];
+    const id =
+      draft !== undefined
+        ? draft
+        : i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
+    return !id;
+  });
+  const dirty = items.some((i) => {
+    if (drafts[i.id] === undefined) return false;
+    const server = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
+    return drafts[i.id] !== server;
+  });
 
   if (items.length === 0) return null;
 
+  async function guardar() {
+    if (!editable || !dirty || saving) return;
+    setSaving(true);
+    onError?.(null);
+    try {
+      let updated: OrdenTrabajo | null = null;
+      for (const i of items) {
+        if (drafts[i.id] === undefined) continue;
+        const server = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
+        if (drafts[i.id] === server) continue;
+        updated = await apiFetch<OrdenTrabajo>(
+          `/api/talleres/${ot.id}/items/${i.id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ categoriaDiagnosticoId: drafts[i.id] }),
+          },
+          token
+        );
+      }
+      if (updated) {
+        onSaved?.(updated);
+        setDrafts({});
+      }
+    } catch (err) {
+      onError?.(
+        err instanceof ApiError ? err.message : "No se pudieron guardar los niveles"
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className={className}>
-      <div className="mb-1 text-xs font-semibold text-[var(--vl-heading)]">
-        Niveles 1 / 2 / 3
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-[var(--vl-heading)]">
+          Niveles 1 / 2 / 3
+        </div>
+        {editable && dirty && (
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void guardar()}
+            className="rounded-lg border-2 border-[#1e4080] bg-[#1e4080] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+          >
+            {saving ? "Guardando…" : "Guardar niveles"}
+          </button>
+        )}
       </div>
       {faltan.length > 0 && (
         <p className="mb-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">
           Falta cargar concepto en {faltan.length} ítem
-          {faltan.length === 1 ? "" : "s"}. Volvé a ajuste de importes.
+          {faltan.length === 1 ? "" : "s"}
+          {editable
+            ? ". Completá los 3 niveles abajo y guardá."
+            : ". Volvé a ajuste de importes."}
         </p>
       )}
       <ul
@@ -2019,8 +2093,12 @@ function CierreConceptosResumen({
         }`}
       >
         {items.map((i) => {
+          const valueId =
+            drafts[i.id] !== undefined
+              ? drafts[i.id]
+              : i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
           const path =
-            pathConcepto(cats, i.categoriaDiagnosticoId) ||
+            pathConcepto(cats, valueId) ||
             (i.categoriaDiagnostico
               ? i.categoriaDiagnostico.nombre
               : "Sin nivel cargado");
@@ -2034,15 +2112,28 @@ function CierreConceptosResumen({
                 {i.descripcion}
                 {i.adicionalAjuste ? " · adicional" : ""}
               </div>
-              <div
-                className={
-                  i.categoriaDiagnosticoId
-                    ? "text-[var(--vl-text-muted)]"
-                    : "font-medium text-amber-700 dark:text-amber-400"
-                }
-              >
-                {path}
-              </div>
+              {editable ? (
+                <div className="mt-1.5">
+                  <ConceptoCascada
+                    cats={cats}
+                    valueId={valueId}
+                    required
+                    onPick={(id) =>
+                      setDrafts((prev) => ({ ...prev, [i.id]: id }))
+                    }
+                  />
+                </div>
+              ) : (
+                <div
+                  className={
+                    valueId
+                      ? "text-[var(--vl-text-muted)]"
+                      : "font-medium text-amber-700 dark:text-amber-400"
+                  }
+                >
+                  {path}
+                </div>
+              )}
               {!ocultarMontos && !compact && (
                 <div className="mt-0.5 font-medium">{money(i.importe)}</div>
               )}
