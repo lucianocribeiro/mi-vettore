@@ -20,6 +20,8 @@ type OtExterna = {
   kmAlMomento: number | null;
   fechaReparacion: string;
   comentario: string;
+  /** Importe opcional; null si no se cargó. */
+  importe?: number | null;
   categoriaId: string | null;
   reparacion: string | null;
   reparacionNivel1: string | null;
@@ -27,6 +29,14 @@ type OtExterna = {
   reparacionNivel3: string | null;
   createdAt: string;
 };
+
+function fmtMoney(n: number) {
+  return n.toLocaleString("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  });
+}
 
 function todayInputDate() {
   const d = new Date();
@@ -171,7 +181,13 @@ export function TallerExternoPage() {
                 </div>
                 <div className="mt-1 text-xs text-[var(--vl-text-muted)]">{o.reparacion ?? "—"}</div>
                 <div className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
-                  {[o.empresa?.nombre, fmtFecha(o.fechaReparacion)].filter(Boolean).join(" · ")}
+                  {[
+                    o.empresa?.nombre,
+                    fmtFecha(o.fechaReparacion),
+                    o.importe != null && o.importe > 0 ? fmtMoney(o.importe) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </div>
               </button>
             ))}
@@ -199,6 +215,12 @@ export function TallerExternoPage() {
                   <dt className="text-[11px] text-[var(--vl-text-muted)]">Km</dt>
                   <dd className="font-medium">
                     {ot.kmAlMomento != null ? `${ot.kmAlMomento.toLocaleString("es-AR")} km` : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] text-[var(--vl-text-muted)]">Importe</dt>
+                  <dd className="font-medium">
+                    {ot.importe != null && ot.importe > 0 ? fmtMoney(ot.importe) : "—"}
                   </dd>
                 </div>
                 <div>
@@ -309,6 +331,9 @@ function NuevaSolicitudExternaForm({
   const [fecha, setFecha] = useState(
     editar ? editar.fechaReparacion.slice(0, 10) : todayInputDate()
   );
+  const [importe, setImporte] = useState(
+    editar?.importe != null && editar.importe > 0 ? String(editar.importe) : ""
+  );
   const [n1, setN1] = useState("");
   const [n2, setN2] = useState("");
   const [n3, setN3] = useState("");
@@ -388,9 +413,16 @@ function NuevaSolicitudExternaForm({
 
   const kmNum = Number(km);
   const kmOk = km.trim() !== "" && Number.isInteger(kmNum) && kmNum >= 0;
+  const importeTrim = importe.trim();
+  const importeNum =
+    importeTrim === "" ? null : Number(importeTrim.replace(",", "."));
+  const importeOk =
+    importeTrim === "" ||
+    (importeNum != null && Number.isFinite(importeNum) && importeNum >= 0);
   const puedeEnviar =
     (!!editar || (!!empresaId && !!camionetaId)) &&
     kmOk &&
+    importeOk &&
     !!fecha &&
     !!hojaId &&
     comentario.trim().length >= 3;
@@ -405,6 +437,7 @@ function NuevaSolicitudExternaForm({
         fechaReparacion: fecha,
         categoriaDiagnosticoId: hojaId,
         comentario: comentario.trim(),
+        importe: importeTrim === "" ? "" : importeNum,
       };
       const saved = await apiFetch<OtExterna>(
         editar ? `/api/talleres/externos/${editar.id}` : "/api/talleres/externos",
@@ -517,6 +550,20 @@ function NuevaSolicitudExternaForm({
             />
           </label>
         </div>
+
+        <label className="text-xs text-[var(--vl-text-muted)]">
+          Importe $ <span className="font-normal">(opcional)</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            inputMode="decimal"
+            className={inputCls}
+            value={importe}
+            onChange={(e) => setImporte(e.target.value)}
+            placeholder="Dejá vacío si no aplica"
+          />
+        </label>
 
         <fieldset className="mb-1">
           <legend className="text-xs text-[var(--vl-text-muted)]">Concepto (3 niveles)</legend>

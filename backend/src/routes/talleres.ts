@@ -986,7 +986,7 @@ router.get("/historial/plantilla", authenticate, async (req: AuthedRequest, res)
       "Mismo formato que el Excel que se exporta del historial: podés exportar, editar y volver a importar.",
       "Obligatorias: Patente y Falla. El resto es opcional pero recomendado.",
       "OT: dejar vacío para cargas nuevas. Si tiene número (viene del export), 'Actualizar datos' modifica esa OT.",
-      "Tipo OT: 'OT' (taller interno) o 'Taller externo' (OTE: no se guarda importe).",
+      "Tipo OT: 'OT' (taller interno) o 'Taller externo' (OTE: importe $ opcional).",
       "Fechas: AAAA-MM-DD. Cerrada es la fecha de la reparación. Km: kilometraje al momento de la reparación.",
       "Tipo: FACTURA, RENDICION o PRESUPUESTO (si se deja vacío, FACTURA). Chofer es solo de referencia.",
       "Nivel 1 / 2 / 3: copiar exactamente desde la hoja Conceptos.",
@@ -1212,7 +1212,7 @@ router.post(
                   data: {
                     tallerNombre: taller || item.tallerNombre,
                     descripcion: descripcion || item.descripcion,
-                    importe: !otNum.externo && importe > 0 ? importe : item.importe,
+                    importe: importe > 0 ? importe : item.importe,
                     ...(fechaItemFila ? { fecha: fechaItemFila } : {}),
                     categoriaDiagnosticoId: categoriaFila ?? item.categoriaDiagnosticoId,
                   },
@@ -1224,7 +1224,7 @@ router.post(
                     tipo: tipoItem,
                     tallerNombre: taller,
                     descripcion,
-                    importe: otNum.externo ? 0 : importe,
+                    importe,
                     fecha: fechaItem,
                     categoriaDiagnosticoId: categoriaFila,
                     clasificacion: "OTRO",
@@ -1333,7 +1333,7 @@ router.post(
               maxStepReached: 4,
               sinPresupuesto: true,
               tallerAsignado: taller || null,
-              valorFinal: !esExterno && importe > 0 ? importe : null,
+              valorFinal: importe > 0 ? importe : null,
               cerradaAt: fecha,
               kmAlMomento: kmFila,
             },
@@ -1346,7 +1346,7 @@ router.post(
                 ...(tipoItem === "PRESUPUESTO" ? { aprobado: true } : {}),
                 tallerNombre: taller || (esExterno ? "Taller externo" : ""),
                 descripcion,
-                importe: esExterno ? 0 : importe,
+                importe,
                 fecha: fechaItem,
                 categoriaDiagnosticoId: categoriaFila,
                 clasificacion: "OTRO",
@@ -1529,6 +1529,7 @@ function serializeOtExterna(
 ) {
   const item = ot.items[0];
   const diag = diagnosticoPathFromId(cats, item?.categoriaDiagnosticoId);
+  const importe = item?.importe != null && item.importe > 0 ? item.importe : null;
   return {
     id: ot.id,
     numeroOT: ot.numeroOT,
@@ -1538,6 +1539,8 @@ function serializeOtExterna(
     kmAlMomento: ot.kmAlMomento,
     fechaReparacion: ot.cerradaAt ?? ot.createdAt,
     comentario: ot.solicitud.detalle,
+    /** Importe opcional; null si no se cargó. */
+    importe,
     categoriaId: item?.categoriaDiagnosticoId ?? null,
     reparacion: diag.path,
     reparacionNivel1: diag.nivel1,
@@ -1547,7 +1550,19 @@ function serializeOtExterna(
   };
 }
 
-/** Taller externo (OTE): solicitudes sin montos, van directo al historial. */
+/** Importe opcional de OTE: vacío → 0; inválido → error string. */
+function parseImporteExternoOpcional(raw: unknown): { ok: true; value: number } | { ok: false; error: string } {
+  if (raw === undefined || raw === null || raw === "") {
+    return { ok: true, value: 0 };
+  }
+  const n = typeof raw === "number" ? raw : Number(String(raw).replace(",", "."));
+  if (!Number.isFinite(n) || n < 0) {
+    return { ok: false, error: "Importe inválido" };
+  }
+  return { ok: true, value: n };
+}
+
+/** Taller externo (OTE): van directo al historial; importe $ opcional. */
 router.get("/externos", authenticate, async (req: AuthedRequest, res) => {
   try {
     const rol = req.user!.rol as Role;
@@ -1620,6 +1635,7 @@ router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
     const comentario = String(body.comentario ?? "").trim();
     const km = Number(body.km);
     const fecha = new Date(String(body.fechaReparacion ?? ""));
+    const importeParsed = parseImporteExternoOpcional(body.importe);
 
     if (!empresaId) return void res.status(400).json({ error: "Elegí la empresa" });
     if (!camionetaId) return void res.status(400).json({ error: "Elegí la patente" });
@@ -1628,6 +1644,9 @@ router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
     }
     if (Number.isNaN(fecha.getTime())) {
       return void res.status(400).json({ error: "Indicá la fecha de reparación" });
+    }
+    if (!importeParsed.ok) {
+      return void res.status(400).json({ error: importeParsed.error });
     }
     if (!categoriaId) {
       return void res.status(400).json({ error: "Elegí el concepto (3 niveles)" });
@@ -1677,6 +1696,7 @@ router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
     });
     const diag = diagnosticoPathFromId(cats, categoriaId);
     const numeroOT = await nextNumeroOTE();
+    const importe = importeParsed.value;
 
     const created = await prisma.$transaction(async (tx) => {
       const solicitud = await tx.solicitudTaller.create({
@@ -1701,6 +1721,7 @@ router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
           sinPresupuestoMotivo: "Taller externo",
           kmAlMomento: km,
           cerradaAt: fecha,
+          valorFinal: importe > 0 ? importe : null,
         },
       });
       await tx.otItem.create({
@@ -1709,7 +1730,7 @@ router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
           tipo: "FACTURA",
           tallerNombre: "Taller externo",
           descripcion: comentario,
-          importe: 0,
+          importe,
           fecha,
           categoriaDiagnosticoId: categoriaId,
           clasificacion: "OTRO",
@@ -1763,11 +1784,15 @@ router.patch("/externos/:id", authenticate, async (req: AuthedRequest, res) => {
     const fecha = new Date(String(body.fechaReparacion ?? ""));
     const categoriaId = String(body.categoriaDiagnosticoId ?? "").trim();
     const comentario = String(body.comentario ?? "").trim();
+    const importeParsed = parseImporteExternoOpcional(body.importe);
     if (!Number.isInteger(km) || km < 0) {
       return void res.status(400).json({ error: "Indicá el kilometraje" });
     }
     if (Number.isNaN(fecha.getTime())) {
       return void res.status(400).json({ error: "Indicá la fecha de reparación" });
+    }
+    if (!importeParsed.ok) {
+      return void res.status(400).json({ error: importeParsed.error });
     }
     if (!categoriaId) {
       return void res.status(400).json({ error: "Elegí el concepto (3 niveles)" });
@@ -1797,11 +1822,16 @@ router.patch("/externos/:id", authenticate, async (req: AuthedRequest, res) => {
     });
     const diag = diagnosticoPathFromId(cats, categoriaId);
     const camionetaId = ot.solicitud.camionetaId;
+    const importe = importeParsed.value;
 
     const updated = await prisma.$transaction(async (tx) => {
       await tx.ordenTrabajo.update({
         where: { id: ot.id },
-        data: { kmAlMomento: km, cerradaAt: fecha },
+        data: {
+          kmAlMomento: km,
+          cerradaAt: fecha,
+          valorFinal: importe > 0 ? importe : null,
+        },
       });
       await tx.solicitudTaller.update({
         where: { id: ot.solicitudTallerId },
@@ -1811,7 +1841,12 @@ router.patch("/externos/:id", authenticate, async (req: AuthedRequest, res) => {
       if (itemId) {
         await tx.otItem.update({
           where: { id: itemId },
-          data: { descripcion: comentario, fecha, categoriaDiagnosticoId: categoriaId },
+          data: {
+            descripcion: comentario,
+            fecha,
+            categoriaDiagnosticoId: categoriaId,
+            importe,
+          },
         });
       }
       await tx.registroMantenimiento.deleteMany({ where: { otId: ot.id } });
