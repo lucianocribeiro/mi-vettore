@@ -1389,7 +1389,9 @@ export function M5FichaPage() {
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => setDrawer({ tipo: "camioneta", item: c })}
+                    onClick={() => {
+                      if (canEdit) openEditCamioneta(c);
+                    }}
                     className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4 text-left transition hover:border-slate-400 hover:shadow-sm dark:hover:border-slate-500"
                   >
                     <div className="text-xs text-[var(--vl-text-muted)]">
