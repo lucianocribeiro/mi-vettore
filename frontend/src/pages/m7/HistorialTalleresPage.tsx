@@ -4,37 +4,6 @@ import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import { formatDate, isInternalOps } from "../../types";
 import { Download } from "../../components/icons";
 
-type Repuesto = {
-  descripcion: string;
-  importe: number;
-  taller: string;
-  tipo: string;
-  reparacion?: string | null;
-  reparacionNivel1?: string | null;
-  reparacionNivel2?: string | null;
-  reparacionNivel3?: string | null;
-};
-
-type HistorialRow = {
-  id: string;
-  numeroOT: string;
-  externo?: boolean;
-  patente: string;
-  falla: string;
-  detalle: string;
-  chofer: string | null;
-  talleres: string[];
-  tallerPrincipal: string | null;
-  repuestos: Repuesto[];
-  facturado: number | null;
-  kmAlMomento: number | null;
-  currentStep: number;
-  cerradaAt: string | null;
-  createdAt: string;
-  /** Fecha en que se cargó la solicitud de taller. */
-  solicitudAt?: string;
-};
-
 type ConceptoRow = {
   id: string;
   numeroOT: string;
@@ -71,10 +40,6 @@ function money(n: number | null | undefined) {
   return `$${n.toLocaleString("es-AR")}`;
 }
 
-function kmLabel(km: number | null | undefined) {
-  return km != null ? `${km.toLocaleString("es-AR")} km` : null;
-}
-
 function OtBadge({ numeroOT, externo }: { numeroOT: string; externo?: boolean }) {
   return (
     <span
@@ -101,7 +66,6 @@ function buildQs(params: Record<string, string>) {
 
 export function HistorialTalleresPage() {
   const { token, user } = useAuth();
-  const [items, setItems] = useState<HistorialRow[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [busquedaDraft, setBusquedaDraft] = useState("");
   const [nivel1, setNivel1] = useState("");
@@ -126,8 +90,8 @@ export function HistorialTalleresPage() {
     { nombre: string; count: number; total: number }[]
   >([]);
   const [opcionesTalleres, setOpcionesTalleres] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<SortKeyConcepto>("fecha");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState<SortKeyConcepto>("patente");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const opcionesN1 = useMemo(() => arbol.filter((c) => c.nivel === 1), [arbol]);
   const opcionesN2 = useMemo(
@@ -168,7 +132,6 @@ export function HistorialTalleresPage() {
 
   const pasaTipo = (externo?: boolean) =>
     tipoTaller === "todos" || (tipoTaller === "externo") === !!externo;
-  const itemsVisibles = items.filter((r) => pasaTipo(r.externo));
   const conceptosVisibles = conceptos.filter((r) => pasaTipo(r.externo));
   const resumenVisible =
     tipoTaller === "todos"
@@ -272,28 +235,18 @@ export function HistorialTalleresPage() {
     setLoading(true);
     setError(null);
     try {
-      if (vista === "conceptos") {
-        const q = buildQs(filtrosConceptos);
-        const data = await apiFetch<{
-          items: ConceptoRow[];
-          resumen: { nombre: string; count: number; total: number }[];
-          opciones?: { ramas: string[]; talleres: string[]; arbol?: CatArbol[] };
-        }>(`/api/talleres/historial/reparaciones${q}`, {}, token);
-        setConceptos(Array.isArray(data.items) ? data.items : []);
-        setResumenConceptos(Array.isArray(data.resumen) ? data.resumen : []);
-        if (data.opciones) {
-          setOpcionesTalleres(data.opciones.talleres ?? []);
-          setArbol(data.opciones.arbol ?? []);
-        }
-        setItems([]);
-      } else {
-        const data = await apiFetch<{ items: HistorialRow[] }>(
-          `/api/talleres/historial${busqueda.trim() ? `?q=${encodeURIComponent(busqueda.trim())}` : ""}`,
-          {},
-          token
-        );
-        setItems(data.items);
-        setConceptos([]);
+      // Misma fuente para Por unidad y Por concepto: filas OT + niveles.
+      const q = buildQs(filtrosConceptos);
+      const data = await apiFetch<{
+        items: ConceptoRow[];
+        resumen: { nombre: string; count: number; total: number }[];
+        opciones?: { ramas: string[]; talleres: string[]; arbol?: CatArbol[] };
+      }>(`/api/talleres/historial/reparaciones${q}`, {}, token);
+      setConceptos(Array.isArray(data.items) ? data.items : []);
+      setResumenConceptos(Array.isArray(data.resumen) ? data.resumen : []);
+      if (data.opciones) {
+        setOpcionesTalleres(data.opciones.talleres ?? []);
+        setArbol(data.opciones.arbol ?? []);
       }
     } catch (err) {
       setError(
@@ -302,7 +255,7 @@ export function HistorialTalleresPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, vista, filtrosConceptos, busqueda]);
+  }, [token, filtrosConceptos]);
 
   useEffect(() => {
     void load();
@@ -480,7 +433,11 @@ export function HistorialTalleresPage() {
       <div className="mb-4 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => setVista("unidad")}
+          onClick={() => {
+            setVista("unidad");
+            setSortKey("patente");
+            setSortDir("asc");
+          }}
           className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
             vista === "unidad"
               ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
@@ -491,7 +448,11 @@ export function HistorialTalleresPage() {
         </button>
         <button
           type="button"
-          onClick={() => setVista("conceptos")}
+          onClick={() => {
+            setVista("conceptos");
+            setSortKey("fecha");
+            setSortDir("desc");
+          }}
           className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
             vista === "conceptos"
               ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
@@ -559,131 +520,130 @@ export function HistorialTalleresPage() {
           )}
         </div>
 
-        {vista === "conceptos" && (
-          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            <label className="block text-xs text-[var(--vl-text-muted)]">
-              Nivel 1
-              <select
-                className={inputCls}
-                value={nivel1}
-                onChange={(e) => {
-                  setNivel1(e.target.value);
-                  setNivel2("");
-                  setNivel3("");
-                }}
-              >
-                <option value="">Todos</option>
-                {opcionesN1.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-xs text-[var(--vl-text-muted)]">
-              Nivel 2
-              <select
-                className={`${inputCls} disabled:opacity-50`}
-                value={nivel2}
-                disabled={!nivel1 || opcionesN2.length === 0}
-                onChange={(e) => {
-                  setNivel2(e.target.value);
-                  setNivel3("");
-                }}
-              >
-                <option value="">Todos</option>
-                {opcionesN2.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-xs text-[var(--vl-text-muted)]">
-              Nivel 3
-              <select
-                className={`${inputCls} disabled:opacity-50`}
-                value={nivel3}
-                disabled={!nivel2 || opcionesN3.length === 0}
-                onChange={(e) => setNivel3(e.target.value)}
-              >
-                <option value="">Todos</option>
-                {opcionesN3.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-xs text-[var(--vl-text-muted)]">
-              Taller / proveedor
-              <select
-                className={inputCls}
-                value={taller}
-                onChange={(e) => setTaller(e.target.value)}
-              >
-                <option value="">Todos</option>
-                {opcionesTalleres.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-xs text-[var(--vl-text-muted)]">
-              Empresa
-              <input
-                type="search"
-                className={inputCls}
-                value={empresaFiltro}
-                onChange={(e) => setEmpresaFiltro(e.target.value)}
-                placeholder="Empresa de transporte…"
-              />
-            </label>
-            <label className="block text-xs text-[var(--vl-text-muted)]">
-              Patente
-              <input
-                type="search"
-                className={inputCls}
-                value={patenteFiltro}
-                onChange={(e) => setPatenteFiltro(e.target.value)}
-                placeholder="Patente…"
-              />
-            </label>
-            <label className="block text-xs text-[var(--vl-text-muted)]">
-              Desde
-              <input
-                type="date"
-                className={inputCls}
-                value={desde}
-                onChange={(e) => setDesde(e.target.value)}
-              />
-            </label>
-            <label className="block text-xs text-[var(--vl-text-muted)]">
-              Hasta
-              <input
-                type="date"
-                className={inputCls}
-                value={hasta}
-                onChange={(e) => setHasta(e.target.value)}
-              />
-            </label>
-          </div>
-        )}
+        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <label className="block text-xs text-[var(--vl-text-muted)]">
+            Patente
+            <input
+              type="search"
+              className={inputCls}
+              value={patenteFiltro}
+              onChange={(e) => setPatenteFiltro(e.target.value)}
+              placeholder="Patente…"
+            />
+          </label>
+          <label className="block text-xs text-[var(--vl-text-muted)]">
+            Empresa
+            <input
+              type="search"
+              className={inputCls}
+              value={empresaFiltro}
+              onChange={(e) => setEmpresaFiltro(e.target.value)}
+              placeholder="Empresa de transporte…"
+            />
+          </label>
+          <label className="block text-xs text-[var(--vl-text-muted)]">
+            Desde
+            <input
+              type="date"
+              className={inputCls}
+              value={desde}
+              onChange={(e) => setDesde(e.target.value)}
+            />
+          </label>
+          <label className="block text-xs text-[var(--vl-text-muted)]">
+            Hasta
+            <input
+              type="date"
+              className={inputCls}
+              value={hasta}
+              onChange={(e) => setHasta(e.target.value)}
+            />
+          </label>
+          <label className="block text-xs text-[var(--vl-text-muted)]">
+            Nivel 1
+            <select
+              className={inputCls}
+              value={nivel1}
+              onChange={(e) => {
+                setNivel1(e.target.value);
+                setNivel2("");
+                setNivel3("");
+              }}
+            >
+              <option value="">Todos</option>
+              {opcionesN1.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs text-[var(--vl-text-muted)]">
+            Nivel 2
+            <select
+              className={`${inputCls} disabled:opacity-50`}
+              value={nivel2}
+              disabled={!nivel1 || opcionesN2.length === 0}
+              onChange={(e) => {
+                setNivel2(e.target.value);
+                setNivel3("");
+              }}
+            >
+              <option value="">Todos</option>
+              {opcionesN2.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs text-[var(--vl-text-muted)]">
+            Nivel 3
+            <select
+              className={`${inputCls} disabled:opacity-50`}
+              value={nivel3}
+              disabled={!nivel2 || opcionesN3.length === 0}
+              onChange={(e) => setNivel3(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {opcionesN3.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs text-[var(--vl-text-muted)]">
+            Taller / proveedor
+            <select
+              className={inputCls}
+              value={taller}
+              onChange={(e) => setTaller(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {opcionesTalleres.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       {loading && <p className="text-sm text-[var(--vl-text-muted)]">Cargando…</p>}
       {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
 
-      {!loading && !error && vista === "conceptos" && (
+      {!loading && !error && (
         <div className="space-y-4">
-          {resumenVisible.length > 0 && (
+          {vista === "conceptos" && resumenVisible.length > 0 && (
             <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
               <h2 className="text-sm font-bold text-[var(--vl-heading)]">
                 Totales por nivel 1
               </h2>
               <p className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                Tocá un concepto para filtrar. Después armamos el resumen.
+                Tocá un concepto para filtrar. El resumen completo lo armamos
+                después.
               </p>
               <ul className="mt-2 flex flex-wrap gap-1.5 text-xs sm:text-sm">
                 {resumenVisible.map((r) => {
@@ -712,7 +672,7 @@ export function HistorialTalleresPage() {
             </div>
           )}
           {conceptosOrdenados.length === 0 ? (
-            <p className="text-sm text-[var(--vl-text-muted)]">
+            <p className="rounded-xl border border-[var(--vl-card-border)] p-4 text-sm text-[var(--vl-text-muted)]">
               Sin resultados
               {hayFiltros ? " con estos filtros" : ""}.
             </p>
@@ -777,112 +737,13 @@ export function HistorialTalleresPage() {
               </table>
               <p className="border-t border-[var(--vl-card-border)] px-3 py-2 text-[11px] text-[var(--vl-text-muted)]">
                 {conceptosOrdenados.length} fila
-                {conceptosOrdenados.length === 1 ? "" : "s"} · tocá el encabezado
-                para ordenar
+                {conceptosOrdenados.length === 1 ? "" : "s"}
+                {vista === "unidad" ? " · vista por unidad" : " · vista por concepto"}
+                {" · "}
+                tocá el encabezado para ordenar
               </p>
             </div>
           )}
-        </div>
-      )}
-
-      {!loading && !error && vista === "unidad" && itemsVisibles.length === 0 && (
-        <p className="rounded-xl border border-[var(--vl-card-border)] p-4 text-sm text-[var(--vl-text-muted)]">
-          No hay historial
-          {busqueda.trim() ? ` para “${busqueda.trim()}”` : ""}.
-        </p>
-      )}
-
-      {!loading && !error && vista === "unidad" && (
-        <div className="space-y-3">
-          {itemsVisibles.map((row) => (
-            <article
-              key={row.id}
-              className={`rounded-xl border border-l-4 p-4 ${
-                row.externo
-                  ? "border-violet-200 border-l-violet-500 bg-violet-50/60 dark:border-violet-900 dark:border-l-violet-500 dark:bg-violet-950/20"
-                  : "border-[var(--vl-card-border)] border-l-sky-500 bg-[var(--vl-card)]"
-              }`}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-[var(--vl-heading)]">
-                    <span>{row.patente}</span>
-                    <OtBadge numeroOT={row.numeroOT} externo={row.externo} />
-                    {row.externo && (
-                      <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                        Taller externo
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 text-xs text-[var(--vl-text-muted)]">
-                    {row.externo ? "Reparación" : "Solicitud"}:{" "}
-                    <strong className="text-[var(--vl-text)]">
-                      {formatDate(
-                        row.externo
-                          ? row.cerradaAt ?? row.createdAt
-                          : row.solicitudAt ?? row.createdAt
-                      )}
-                    </strong>
-                    {" · Km "}
-                    <strong className="text-[var(--vl-text)]">
-                      {row.kmAlMomento != null
-                        ? row.kmAlMomento.toLocaleString("es-AR")
-                        : "—"}
-                    </strong>
-                    {row.falla ? ` · ${row.falla}` : ""}
-                    {row.chofer ? ` · ${row.chofer}` : ""}
-                  </div>
-                </div>
-                {!row.externo && (
-                  <div className="text-right text-xs text-[var(--vl-text-muted)]">
-                    <div>
-                      {row.cerradaAt ? `Cerrada ${formatDate(row.cerradaAt)}` : "Abierta"}
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-[var(--vl-heading)]">
-                      {money(row.facturado)}
-                    </div>
-                  </div>
-                )}
-              </div>
-              {row.externo ? (
-                <p className="mt-2 whitespace-pre-wrap text-xs text-[var(--vl-text)]">
-                  {row.detalle}
-                </p>
-              ) : (
-                <p className="mt-2 text-xs text-[var(--vl-text)]">
-                  Taller: <strong>{row.tallerPrincipal || "—"}</strong>
-                </p>
-              )}
-              {!row.externo && row.repuestos.length > 0 && (
-                <ul className="mt-2 space-y-1 border-t border-[var(--vl-card-border)] pt-2 text-xs">
-                  {row.repuestos.map((r, i) => {
-                    const niveles =
-                      [r.reparacionNivel1, r.reparacionNivel2, r.reparacionNivel3]
-                        .filter(Boolean)
-                        .join(" › ") || r.reparacion || null;
-                    return (
-                      <li key={`${row.id}-${i}`} className="flex justify-between gap-2">
-                        <span>
-                          {r.descripcion}
-                          {r.taller ? ` · ${r.taller}` : ""}
-                          {niveles ? (
-                            <span className="mt-0.5 block text-[10px] text-[var(--vl-text-muted)]">
-                              {niveles}
-                            </span>
-                          ) : (
-                            <span className="mt-0.5 block text-[10px] font-medium text-amber-700 dark:text-amber-400">
-                              Sin nivel 1 / 2 / 3
-                            </span>
-                          )}
-                        </span>
-                        <span className="shrink-0 font-medium">{money(r.importe)}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </article>
-          ))}
         </div>
       )}
     </div>
