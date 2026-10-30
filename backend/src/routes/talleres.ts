@@ -1387,6 +1387,8 @@ router.get("/historial/reparaciones", authenticate, async (req: AuthedRequest, r
       nivel2: String(req.query?.nivel2 ?? ""),
       nivel3: String(req.query?.nivel3 ?? ""),
       taller: String(req.query?.taller ?? ""),
+      empresa: String(req.query?.empresa ?? ""),
+      patente: String(req.query?.patente ?? ""),
       desde: String(req.query?.desde ?? ""),
       hasta: String(req.query?.hasta ?? ""),
     });
@@ -1417,6 +1419,8 @@ router.get(
         nivel2: String(req.query?.nivel2 ?? ""),
         nivel3: String(req.query?.nivel3 ?? ""),
         taller: String(req.query?.taller ?? ""),
+        empresa: String(req.query?.empresa ?? ""),
+        patente: String(req.query?.patente ?? ""),
         desde: String(req.query?.desde ?? ""),
         hasta: String(req.query?.hasta ?? ""),
       });

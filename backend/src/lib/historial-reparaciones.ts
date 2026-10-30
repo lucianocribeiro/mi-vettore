@@ -10,6 +10,7 @@ export type HistorialReparacionRow = {
   numeroOT: string;
   externo: boolean;
   patente: string;
+  empresa: string | null;
   chofer: string | null;
   falla: string;
   descripcion: string;
@@ -38,11 +39,15 @@ export async function queryHistorialReparaciones(opts: {
   nivel2?: string;
   nivel3?: string;
   taller?: string;
+  empresa?: string;
+  patente?: string;
   desde?: string;
   hasta?: string;
 }) {
   const q = String(opts.q ?? "").trim().toLowerCase();
   const tallerQ = String(opts.taller ?? "").trim().toLowerCase();
+  const empresaQ = String(opts.empresa ?? "").trim().toLowerCase();
+  const patenteQ = String(opts.patente ?? "").trim().toLowerCase();
   const filtro = {
     nivel1: String(opts.nivel1 ?? "").trim(),
     nivel2: String(opts.nivel2 ?? "").trim(),
@@ -75,7 +80,10 @@ export async function queryHistorialReparaciones(opts: {
         ot: {
           include: {
             solicitud: {
-              include: { camioneta: true, chofer: true },
+              include: {
+                camioneta: { include: { empresa: true } },
+                chofer: true,
+              },
             },
             tallerProveedor: true,
           },
@@ -112,6 +120,7 @@ export async function queryHistorialReparaciones(opts: {
       numeroOT: ot.numeroOT,
       externo: ot.externo,
       patente: ot.solicitud.camioneta.patente,
+      empresa: ot.solicitud.camioneta.empresa?.nombre ?? null,
       chofer: ot.solicitud.chofer?.nombre ?? null,
       falla: ot.solicitud.falla,
       descripcion: i.descripcion,
@@ -147,12 +156,15 @@ export async function queryHistorialReparaciones(opts: {
   const filtered = rows.filter((r) => {
     if (!categoriaEnRama(cats, r.categoriaId, filtro)) return false;
     if (tallerQ && !r.taller.toLowerCase().includes(tallerQ)) return false;
+    if (empresaQ && !(r.empresa ?? "").toLowerCase().includes(empresaQ)) return false;
+    if (patenteQ && !r.patente.toLowerCase().includes(patenteQ)) return false;
     if (desdeOk && r.fecha < desdeOk) return false;
     if (hastaOk && r.fecha > hastaOk) return false;
     if (q) {
       const hay = [
         r.numeroOT,
         r.patente,
+        r.empresa ?? "",
         r.falla,
         r.descripcion,
         r.taller,

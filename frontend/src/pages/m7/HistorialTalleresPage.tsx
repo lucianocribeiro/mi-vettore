@@ -40,6 +40,7 @@ type ConceptoRow = {
   numeroOT: string;
   externo?: boolean;
   patente: string;
+  empresa?: string | null;
   reparacion: string | null;
   reparacionNivel1: string | null;
   reparacionNivel2: string | null;
@@ -49,6 +50,17 @@ type ConceptoRow = {
   fecha: string;
   kmAlMomento?: number | null;
 };
+
+type SortKeyConcepto =
+  | "numeroOT"
+  | "patente"
+  | "empresa"
+  | "km"
+  | "fecha"
+  | "importe"
+  | "n1"
+  | "n2"
+  | "n3";
 
 type CatArbol = { id: string; nombre: string; nivel: number; padreId: string | null };
 
@@ -114,6 +126,8 @@ export function HistorialTalleresPage() {
     { nombre: string; count: number; total: number }[]
   >([]);
   const [opcionesTalleres, setOpcionesTalleres] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<SortKeyConcepto>("fecha");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const opcionesN1 = useMemo(() => arbol.filter((c) => c.nivel === 1), [arbol]);
   const opcionesN2 = useMemo(
@@ -181,6 +195,77 @@ export function HistorialTalleresPage() {
   }
 
   const nombreNivel1 = opcionesN1.find((c) => c.id === nivel1)?.nombre ?? nivel1;
+
+  function toggleSort(key: SortKeyConcepto) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "fecha" || key === "importe" || key === "km" ? "desc" : "asc");
+    }
+  }
+
+  const conceptosOrdenados = useMemo(() => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    const val = (r: ConceptoRow): string | number => {
+      switch (sortKey) {
+        case "numeroOT":
+          return r.numeroOT;
+        case "patente":
+          return r.patente;
+        case "empresa":
+          return r.empresa ?? "";
+        case "km":
+          return r.kmAlMomento ?? -1;
+        case "fecha":
+          return r.fecha ? new Date(r.fecha).getTime() : 0;
+        case "importe":
+          return r.importe || 0;
+        case "n1":
+          return r.reparacionNivel1 ?? "";
+        case "n2":
+          return r.reparacionNivel2 ?? "";
+        case "n3":
+          return r.reparacionNivel3 ?? "";
+        default:
+          return "";
+      }
+    };
+    return [...conceptosVisibles].sort((a, b) => {
+      const va = val(a);
+      const vb = val(b);
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+      return String(va).localeCompare(String(vb), "es", { sensitivity: "base" }) * dir;
+    });
+  }, [conceptosVisibles, sortKey, sortDir]);
+
+  function SortTh({
+    col,
+    label,
+    className,
+  }: {
+    col: SortKeyConcepto;
+    label: string;
+    className?: string;
+  }) {
+    const activo = sortKey === col;
+    return (
+      <th className={`whitespace-nowrap px-2 py-2 font-semibold ${className ?? ""}`}>
+        <button
+          type="button"
+          onClick={() => toggleSort(col)}
+          className={`inline-flex items-center gap-0.5 ${
+            activo ? "text-[var(--vl-heading)]" : "text-[var(--vl-text-muted)]"
+          }`}
+        >
+          {label}
+          <span className="text-[10px] opacity-70" aria-hidden>
+            {activo ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+          </span>
+        </button>
+      </th>
+    );
+  }
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -598,9 +683,9 @@ export function HistorialTalleresPage() {
                 Totales por nivel 1
               </h2>
               <p className="mt-0.5 text-[11px] text-[var(--vl-text-muted)]">
-                Tocá un concepto para filtrar.
+                Tocá un concepto para filtrar. Después armamos el resumen.
               </p>
-              <ul className="mt-2 space-y-1 text-sm">
+              <ul className="mt-2 flex flex-wrap gap-1.5 text-xs sm:text-sm">
                 {resumenVisible.map((r) => {
                   const activo = !!nivel1 && nombreNivel1 === r.nombre;
                   return (
@@ -609,20 +694,14 @@ export function HistorialTalleresPage() {
                         type="button"
                         disabled={r.nombre === "Sin clasificar"}
                         onClick={() => elegirRama(r.nombre)}
-                        className={`flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition ${
+                        className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 transition ${
                           activo
-                            ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                            : "text-[var(--vl-text)] hover:bg-[var(--vl-page)]"
+                            ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                            : "border-[var(--vl-card-border)] text-[var(--vl-text)] hover:bg-[var(--vl-page)]"
                         }`}
                       >
                         <span>{r.nombre}</span>
-                        <span
-                          className={
-                            activo
-                              ? "opacity-80"
-                              : "text-[var(--vl-text-muted)]"
-                          }
-                        >
+                        <span className="opacity-70">
                           {r.count} · {money(r.total)}
                         </span>
                       </button>
@@ -632,62 +711,75 @@ export function HistorialTalleresPage() {
               </ul>
             </div>
           )}
-          {conceptosVisibles.length === 0 ? (
+          {conceptosOrdenados.length === 0 ? (
             <p className="text-sm text-[var(--vl-text-muted)]">
               Sin resultados
               {hayFiltros ? " con estos filtros" : ""}.
             </p>
           ) : (
-            <div className="space-y-2">
-              {Object.entries(
-                conceptosVisibles.reduce<Record<string, ConceptoRow[]>>((acc, row) => {
-                  const k =
-                    [row.reparacionNivel1, row.reparacionNivel2, row.reparacionNivel3]
-                      .filter(Boolean)
-                      .join(" › ") || row.reparacion || "Sin concepto";
-                  (acc[k] ??= []).push(row);
-                  return acc;
-                }, {})
-              ).map(([rama, rows]) => {
-                const total = rows.reduce((a, r) => a + (r.importe || 0), 0);
-                return (
-                  <details
-                    key={rama}
-                    className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3"
-                    open
-                  >
-                    <summary className="cursor-pointer text-sm font-semibold text-[var(--vl-heading)]">
-                      {rama}{" "}
-                      <span className="font-normal text-[var(--vl-text-muted)]">
-                        · {rows.length} · {money(total)}
-                      </span>
-                    </summary>
-                    <ul className="mt-2 space-y-1 text-xs text-[var(--vl-text-muted)]">
-                      {rows.map((r) => (
-                        <li
-                          key={r.id}
-                          className={`flex flex-wrap items-center gap-1.5 border-l-2 pl-2 ${
-                            r.externo ? "border-violet-500" : "border-sky-500"
-                          }`}
-                        >
-                          <OtBadge numeroOT={r.numeroOT} externo={r.externo} />
-                          <span>
-                            {[
-                              r.patente,
-                              kmLabel(r.kmAlMomento),
-                              r.externo ? "Taller externo" : r.taller || "—",
-                              r.externo ? null : money(r.importe),
-                              r.fecha ? formatDate(r.fecha) : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                );
-              })}
+            <div className="overflow-x-auto rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)]">
+              <table className="min-w-[920px] w-full text-left text-xs">
+                <thead className="border-b border-[var(--vl-card-border)] bg-slate-50 text-[11px] dark:bg-slate-900/50">
+                  <tr>
+                    <SortTh col="numeroOT" label="OT" />
+                    <SortTh col="patente" label="Patente" />
+                    <SortTh col="empresa" label="Empresa" />
+                    <SortTh col="km" label="Km" />
+                    <SortTh col="fecha" label="Fecha" />
+                    <SortTh col="importe" label="Monto" className="text-right" />
+                    <SortTh col="n1" label="Nivel 1" />
+                    <SortTh col="n2" label="Nivel 2" />
+                    <SortTh col="n3" label="Nivel 3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {conceptosOrdenados.map((r) => (
+                    <tr
+                      key={r.id}
+                      className={`border-t border-[var(--vl-card-border)] ${
+                        r.externo
+                          ? "border-l-4 border-l-violet-500"
+                          : "border-l-4 border-l-sky-500"
+                      }`}
+                    >
+                      <td className="px-2 py-2">
+                        <OtBadge numeroOT={r.numeroOT} externo={r.externo} />
+                      </td>
+                      <td className="px-2 py-2 font-medium text-[var(--vl-heading)]">
+                        {r.patente}
+                      </td>
+                      <td className="max-w-[10rem] truncate px-2 py-2 text-[var(--vl-text-muted)]">
+                        {r.empresa || "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2 text-[var(--vl-text-muted)]">
+                        {r.kmAlMomento != null
+                          ? r.kmAlMomento.toLocaleString("es-AR")
+                          : "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2 text-[var(--vl-text-muted)]">
+                        {r.fecha ? formatDate(r.fecha) : "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2 text-right font-medium text-[var(--vl-heading)]">
+                        {r.externo ? "—" : money(r.importe)}
+                      </td>
+                      <td className="px-2 py-2 text-[var(--vl-text)]">
+                        {r.reparacionNivel1 || "—"}
+                      </td>
+                      <td className="px-2 py-2 text-[var(--vl-text)]">
+                        {r.reparacionNivel2 || "—"}
+                      </td>
+                      <td className="px-2 py-2 text-[var(--vl-text)]">
+                        {r.reparacionNivel3 || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="border-t border-[var(--vl-card-border)] px-3 py-2 text-[11px] text-[var(--vl-text-muted)]">
+                {conceptosOrdenados.length} fila
+                {conceptosOrdenados.length === 1 ? "" : "s"} · tocá el encabezado
+                para ordenar
+              </p>
             </div>
           )}
         </div>
