@@ -1385,6 +1385,22 @@ export function M5FichaPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               {camionetasFiltradas.map((c) => {
                 const a = currentAsignacion(c);
+                const empresa =
+                  c.empresa?.nombre ?? a?.empresa?.nombre ?? "Sin empresa";
+                const modeloAnio = [
+                  (c.modelo || c.marca || "").trim() || null,
+                  c.anio != null ? String(c.anio) : null,
+                ]
+                  .filter(Boolean)
+                  .join(" – ");
+                const frioLine = [
+                  c.equipoFrio || null,
+                  c.tipoServicio?.nombre ||
+                    c.tipoTransporte?.replace(/_/g, " ").toLowerCase() ||
+                    null,
+                ]
+                  .filter(Boolean)
+                  .join(" - ");
                 return (
                   <button
                     key={c.id}
@@ -1394,69 +1410,63 @@ export function M5FichaPage() {
                     }}
                     className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4 text-left transition hover:border-slate-400 hover:shadow-sm dark:hover:border-slate-500"
                   >
-                    <div className="text-xs text-[var(--vl-text-muted)]">
-                      {c.empresa?.nombre ??
-                        a?.empresa?.nombre ??
-                        "Sin empresa"}
-                    </div>
-                    <div className="mt-2 font-semibold text-[var(--vl-heading)]">
-                      {c.patente}
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                      <EstadoBadge
-                        estado={estadoUnidad(c)}
-                        motivo={MOTIVO_UNIDAD_LABEL[c.estado]}
-                      />
-                      {c.estado !== "OPERATIVA" &&
-                        (c.estadoDesde || c.estadoHasta) && (
-                          <span className="text-[var(--vl-text-muted)]">
-                            {c.estadoDesde
-                              ? formatDate(c.estadoDesde)
-                              : "—"}
-                            {" → "}
-                            {c.estadoHasta
-                              ? formatDate(c.estadoHasta)
-                              : "sin fin"}
-                          </span>
-                        )}
-                      {(c.tipoServicio?.nombre || c.tipoTransporte) && (
-                        <span className="text-[var(--vl-text-muted)]">
-                          {c.tipoServicio?.nombre ||
-                            c.tipoTransporte?.replace(/_/g, " ").toLowerCase()}
-                        </span>
-                      )}
-                      {c.capacidad && (
-                        <span className="text-[var(--vl-text-muted)]">
-                          {c.capacidad}
-                        </span>
-                      )}
-                      {canEdit && (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditCamioneta(c);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.stopPropagation();
-                              openEditCamioneta(c);
-                            }
-                          }}
-                          className="text-slate-400 underline-offset-2 hover:text-slate-700 hover:underline"
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm text-[var(--vl-text)]">{empresa}</div>
+                        <div className="mt-0.5 text-lg font-bold leading-tight text-[var(--vl-heading)]">
+                          {c.patente}
+                        </div>
+                        <div
+                          className="mt-2 flex flex-wrap items-center gap-2 text-xs"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          Editar
-                        </span>
-                      )}
-                      {canEdit && (
-                        <EstadoAcciones
-                          estado={estadoUnidad(c)}
-                          onCambiar={(estado) => void cambiarEstado("camioneta", c.id, estado)}
-                          onEliminar={() => void eliminarEntidad("camioneta", c.id)}
-                          sinInactivar
-                        />
-                      )}
+                          <EstadoBadge
+                            estado={estadoUnidad(c)}
+                            motivo={MOTIVO_UNIDAD_LABEL[c.estado]}
+                          />
+                          {c.estado !== "OPERATIVA" &&
+                            (c.estadoDesde || c.estadoHasta) && (
+                              <span className="text-[var(--vl-text-muted)]">
+                                {c.estadoDesde
+                                  ? formatDate(c.estadoDesde)
+                                  : "—"}
+                                {" → "}
+                                {c.estadoHasta
+                                  ? formatDate(c.estadoHasta)
+                                  : "sin fin"}
+                              </span>
+                            )}
+                          {canEdit && (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => openEditCamioneta(c)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") openEditCamioneta(c);
+                              }}
+                              className="text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+                            >
+                              Editar
+                            </span>
+                          )}
+                          {canEdit && (
+                            <EstadoAcciones
+                              estado={estadoUnidad(c)}
+                              onCambiar={(estado) =>
+                                void cambiarEstado("camioneta", c.id, estado)
+                              }
+                              onEliminar={() =>
+                                void eliminarEntidad("camioneta", c.id)
+                              }
+                              sinInactivar
+                            />
+                          )}
+                        </div>
+                      </div>
+                      <div className="max-w-[48%] shrink-0 text-right text-sm text-[var(--vl-text)]">
+                        <div>{modeloAnio || "—"}</div>
+                        <div className="mt-0.5">{frioLine || "—"}</div>
+                      </div>
                     </div>
                   </button>
                 );
