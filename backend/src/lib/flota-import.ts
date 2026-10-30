@@ -28,7 +28,7 @@ export const FLOTA_COLUMNAS: Record<HojaFlota, Columna[]> = {
     { header: "Nombre", key: "nombre", width: 28 },
     { header: "CUIT", key: "cuit", width: 16 },
     { header: "Email", key: "email", width: 28 },
-    { header: "Contacto", key: "contacto", width: 18 },
+    { header: "Teléfono", key: "telefono", width: 16 },
     { header: "Mantenimiento", key: "mantenimiento", width: 14 },
     { header: "Taller", key: "taller", width: 10 },
   ],
@@ -65,7 +65,7 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
     nombre: EMPRESA_EJEMPLO,
     cuit: CUIT_EJEMPLO,
     email: "contacto@empresa.com",
-    contacto: "2644000000",
+    telefono: "2644000000",
     mantenimiento: "SI",
     taller: "SI",
   },
@@ -94,7 +94,7 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
 const INSTRUCCIONES: Record<HojaFlota, string[]> = {
   empresas: [
     "Obligatorias: Nombre y CUIT (11 dígitos). Se genera usuario de acceso con el CUIT.",
-    "Email: mail de contacto (opcional). Contacto: teléfono / WhatsApp (opcional).",
+    "Email: mail (opcional). Teléfono: celular / WhatsApp (opcional). No repetir el mail en Teléfono.",
     "Mantenimiento y Taller: SI o NO (módulos habilitados; vacío = NO).",
   ],
   choferes: [
@@ -266,18 +266,26 @@ export async function parseFlotaWorkbook(
         error(n, "Nombre y CUIT (11 dígitos) son obligatorios");
         return;
       }
-      const contactoRaw = txt(row, "contacto") || txt(row, "telefono");
+      const telefonoRaw =
+        txt(row, "telefono") || txt(row, "contacto") || txt(row, "celular");
       let email = (txt(row, "email") || txt(row, "mail")).toLowerCase();
-      // Excel viejo: el mail iba en Contacto.
-      if (!email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactoRaw)) {
-        email = contactoRaw.toLowerCase();
+      const esMail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+      // Excel viejo: el mail iba en Contacto (a veces duplicado en Email + Contacto).
+      if (!email && esMail(telefonoRaw)) {
+        email = telefonoRaw.toLowerCase();
       }
+      const contacto =
+        telefonoRaw &&
+        !esMail(telefonoRaw) &&
+        telefonoRaw.toLowerCase() !== email
+          ? telefonoRaw
+          : "";
       data.empresas.push({
         fila: n,
         nombre,
         cuit,
         email,
-        contacto: email && contactoRaw.toLowerCase() === email ? "" : contactoRaw,
+        contacto,
         verMantenimiento: parseSiNo(
           txt(row, "mantenimiento") || txt(row, "vermantenimiento")
         ),

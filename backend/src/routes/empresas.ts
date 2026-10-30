@@ -55,14 +55,23 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
     await sendFlotaExcel(
       res,
       "empresas",
-      items.map((e) => ({
-        nombre: e.nombre,
-        cuit: e.cuit ?? "",
-        email: e.email ?? "",
-        contacto: e.contacto ?? "",
-        mantenimiento: e.verMantenimiento ? "SI" : "NO",
-        taller: e.verTaller ? "SI" : "NO",
-      })),
+      items.map((e) => {
+        const email = (e.email ?? "").trim();
+        const raw = (e.contacto ?? "").trim();
+        const esMail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw);
+        const telefono =
+          raw && !esMail && raw.toLowerCase() !== email.toLowerCase()
+            ? raw
+            : "";
+        return {
+          nombre: e.nombre,
+          cuit: e.cuit ?? "",
+          email,
+          telefono,
+          mantenimiento: e.verMantenimiento ? "SI" : "NO",
+          taller: e.verTaller ? "SI" : "NO",
+        };
+      }),
       `empresas_${new Date().toISOString().slice(0, 10)}.xlsx`
     );
   } catch (err) {

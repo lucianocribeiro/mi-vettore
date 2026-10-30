@@ -174,7 +174,6 @@ export function M5FichaPage() {
   const [fEmailChofer, setFEmailChofer] = useState("");
   const [fVerMant, setFVerMant] = useState(false);
   const [fVerTaller, setFVerTaller] = useState(false);
-  const [fPideSenasa, setFPideSenasa] = useState(true);
   const [fPideManipulacion, setFPideManipulacion] = useState(true);
   const [fPideSenasaHomol, setFPideSenasaHomol] = useState(true);
   const [fEstadoChofer, setFEstadoChofer] = useState<EstadoEntidad>("ACTIVO");
@@ -400,7 +399,6 @@ export function M5FichaPage() {
     setFEmailChofer("");
     setFVerMant(false);
     setFVerTaller(false);
-    setFPideSenasa(true);
     setFPideManipulacion(true);
     setFEstadoChofer("ACTIVO");
     setFCuit("");
@@ -606,7 +604,6 @@ export function M5FichaPage() {
           password: fPasswordEmpresa || undefined,
           verMantenimiento: fVerMant,
           verTaller: fVerTaller,
-          pideSenasa: fPideSenasa,
         };
         if (form.item) {
           const updated = await apiFetch<Empresa & { credencialTemporal?: string }>(
@@ -1693,16 +1690,22 @@ export function M5FichaPage() {
           </p>
         </div>
         <EntityTable
-          headers={["Nombre", "CUIT", "Mail", "Estado", "Choferes", "Patentes", ""]}
+          headers={["Empresa", "Estado", "Choferes", "Patentes", ""]}
           rows={empresasFiltradas.map((e) => {
             const wa = whatsappDigits(e.contacto);
             const choferesEmp = (e.choferes ?? []).filter((c) => c.estado !== "INACTIVO");
             const unidadesEmp = (e.unidades ?? []).filter((u) => u.estado !== "INACTIVA");
             const estadoEmp = estadoEmpresa(e);
             return [
-              e.nombre,
-              e.cuit || "—",
-              e.email || "—",
+              <div key={`emp-${e.id}`} className="min-w-[11rem]">
+                <div className="font-medium text-[var(--vl-heading)]">{e.nombre}</div>
+                <div className="text-xs text-[var(--vl-text-muted)]">
+                  {e.cuit || "Sin CUIT"}
+                </div>
+                <div className="text-xs text-[var(--vl-text-muted)] break-all">
+                  {e.email || "Sin mail"}
+                </div>
+              </div>,
               <EstadoBadge key={`est-${e.id}`} estado={estadoEmp} />,
               choferesEmp.length ? (
                 <ul key={`ch-${e.id}`} className="space-y-0.5">
@@ -2173,16 +2176,6 @@ export function M5FichaPage() {
                     onChange={(e) => setFVerTaller(e.target.checked)}
                   />
                   Taller
-                </label>
-              </Field>
-              <Field label="Documentación que se pide">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={fPideSenasa}
-                    onChange={(e) => setFPideSenasa(e.target.checked)}
-                  />
-                  SENASA (en sus unidades)
                 </label>
               </Field>
               {!form.item && (
