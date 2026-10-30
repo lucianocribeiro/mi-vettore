@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -45,12 +45,24 @@ type ResumenDocs = {
 
 type FiltroDocs = "all" | "pendiente" | "vencida" | "por_vencer" | "completa";
 
-const FILTROS_DOCS: Array<{ value: FiltroDocs; label: string; dot?: string }> = [
+/** Paleta fija: naranja ≠ amarillo ≠ rojo. */
+const DOC_COLOR = {
+  pendiente: "#ea580c", // naranja intenso
+  vencida: "#dc2626", // rojo
+  porVencer: "#eab308", // amarillo
+  completa: "#10b981", // verde
+} as const;
+
+const FILTROS_DOCS: Array<{
+  value: FiltroDocs;
+  label: string;
+  color?: string;
+}> = [
   { value: "all", label: "Todas" },
-  { value: "pendiente", label: "Doc. pendiente", dot: "bg-orange-500" },
-  { value: "vencida", label: "Vencida", dot: "bg-red-500" },
-  { value: "por_vencer", label: "Por vencer", dot: "bg-amber-400" },
-  { value: "completa", label: "Completa", dot: "bg-emerald-500" },
+  { value: "pendiente", label: "Doc. pendiente", color: DOC_COLOR.pendiente },
+  { value: "vencida", label: "Vencida", color: DOC_COLOR.vencida },
+  { value: "por_vencer", label: "Por vencer", color: DOC_COLOR.porVencer },
+  { value: "completa", label: "Completa", color: DOC_COLOR.completa },
 ];
 
 function matchesFiltroDocs(r: ResumenDocs | undefined, filtro: FiltroDocs): boolean {
@@ -62,7 +74,7 @@ function matchesFiltroDocs(r: ResumenDocs | undefined, filtro: FiltroDocs): bool
   return r.nivel === "ok";
 }
 
-/** Vencida = rojo; doc pendiente (falta cargar) = naranja; por vencer = ámbar. */
+/** Vencida = rojo; doc pendiente = naranja; por vencer = amarillo. */
 function nivelVisual(r: ResumenDocs | undefined): NivelDocs {
   if (!r) return "ok";
   if (r.vencidos.length > 0) return "danger";
@@ -73,16 +85,16 @@ function nivelVisual(r: ResumenDocs | undefined): NivelDocs {
 
 const CARD_RING: Record<NivelDocs, string> = {
   ok: "border-[var(--vl-card-border)]",
-  warn: "border-amber-400 dark:border-amber-500",
-  pendiente: "border-orange-500 dark:border-orange-400",
-  danger: "border-red-500 dark:border-red-400",
+  warn: "border-[#eab308] dark:border-[#facc15]",
+  pendiente: "border-[#ea580c] dark:border-[#fb923c]",
+  danger: "border-[#dc2626] dark:border-[#f87171]",
 };
 
 const CARD_TINT: Record<NivelDocs, string> = {
   ok: "bg-[var(--vl-card)]",
-  warn: "bg-amber-50/80 dark:bg-amber-950/30",
-  pendiente: "bg-orange-50/80 dark:bg-orange-950/30",
-  danger: "bg-red-50/80 dark:bg-red-950/30",
+  warn: "bg-yellow-50/90 dark:bg-yellow-950/25",
+  pendiente: "bg-orange-50/90 dark:bg-orange-950/30",
+  danger: "bg-red-50/90 dark:bg-red-950/30",
 };
 
 /** Renglones de la tarjeta: frente/dorso y las 5 fotos se agrupan en uno solo. */
@@ -150,22 +162,32 @@ function DocChecklist({
         }
         const icono =
           peor.estado === "falta" ? (
-            <span className="font-bold text-orange-600 dark:text-orange-400" aria-label="Falta">
+            <span
+              className="font-bold"
+              style={{ color: DOC_COLOR.pendiente }}
+              aria-label="Falta"
+            >
               ✗
             </span>
           ) : peor.estado === "vencido" ? (
-            <span className="font-bold text-red-600 dark:text-red-400" aria-label="Vencido">
+            <span
+              className="font-bold"
+              style={{ color: DOC_COLOR.vencida }}
+              aria-label="Vencido"
+            >
               ✗
             </span>
           ) : peor.estado === "opcional" ? (
             <span className="text-[var(--vl-text-muted)]">—</span>
           ) : (
             <span
-              className={`font-bold ${
-                peor.estado === "por_vencer"
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-emerald-600 dark:text-emerald-400"
-              }`}
+              className="font-bold"
+              style={{
+                color:
+                  peor.estado === "por_vencer"
+                    ? DOC_COLOR.porVencer
+                    : DOC_COLOR.completa,
+              }}
               aria-label="Ok"
             >
               ✓
@@ -175,7 +197,12 @@ function DocChecklist({
           <div key={g.label} className="contents">
             <span className="w-4 text-center">{icono}</span>
             <span className="text-[var(--vl-text-muted)]">{g.label}:</span>
-            <span className={ITEM_LINE[peor.estado]}>{detalle}</span>
+            <span
+              className={ITEM_LINE_CLASS[peor.estado]}
+              style={ITEM_LINE_STYLE[peor.estado]}
+            >
+              {detalle}
+            </span>
           </div>
         );
       })}
@@ -183,12 +210,20 @@ function DocChecklist({
   );
 }
 
-const ITEM_LINE: Record<EstadoItemDoc, string> = {
+const ITEM_LINE_STYLE: Record<EstadoItemDoc, CSSProperties | undefined> = {
+  ok: undefined,
+  opcional: undefined,
+  por_vencer: { color: DOC_COLOR.porVencer, fontWeight: 500 },
+  vencido: { color: DOC_COLOR.vencida, fontWeight: 600 },
+  falta: { color: DOC_COLOR.pendiente, fontWeight: 600 },
+};
+
+const ITEM_LINE_CLASS: Record<EstadoItemDoc, string> = {
   ok: "text-[var(--vl-text-muted)]",
   opcional: "text-[var(--vl-text-muted)]",
-  por_vencer: "font-medium text-amber-700 dark:text-amber-400",
-  vencido: "font-semibold text-red-600 dark:text-red-400",
-  falta: "font-semibold text-orange-600 dark:text-orange-400",
+  por_vencer: "",
+  vencido: "",
+  falta: "",
 };
 
 function compact(s: string): string {
@@ -617,7 +652,13 @@ export function DocumentacionPage() {
                     : "border-[var(--vl-card-border)] text-[var(--vl-text-muted)]"
                 }`}
               >
-                {f.dot && <span className={`h-2 w-2 rounded-full ${f.dot}`} />}
+                {f.color && (
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
+                    style={{ backgroundColor: f.color }}
+                    aria-hidden
+                  />
+                )}
                 {label}
                 <span className="opacity-70">({conteoDocs[f.value] ?? 0})</span>
               </button>
