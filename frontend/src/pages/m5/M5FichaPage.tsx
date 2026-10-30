@@ -456,7 +456,6 @@ export function M5FichaPage() {
     setFPasswordEmpresa("");
     setFVerMant(!!item.verMantenimiento);
     setFVerTaller(!!item.verTaller);
-    setFPideSenasa(item.pideSenasa !== false);
     setForm({ kind: "empresa", item });
   }
 
