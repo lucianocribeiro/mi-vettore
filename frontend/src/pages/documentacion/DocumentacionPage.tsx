@@ -24,7 +24,7 @@ import {
   type TipoServicio,
 } from "../../types";
 
-type NivelDocs = "ok" | "warn" | "danger";
+type NivelDocs = "ok" | "warn" | "danger" | "pendiente";
 
 type EstadoItemDoc = "ok" | "falta" | "vencido" | "por_vencer" | "opcional";
 
@@ -39,7 +39,7 @@ type ResumenDocs = {
   vencidos: TipoDocumento[];
   porVencer: TipoDocumento[];
   sinValidar: number;
-  nivel: NivelDocs;
+  nivel: "ok" | "warn" | "danger";
   items?: ResumenDocItem[];
 };
 
@@ -47,7 +47,7 @@ type FiltroDocs = "all" | "pendiente" | "vencida" | "por_vencer" | "completa";
 
 const FILTROS_DOCS: Array<{ value: FiltroDocs; label: string; dot?: string }> = [
   { value: "all", label: "Todas" },
-  { value: "pendiente", label: "Doc. pendiente", dot: "bg-red-500" },
+  { value: "pendiente", label: "Doc. pendiente", dot: "bg-orange-500" },
   { value: "vencida", label: "Vencida", dot: "bg-red-500" },
   { value: "por_vencer", label: "Por vencer", dot: "bg-amber-400" },
   { value: "completa", label: "Completa", dot: "bg-emerald-500" },
@@ -62,15 +62,26 @@ function matchesFiltroDocs(r: ResumenDocs | undefined, filtro: FiltroDocs): bool
   return r.nivel === "ok";
 }
 
+/** Vencida = rojo; doc pendiente (falta cargar) = naranja; por vencer = ámbar. */
+function nivelVisual(r: ResumenDocs | undefined): NivelDocs {
+  if (!r) return "ok";
+  if (r.vencidos.length > 0) return "danger";
+  if (r.faltantes.length > 0) return "pendiente";
+  if (r.porVencer.length > 0 || r.nivel === "warn") return "warn";
+  return "ok";
+}
+
 const CARD_RING: Record<NivelDocs, string> = {
   ok: "border-[var(--vl-card-border)]",
   warn: "border-amber-400 dark:border-amber-500",
+  pendiente: "border-orange-500 dark:border-orange-400",
   danger: "border-red-500 dark:border-red-400",
 };
 
 const CARD_TINT: Record<NivelDocs, string> = {
   ok: "bg-[var(--vl-card)]",
   warn: "bg-amber-50/80 dark:bg-amber-950/30",
+  pendiente: "bg-orange-50/80 dark:bg-orange-950/30",
   danger: "bg-red-50/80 dark:bg-red-950/30",
 };
 
@@ -138,8 +149,12 @@ function DocChecklist({
           detalle = "Cargado";
         }
         const icono =
-          peor.estado === "falta" || peor.estado === "vencido" ? (
-            <span className="font-bold text-red-600 dark:text-red-400" aria-label="Falta">
+          peor.estado === "falta" ? (
+            <span className="font-bold text-orange-600 dark:text-orange-400" aria-label="Falta">
+              ✗
+            </span>
+          ) : peor.estado === "vencido" ? (
+            <span className="font-bold text-red-600 dark:text-red-400" aria-label="Vencido">
               ✗
             </span>
           ) : peor.estado === "opcional" ? (
@@ -173,7 +188,7 @@ const ITEM_LINE: Record<EstadoItemDoc, string> = {
   opcional: "text-[var(--vl-text-muted)]",
   por_vencer: "font-medium text-amber-700 dark:text-amber-400",
   vencido: "font-semibold text-red-600 dark:text-red-400",
-  falta: "font-semibold text-red-600 dark:text-red-400",
+  falta: "font-semibold text-orange-600 dark:text-orange-400",
 };
 
 function compact(s: string): string {
@@ -773,7 +788,7 @@ export function DocumentacionPage() {
             {filteredCams.map((c) => {
               const active = selectedCam === c.id;
               const resumen = resumenCam[c.id];
-              const nivel: NivelDocs = resumen?.nivel ?? "ok";
+              const nivel = nivelVisual(resumen);
               return (
                 <button
                   key={c.id}
@@ -933,7 +948,7 @@ export function DocumentacionPage() {
             {filteredChoferes.map((c) => {
               const active = selectedChofer === c.id;
               const resumen = resumenCh[c.id];
-              const nivel: NivelDocs = resumen?.nivel ?? "ok";
+              const nivel = nivelVisual(resumen);
               const empresa = currentChoferAsignacion(c)?.empresa?.nombre;
               const abrible = puedeAbrirChofer(c.id);
               return (
