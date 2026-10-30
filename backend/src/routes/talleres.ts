@@ -1880,7 +1880,7 @@ router.delete("/externos/:id", authenticate, async (req: AuthedRequest, res) => 
   }
 });
 
-/** Elimina una OT interna (carga errónea). No se puede si ya hay pagos. */
+/** Elimina una OT interna (carga errónea). Borra también movimientos de cuenta corriente. */
 router.delete("/:id", authenticate, async (req: AuthedRequest, res) => {
   try {
     if (!isInternalOpsRole(req.user!.rol)) {
@@ -1889,20 +1889,9 @@ router.delete("/:id", authenticate, async (req: AuthedRequest, res) => {
     }
     const ot = await prisma.ordenTrabajo.findUnique({
       where: { id: req.params.id },
-      include: {
-        movimientos: { select: { id: true, estado: true } },
-      },
     });
     if (!ot || ot.externo) {
       res.status(404).json({ error: "OT no encontrada" });
-      return;
-    }
-    const pagados = ot.movimientos.filter((m) => m.estado === "PAGADO");
-    if (pagados.length > 0) {
-      res.status(400).json({
-        error:
-          "La OT ya tiene pagos en cuenta corriente. Revertí los pagos antes de eliminarla.",
-      });
       return;
     }
     await prisma.$transaction(async (tx) => {

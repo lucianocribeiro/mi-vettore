@@ -506,7 +506,7 @@ router.post(
   }
 );
 
-/** Anula (borra) un ítem PENDIENTE cargado por error o duplicado. Lo pagado no se toca. */
+/** Anula (borra) un ítem de CC cargado por error (pendiente o pagado). */
 router.delete(
   "/:id/movimientos/:movId",
   authenticate,
@@ -521,12 +521,6 @@ router.delete(
       });
       if (!mov) {
         res.status(404).json({ error: "Movimiento no encontrado" });
-        return;
-      }
-      if (mov.estado !== "PENDIENTE") {
-        res.status(400).json({
-          error: "Solo se pueden anular ítems pendientes. Si está pagado, revertí el pago primero.",
-        });
         return;
       }
       await prisma.tallerMovimiento.delete({ where: { id: mov.id } });
@@ -554,22 +548,46 @@ router.patch(
         res.status(404).json({ error: "Movimiento no encontrado" });
         return;
       }
-      const data: { fechaPago?: Date; metodoPago?: MetodoPagoTaller } = {};
+      const data: {
+        fechaPago?: Date | null;
+        metodoPago?: MetodoPagoTaller | null;
+        montoFacturado?: number;
+      } = {};
       if (req.body?.fechaPago !== undefined) {
-        const d = new Date(String(req.body.fechaPago));
-        if (Number.isNaN(d.getTime())) {
-          res.status(400).json({ error: "Fecha de pago inválida" });
-          return;
+        if (req.body.fechaPago === null || req.body.fechaPago === "") {
+          data.fechaPago = null;
+        } else {
+          const d = new Date(String(req.body.fechaPago));
+          if (Number.isNaN(d.getTime())) {
+            res.status(400).json({ error: "Fecha de pago inválida" });
+            return;
+          }
+          data.fechaPago = d;
         }
-        data.fechaPago = d;
       }
       if (req.body?.metodoPago !== undefined) {
-        const metodoRaw = String(req.body.metodoPago).toUpperCase();
-        if (!(metodoRaw in MetodoPagoTaller)) {
-          res.status(400).json({ error: "Método de pago inválido" });
+        if (req.body.metodoPago === null || req.body.metodoPago === "") {
+          data.metodoPago = null;
+        } else {
+          const metodoRaw = String(req.body.metodoPago).toUpperCase();
+          if (!(metodoRaw in MetodoPagoTaller)) {
+            res.status(400).json({ error: "Método de pago inválido" });
+            return;
+          }
+          data.metodoPago = metodoRaw as MetodoPagoTaller;
+        }
+      }
+      if (req.body?.montoFacturado !== undefined) {
+        const monto = Number(req.body.montoFacturado);
+        if (!Number.isFinite(monto) || monto < 0) {
+          res.status(400).json({ error: "Monto inválido" });
           return;
         }
-        data.metodoPago = metodoRaw as MetodoPagoTaller;
+        data.montoFacturado = monto;
+      }
+      if (Object.keys(data).length === 0) {
+        res.status(400).json({ error: "Nada para actualizar" });
+        return;
       }
       const updated = await prisma.tallerMovimiento.update({
         where: { id: mov.id },

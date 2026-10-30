@@ -1638,7 +1638,8 @@ export function M7TalleresPage() {
               {confirmEliminarOt.solicitud?.camioneta?.patente
                 ? ` · ${confirmEliminarOt.solicitud.camioneta.patente}`
                 : ""}
-              . Esta acción no se puede deshacer.
+              . También se borran los movimientos de cuenta corriente. Esta
+              acción no se puede deshacer.
             </p>
             <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button

@@ -498,9 +498,17 @@ export function TalleresProveedoresPanel({
     }
   }
 
-  async function anularPendiente(tallerId: string, movId: string) {
+  async function anularMovimiento(
+    tallerId: string,
+    movId: string,
+    estado: "PENDIENTE" | "PAGADO"
+  ) {
     if (!token) return;
-    if (!confirm("¿Anular este ítem pendiente? Se borra de la cuenta corriente.")) return;
+    const msg =
+      estado === "PAGADO"
+        ? "¿Eliminar este ítem pagado de la cuenta corriente? Se borra el registro (sirve si se cargó mal)."
+        : "¿Anular este ítem pendiente? Se borra de la cuenta corriente.";
+    if (!confirm(msg)) return;
     try {
       await apiFetch(
         `/api/talleres-proveedores/${tallerId}/movimientos/${movId}`,
@@ -510,6 +518,33 @@ export function TalleresProveedoresPanel({
       await load();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo anular");
+    }
+  }
+
+  async function editarMonto(tallerId: string, movId: string, actual: number) {
+    if (!token) return;
+    const raw = window.prompt(
+      "Nuevo monto facturado:",
+      String(actual)
+    );
+    if (raw == null) return;
+    const monto = Number(String(raw).replace(",", "."));
+    if (!Number.isFinite(monto) || monto < 0) {
+      alert("Monto inválido");
+      return;
+    }
+    try {
+      await apiFetch(
+        `/api/talleres-proveedores/${tallerId}/movimientos/${movId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ montoFacturado: monto }),
+        },
+        token
+      );
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo editar");
     }
   }
 
@@ -913,15 +948,26 @@ export function TalleresProveedoresPanel({
                         </div>
                       </div>
                     </div>
-                    {m.estado === "PENDIENTE" ? (
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--vl-card-border)] px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-500/10 dark:text-red-400"
-                          onClick={() => void anularPendiente(s.id, m.id)}
-                        >
-                          Anular
-                        </button>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--vl-card-border)] px-3 py-2 text-xs font-semibold text-[var(--vl-heading)] hover:bg-slate-50 dark:hover:bg-slate-800"
+                        onClick={() =>
+                          void editarMonto(s.id, m.id, m.montoFacturado)
+                        }
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--vl-card-border)] px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                        onClick={() =>
+                          void anularMovimiento(s.id, m.id, m.estado)
+                        }
+                      >
+                        Eliminar
+                      </button>
+                      {m.estado === "PENDIENTE" ? (
                         <button
                           type="button"
                           className="inline-flex min-h-10 items-center justify-center rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500"
@@ -929,16 +975,16 @@ export function TalleresProveedoresPanel({
                         >
                           Marcar pagado
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3.5 py-2 text-xs font-semibold text-[var(--vl-heading)] hover:bg-slate-50 dark:hover:bg-slate-800"
-                        onClick={() => void revertirPago(s.id, m.id)}
-                      >
-                        Revertir pago
-                      </button>
-                    )}
+                      ) : (
+                        <button
+                          type="button"
+                          className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3.5 py-2 text-xs font-semibold text-[var(--vl-heading)] hover:bg-slate-50 dark:hover:bg-slate-800"
+                          onClick={() => void revertirPago(s.id, m.id)}
+                        >
+                          Revertir pago
+                        </button>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
