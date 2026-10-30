@@ -5,16 +5,18 @@ import {
   EMPTY_FLOTA_FILTERS,
   filterCamionetas,
 } from "../../components/FlotaUnitFilterBar";
-import { Download, Plus } from "../../components/icons";
+import { ChevronDown, Download, Plus } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
 import { FlotaImportPanel, type HojaFlota } from "./FlotaImportPanel";
 import {
+  ESTADOS_ENTIDAD,
   EstadoAcciones,
   EstadoBadge,
   EstadoChips,
   MOTIVO_UNIDAD_LABEL,
   contarEstados,
   estadoEmpresa,
+  estadoLabel,
   estadoUnidad,
   type EstadoEntidad,
   type FiltroEstado,
@@ -70,6 +72,60 @@ type DrawerOpen =
   | { tipo: "camioneta"; item: Camioneta }
   | { tipo: "chofer"; item: Chofer }
   | null;
+
+type AbmUnidadAdvFilters = {
+  empresaIds: string[];
+  marcas: string[];
+  modelos: string[];
+  anioDesde: string;
+  anioHasta: string;
+  tipoServicioIds: string[];
+  estados: EstadoEntidad[];
+};
+
+const EMPTY_ABM_UNIDAD_ADV: AbmUnidadAdvFilters = {
+  empresaIds: [],
+  marcas: [],
+  modelos: [],
+  anioDesde: "",
+  anioHasta: "",
+  tipoServicioIds: [],
+  estados: [],
+};
+
+const ABM_UNIDAD_ADV_KEY = "vl.abm.unidades.advFilters.v1";
+const ABM_UNIDAD_ADV_OPEN_KEY = "vl.abm.unidades.advOpen.v1";
+
+function loadAbmUnidadAdv(): AbmUnidadAdvFilters {
+  try {
+    const raw = localStorage.getItem(ABM_UNIDAD_ADV_KEY);
+    if (!raw) return EMPTY_ABM_UNIDAD_ADV;
+    const parsed = JSON.parse(raw) as Partial<AbmUnidadAdvFilters>;
+    return {
+      ...EMPTY_ABM_UNIDAD_ADV,
+      ...parsed,
+      empresaIds: Array.isArray(parsed.empresaIds) ? parsed.empresaIds : [],
+      marcas: Array.isArray(parsed.marcas) ? parsed.marcas : [],
+      modelos: Array.isArray(parsed.modelos) ? parsed.modelos : [],
+      tipoServicioIds: Array.isArray(parsed.tipoServicioIds)
+        ? parsed.tipoServicioIds
+        : [],
+      estados: Array.isArray(parsed.estados) ? parsed.estados : [],
+      anioDesde: String(parsed.anioDesde ?? ""),
+      anioHasta: String(parsed.anioHasta ?? ""),
+    };
+  } catch {
+    return EMPTY_ABM_UNIDAD_ADV;
+  }
+}
+
+function toggleStr(arr: string[], v: string) {
+  return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
+}
+
+function toggleEstado(arr: EstadoEntidad[], v: EstadoEntidad): EstadoEntidad[] {
+  return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
+}
 
 type CreateKind =
   | "camioneta"
@@ -154,6 +210,16 @@ export function M5FichaPage() {
   const [estadoFiltro, setEstadoFiltro] = useState<
     Record<"empresas" | "chofer" | "camioneta", FiltroEstado>
   >({ empresas: "TODOS", chofer: "TODOS", camioneta: "TODOS" });
+  const [advUnidadOpen, setAdvUnidadOpen] = useState(() => {
+    try {
+      return localStorage.getItem(ABM_UNIDAD_ADV_OPEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [advUnidad, setAdvUnidad] = useState<AbmUnidadAdvFilters>(() =>
+    loadAbmUnidadAdv()
+  );
   const [exportando, setExportando] = useState(false);
   const [form, setForm] = useState<
     | null
@@ -389,6 +455,22 @@ export function M5FichaPage() {
   useEffect(() => {
     setAbmQuery("");
   }, [tab]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ABM_UNIDAD_ADV_KEY, JSON.stringify(advUnidad));
+    } catch {
+      /* ignore */
+    }
+  }, [advUnidad]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ABM_UNIDAD_ADV_OPEN_KEY, advUnidadOpen ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [advUnidadOpen]);
 
   function openCreate(kind: NonNullable<typeof form>["kind"]) {
     setFormError(null);
@@ -963,22 +1045,87 @@ export function M5FichaPage() {
 
   const camionetasDeEmpresa = useMemo(() => {
     const list = Array.isArray(camionetas) ? camionetas : [];
+    if (advUnidad.empresaIds.length > 0) {
+      const ids = new Set(advUnidad.empresaIds);
+      return list.filter((c) => c.empresaId != null && ids.has(c.empresaId));
+    }
     return empresaFiltro ? list.filter((c) => c.empresaId === empresaFiltro) : list;
-  }, [camionetas, empresaFiltro]);
+  }, [camionetas, empresaFiltro, advUnidad.empresaIds]);
 
   const unidadCounts = useMemo(
     () => contarEstados(camionetasDeEmpresa, estadoUnidad),
     [camionetasDeEmpresa]
   );
 
+  const marcasUnidadOpts = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of Array.isArray(camionetas) ? camionetas : []) {
+      const m = (c.marca ?? "").trim();
+      if (m) set.add(m);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, "es"));
+  }, [camionetas]);
+
+  const modelosUnidadOpts = useMemo(() => {
+    const set = new Set<string>();
+    const marcas = new Set(advUnidad.marcas);
+    for (const c of Array.isArray(camionetas) ? camionetas : []) {
+      if (marcas.size > 0 && !marcas.has((c.marca ?? "").trim())) continue;
+      const m = (c.modelo ?? "").trim();
+      if (m) set.add(m);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, "es"));
+  }, [camionetas, advUnidad.marcas]);
+
+  const advUnidadActivo = useMemo(() => {
+    const a = advUnidad;
+    return (
+      a.empresaIds.length +
+        a.marcas.length +
+        a.modelos.length +
+        a.tipoServicioIds.length +
+        a.estados.length >
+        0 ||
+      Boolean(a.anioDesde.trim() || a.anioHasta.trim())
+    );
+  }, [advUnidad]);
+
   const camionetasFiltradas = useMemo(() => {
-    const list = camionetasDeEmpresa;
-    const visibles =
-      estadoFiltro.camioneta === "TODOS"
-        ? list
-        : list.filter((c) => estadoUnidad(c) === estadoFiltro.camioneta);
-    return filterCamionetas(visibles, { ...EMPTY_FLOTA_FILTERS, query: abmQuery });
-  }, [camionetasDeEmpresa, abmQuery, estadoFiltro.camioneta]);
+    let list = camionetasDeEmpresa;
+    if (advUnidad.marcas.length > 0) {
+      const set = new Set(advUnidad.marcas);
+      list = list.filter((c) => set.has((c.marca ?? "").trim()));
+    }
+    if (advUnidad.modelos.length > 0) {
+      const set = new Set(advUnidad.modelos);
+      list = list.filter((c) => set.has((c.modelo ?? "").trim()));
+    }
+    const desde = Number.parseInt(advUnidad.anioDesde.trim(), 10);
+    const hasta = Number.parseInt(advUnidad.anioHasta.trim(), 10);
+    if (Number.isFinite(desde)) {
+      list = list.filter((c) => c.anio != null && c.anio >= desde);
+    }
+    if (Number.isFinite(hasta)) {
+      list = list.filter((c) => c.anio != null && c.anio <= hasta);
+    }
+    if (advUnidad.tipoServicioIds.length > 0) {
+      const set = new Set(advUnidad.tipoServicioIds);
+      list = list.filter(
+        (c) => c.tipoServicioId != null && set.has(c.tipoServicioId)
+      );
+    }
+    const estados =
+      advUnidad.estados.length > 0
+        ? advUnidad.estados
+        : estadoFiltro.camioneta === "TODOS"
+          ? null
+          : [estadoFiltro.camioneta];
+    if (estados) {
+      const set = new Set(estados);
+      list = list.filter((c) => set.has(estadoUnidad(c)));
+    }
+    return filterCamionetas(list, { ...EMPTY_FLOTA_FILTERS, query: abmQuery });
+  }, [camionetasDeEmpresa, abmQuery, estadoFiltro.camioneta, advUnidad]);
 
   const empresaCounts = useMemo(
     () => contarEstados(Array.isArray(empresas) ? empresas : [], estadoEmpresa),
@@ -1329,7 +1476,7 @@ export function M5FichaPage() {
               className="min-h-11 w-full min-w-0 flex-1 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080] sm:max-w-md"
             />
           )}
-          {(tab === "camioneta" || tab === "chofer") && (
+          {tab === "chofer" && (
             <select
               value={empresaFiltro}
               onChange={(e) => setEmpresaFiltro(e.target.value)}
@@ -1368,11 +1515,261 @@ export function M5FichaPage() {
         <>
           <div className="mb-4 space-y-3">
             <EstadoChips
-              value={estadoFiltro.camioneta}
-              onChange={(v) => setEstadoFiltro((p) => ({ ...p, camioneta: v }))}
+              value={
+                advUnidad.estados.length > 0 ? "TODOS" : estadoFiltro.camioneta
+              }
+              onChange={(v) => {
+                setEstadoFiltro((p) => ({ ...p, camioneta: v }));
+                setAdvUnidad((a) => ({ ...a, estados: [] }));
+              }}
               counts={unidadCounts}
               sinInactivar
             />
+            <div className="overflow-hidden rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)]">
+              <button
+                type="button"
+                onClick={() => setAdvUnidadOpen((o) => !o)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-[var(--vl-text)]"
+              >
+                <span>
+                  Filtro avanzado
+                  {advUnidadActivo ? (
+                    <span className="ml-2 text-xs font-normal text-[var(--vl-text-muted)]">
+                      (activo)
+                    </span>
+                  ) : null}
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-[var(--vl-text-muted)] transition-transform ${
+                    advUnidadOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {advUnidadOpen && (
+                <div className="space-y-4 border-t border-[var(--vl-card-border)] px-3 py-3">
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">
+                      Empresa de transporte
+                    </p>
+                    <div className="flex max-h-36 flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
+                      {[...empresas]
+                        .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
+                        .map((e) => (
+                          <label
+                            key={e.id}
+                            className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={advUnidad.empresaIds.includes(e.id)}
+                              onChange={() =>
+                                setAdvUnidad((a) => ({
+                                  ...a,
+                                  empresaIds: toggleStr(a.empresaIds, e.id),
+                                }))
+                              }
+                            />
+                            {e.nombre}
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">
+                        Marca
+                      </p>
+                      <div className="flex max-h-28 flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
+                        {marcasUnidadOpts.length === 0 ? (
+                          <span className="text-xs text-[var(--vl-text-muted)]">
+                            Sin marcas
+                          </span>
+                        ) : (
+                          marcasUnidadOpts.map((m) => (
+                            <label
+                              key={m}
+                              className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={advUnidad.marcas.includes(m)}
+                                onChange={() =>
+                                  setAdvUnidad((a) => {
+                                    const marcas = toggleStr(a.marcas, m);
+                                    if (marcas.length === 0) {
+                                      return { ...a, marcas, modelos: a.modelos };
+                                    }
+                                    const allowed = new Set(
+                                      (Array.isArray(camionetas)
+                                        ? camionetas
+                                        : []
+                                      )
+                                        .filter((c) =>
+                                          marcas.includes((c.marca ?? "").trim())
+                                        )
+                                        .map((c) => (c.modelo ?? "").trim())
+                                        .filter(Boolean)
+                                    );
+                                    return {
+                                      ...a,
+                                      marcas,
+                                      modelos: a.modelos.filter((mod) =>
+                                        allowed.has(mod)
+                                      ),
+                                    };
+                                  })
+                                }
+                              />
+                              {m}
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">
+                        Modelo
+                      </p>
+                      <div className="flex max-h-28 flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
+                        {modelosUnidadOpts.length === 0 ? (
+                          <span className="text-xs text-[var(--vl-text-muted)]">
+                            Sin modelos
+                          </span>
+                        ) : (
+                          modelosUnidadOpts.map((m) => (
+                            <label
+                              key={m}
+                              className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={advUnidad.modelos.includes(m)}
+                                onChange={() =>
+                                  setAdvUnidad((a) => ({
+                                    ...a,
+                                    modelos: toggleStr(a.modelos, m),
+                                  }))
+                                }
+                              />
+                              {m}
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <label className="text-xs text-[var(--vl-text)]">
+                      <span className="mb-1 block font-semibold text-[var(--vl-text-muted)]">
+                        Año desde
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        placeholder="Ej. 2015"
+                        value={advUnidad.anioDesde}
+                        onChange={(e) =>
+                          setAdvUnidad((a) => ({
+                            ...a,
+                            anioDesde: e.target.value,
+                          }))
+                        }
+                        className="min-h-9 w-28 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-bg)] px-2 py-1.5 text-sm outline-none focus:border-[#1e4080]"
+                      />
+                    </label>
+                    <label className="text-xs text-[var(--vl-text)]">
+                      <span className="mb-1 block font-semibold text-[var(--vl-text-muted)]">
+                        Año hasta
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        placeholder="Ej. 2024"
+                        value={advUnidad.anioHasta}
+                        onChange={(e) =>
+                          setAdvUnidad((a) => ({
+                            ...a,
+                            anioHasta: e.target.value,
+                          }))
+                        }
+                        className="min-h-9 w-28 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-bg)] px-2 py-1.5 text-sm outline-none focus:border-[#1e4080]"
+                      />
+                    </label>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">
+                      Tipo de frío
+                    </p>
+                    <div className="flex max-h-28 flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
+                      {(Array.isArray(tiposServicio) ? tiposServicio : [])
+                        .filter((t) => t.activo !== false)
+                        .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
+                        .map((t) => (
+                          <label
+                            key={t.id}
+                            className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={advUnidad.tipoServicioIds.includes(t.id)}
+                              onChange={() =>
+                                setAdvUnidad((a) => ({
+                                  ...a,
+                                  tipoServicioIds: toggleStr(
+                                    a.tipoServicioIds,
+                                    t.id
+                                  ),
+                                }))
+                              }
+                            />
+                            {t.nombre}
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">
+                      Estado
+                    </p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                      {ESTADOS_ENTIDAD.filter(
+                        (e) => !(e === "INACTIVO" && unidadCounts.INACTIVO === 0)
+                      ).map((e) => (
+                        <label
+                          key={e}
+                          className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={advUnidad.estados.includes(e)}
+                            onChange={() => {
+                              setAdvUnidad((a) => ({
+                                ...a,
+                                estados: toggleEstado(a.estados, e),
+                              }));
+                              setEstadoFiltro((p) => ({
+                                ...p,
+                                camioneta: "TODOS",
+                              }));
+                            }}
+                          />
+                          {estadoLabel(e)}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {advUnidadActivo && (
+                    <button
+                      type="button"
+                      onClick={() => setAdvUnidad(EMPTY_ABM_UNIDAD_ADV)}
+                      className="text-xs font-medium text-[#1e4080] underline-offset-2 hover:underline"
+                    >
+                      Limpiar filtros avanzados
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             <p className="text-[11px] text-[var(--vl-text-muted)]">
               Mostrando {camionetasFiltradas.length} de {unidadCounts.TODOS}
             </p>
@@ -1412,8 +1809,10 @@ export function M5FichaPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm text-[var(--vl-text)]">{empresa}</div>
-                        <div className="mt-0.5 text-lg font-bold leading-tight text-[var(--vl-heading)]">
+                        <div className="text-xs text-[var(--vl-text-muted)]">
+                          {empresa}
+                        </div>
+                        <div className="mt-1 font-semibold text-[var(--vl-heading)]">
                           {c.patente}
                         </div>
                         <div
@@ -1444,7 +1843,7 @@ export function M5FichaPage() {
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") openEditCamioneta(c);
                               }}
-                              className="text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+                              className="text-slate-400 underline-offset-2 hover:text-slate-700 hover:underline"
                             >
                               Editar
                             </span>
@@ -1463,7 +1862,7 @@ export function M5FichaPage() {
                           )}
                         </div>
                       </div>
-                      <div className="max-w-[48%] shrink-0 text-right text-sm text-[var(--vl-text)]">
+                      <div className="max-w-[48%] shrink-0 text-right text-xs text-[var(--vl-text-muted)]">
                         <div>{modeloAnio || "—"}</div>
                         <div className="mt-0.5">{frioLine || "—"}</div>
                       </div>
