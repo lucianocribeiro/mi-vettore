@@ -221,6 +221,8 @@ export function M7TalleresPage() {
   const [pageTab, setPageTab] = useState<"ots" | "proveedores" | "cc">("ots");
   const [ots, setOts] = useState<OrdenTrabajo[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** En celular: listado o detalle a pantalla completa (evita abrir abajo de 1000 OTs). */
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -521,7 +523,10 @@ export function M7TalleresPage() {
     try {
       await apiFetch(`/api/talleres/${id}`, { method: "DELETE" }, token);
       setOts((prev) => prev.filter((o) => o.id !== id));
-      if (selectedId === id) setSelectedId(null);
+      if (selectedId === id) {
+        setSelectedId(null);
+        setMobileDetailOpen(false);
+      }
       setConfirmEliminarOt(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo eliminar la OT");
@@ -620,7 +625,9 @@ export function M7TalleresPage() {
           {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
           {!loading && (
             <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-              <div className="space-y-3">
+              <div
+                className={`space-y-3 ${mobileDetailOpen ? "hidden lg:block" : ""}`}
+              >
                 <div className="space-y-2 rounded-lg border border-[var(--vl-card-border)] p-2">
                   <p className="px-0.5 text-[10px] text-[var(--vl-text-muted)]">
                     {otCounts.total} órdenes
@@ -751,7 +758,11 @@ export function M7TalleresPage() {
                   >
                     <button
                       type="button"
-                      onClick={() => setSelectedId(o.id)}
+                      onClick={() => {
+                        setSelectedId(o.id);
+                        setMobileDetailOpen(true);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
                       className="w-full text-left"
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -786,7 +797,19 @@ export function M7TalleresPage() {
               </div>
 
               {ot && (
-                <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5">
+                <div
+                  className={`rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-5 ${
+                    mobileDetailOpen ? "" : "hidden lg:block"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setMobileDetailOpen(false)}
+                    className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-[var(--vl-heading)] lg:hidden"
+                  >
+                    <ChevronLeft size={18} />
+                    Volver al listado
+                  </button>
                   <div className="text-xs text-[var(--vl-text-muted)]">
                     {ot.solicitud.camioneta.patente}
                     {ot.solicitud.chofer ? ` · ${ot.solicitud.chofer.nombre}` : ""}
@@ -1435,6 +1458,8 @@ export function M7TalleresPage() {
           onCreated={(created) => {
             setOts((prev) => [created, ...prev]);
             setSelectedId(created.id);
+            setMobileDetailOpen(true);
+            window.scrollTo({ top: 0, behavior: "smooth" });
             setShowForm(false);
           }}
         />
