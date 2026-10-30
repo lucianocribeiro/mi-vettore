@@ -112,17 +112,24 @@ export async function resyncMantenimientoDeOt(tx: Tx, otId: string) {
       solicitud: { select: { camionetaId: true } },
       tallerProveedor: { select: { razonSocial: true } },
       items: { select: { categoriaDiagnosticoId: true } },
+      diagnosticos: { select: { categoriaId: true }, orderBy: { createdAt: "asc" } },
     },
   });
   if (!ot?.cerradaAt) return;
   await tx.registroMantenimiento.deleteMany({ where: { otId } });
+  const catOt =
+    ot.diagnosticos[0]?.categoriaId ??
+    ot.items.find((i) => i.categoriaDiagnosticoId)?.categoriaDiagnosticoId ??
+    null;
   await syncMantenimientoDesdeOt(tx, {
     camionetaId: ot.solicitud.camionetaId,
     otId: ot.id,
     numeroOT: ot.numeroOT,
     tallerNombre: ot.tallerAsignado ?? ot.tallerProveedor?.razonSocial ?? null,
     kmActual: ot.kmAlMomento,
-    itemCategoriaIds: ot.items.map((i) => i.categoriaDiagnosticoId),
+    itemCategoriaIds: catOt
+      ? [catOt]
+      : ot.items.map((i) => i.categoriaDiagnosticoId),
     fecha: ot.cerradaAt,
   });
 }

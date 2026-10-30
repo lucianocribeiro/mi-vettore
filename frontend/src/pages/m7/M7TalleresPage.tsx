@@ -155,11 +155,44 @@ type OrdenTrabajo = {
   items?: OtItem[];
   facturas?: OtFactura[];
   presupuestos?: { id: string; taller: string; monto: number; descripcion?: string | null; archivo: string | null }[];
+  /** Concepto N1/N2/N3 a nivel OT (no por ítem). */
+  diagnosticos?: {
+    id: string;
+    categoriaId: string;
+    categoria?: {
+      id: string;
+      nombre: string;
+      nivel: number;
+      padreId: string | null;
+    } | null;
+  }[];
   totales?: { presupuesto: number; facturado: number; presupuestoTodos?: number };
   resumenChofer?: { presupuestoTotal: number; gastoReal: number };
   comentarios?: OtComentario[];
   auditorias?: { id: string; accion: string; createdAt: string; user?: { nombre: string | null; email: string } | null }[];
 };
+
+/** Hoja N3 de la OT; fallback a ítems (datos viejos). */
+function otConceptoId(ot: OrdenTrabajo): string | null {
+  const fromOt =
+    ot.diagnosticos?.[0]?.categoriaId ??
+    ot.diagnosticos?.[0]?.categoria?.id ??
+    null;
+  if (fromOt) return fromOt;
+  const items = ot.items ?? [];
+  const gasto = items.filter((i) => i.tipo === "FACTURA" || i.tipo === "RENDICION");
+  const pool =
+    gasto.length > 0
+      ? gasto
+      : items.filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado).length > 0
+        ? items.filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado)
+        : items.filter((i) => i.tipo === "PRESUPUESTO");
+  for (const i of pool) {
+    const id = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id;
+    if (id) return id;
+  }
+  return null;
+}
 
 function canCreateSolicitud(rol?: Role | null) {
   return rol === "CHOFER" || rol === "EMPRESA" || isInternalOps(rol);
@@ -1716,16 +1749,9 @@ export function M7TalleresPage() {
                 disabled={busy}
                 onClick={() => {
                   void (async () => {
-                    const faltan = (ot.items ?? []).filter((i) => {
-                      const esGasto =
-                        i.tipo === "FACTURA" || i.tipo === "RENDICION";
-                      const esAprobado =
-                        i.tipo === "PRESUPUESTO" && i.aprobado;
-                      return (esGasto || esAprobado) && !i.categoriaDiagnosticoId;
-                    });
-                    if (faltan.length > 0) {
+                    if (!otConceptoId(ot)) {
                       setError(
-                        "Nivel 1, 2 y 3 obligatorio: completá el concepto en ajuste antes de cerrar."
+                        "Nivel 1, 2 y 3 obligatorio: completá el arbolito de la OT antes de cerrar."
                       );
                       setConfirmCerrar(false);
                       return;
@@ -2006,12 +2032,10 @@ function pathConcepto(
   return chain.join(" › ");
 }
 
-/** Resumen de niveles 1-2-3 (siempre visible en la OT; editable si la OT ya está cerrada). */
+/** Un solo arbolito N1/N2/N3 por OT — nunca por ítem/proveedor. */
 function CierreConceptosResumen({
   ot,
   token,
-  ocultarMontos,
-  compact,
   editable,
   onSaved,
   onError,
@@ -2027,7 +2051,7 @@ function CierreConceptosResumen({
   className?: string;
 }) {
   const [cats, setCats] = useState<CatDiag[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, string | null>>({});
+  const serverId = otConceptoId(ot);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     void apiFetch<CatDiag[]>("/api/diagnostico/categorias", {}, token)
@@ -2035,67 +2059,33 @@ function CierreConceptosResumen({
       .catch(() => setCats([]));
   }, [token]);
 
-  const all = ot.items ?? [];
-  const gasto = all.filter((i) => i.tipo === "FACTURA" || i.tipo === "RENDICION");
-  const aprobados = all.filter((i) => i.tipo === "PRESUPUESTO" && !!i.aprobado);
-  const presupuestos = all.filter((i) => i.tipo === "PRESUPUESTO");
-  const items =
-    gasto.length > 0
-      ? gasto
-      : aprobados.length > 0
-        ? aprobados
-        : presupuestos;
-  const faltan = items.filter((i) => {
-    const draft = drafts[i.id];
-    const id =
-      draft !== undefined
-        ? draft
-        : i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
-    return !id;
-  });
-  const dirty = items.some((i) => {
-    if (drafts[i.id] === undefined) return false;
-    const server = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
-    return drafts[i.id] !== server;
-  });
+  const path = pathConcepto(cats, serverId);
+  const falta = !serverId;
 
-  if (items.length === 0) {
-    return (
-      <div className={className}>
-        <div className="text-xs font-semibold text-[var(--vl-heading)]">
-          Niveles 1 / 2 / 3
-        </div>
-        <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-          Todavía no hay ítems para clasificar. Cargá el gasto o el presupuesto
-          y elegí el arbolito acá.
-        </p>
-      </div>
-    );
-  }
-
-  async function guardar() {
-    if (!editable || !dirty || saving) return;
+  async function guardarLeaf(leafId: string | null) {
+    if (!editable || saving) return;
+    if (!leafId) return;
+    if (leafId === serverId) return;
     setSaving(true);
     onError?.(null);
     try {
-      let updated: OrdenTrabajo | null = null;
-      for (const i of items) {
-        if (drafts[i.id] === undefined) continue;
-        const server = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
-        if (drafts[i.id] === server) continue;
-        updated = await apiFetch<OrdenTrabajo>(
-          `/api/talleres/${ot.id}/items/${i.id}`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({ categoriaDiagnosticoId: drafts[i.id] }),
-          },
-          token
-        );
-      }
-      if (updated) {
-        onSaved?.(updated);
-        setDrafts({});
-      }
+      const partial = await apiFetch<{
+        id: string;
+        diagnosticos: OrdenTrabajo["diagnosticos"];
+        items?: OtItem[];
+      }>(
+        `/api/diagnostico/ot/${ot.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ categoriaId: leafId }),
+        },
+        token
+      );
+      onSaved?.({
+        ...ot,
+        diagnosticos: partial.diagnosticos,
+        items: partial.items ?? ot.items,
+      });
     } catch (err) {
       onError?.(
         err instanceof ApiError ? err.message : "No se pudieron guardar los niveles"
@@ -2107,73 +2097,37 @@ function CierreConceptosResumen({
 
   return (
     <div className={className}>
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs font-semibold text-[var(--vl-heading)]">
-          Niveles 1 / 2 / 3
-        </div>
-        {editable && dirty && (
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void guardar()}
-            className="rounded-lg border-2 border-[#1e4080] bg-[#1e4080] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
-          >
-            {saving ? "Guardando…" : "Guardar niveles"}
-          </button>
-        )}
+      <div className="mb-1 text-xs font-semibold text-[var(--vl-heading)]">
+        Concepto de la OT · Niveles 1 / 2 / 3
       </div>
-      {faltan.length > 0 && (
+      <p className="mb-2 text-[11px] text-[var(--vl-text-muted)]">
+        Un solo arbolito para toda la orden (no se elige por ítem ni por
+        proveedor).
+      </p>
+      {falta && (
         <p className="mb-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-          Falta cargar concepto en {faltan.length} ítem
-          {faltan.length === 1 ? "" : "s"}. Completá los 3 niveles abajo
-          {editable ? " y guardá." : "."}
+          Obligatorio: completá los 3 niveles.
         </p>
       )}
-      <ul
-        className={`space-y-1.5 rounded-lg border border-[var(--vl-card-border)] p-3 text-xs ${
-          compact ? "max-h-40 overflow-y-auto" : ""
-        }`}
-      >
-        {items.map((i) => {
-          const valueId =
-            drafts[i.id] !== undefined
-              ? drafts[i.id]
-              : i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
-          const path = pathConcepto(cats, valueId);
-          return (
-            <li
-              key={i.id}
-              className="border-b border-[var(--vl-card-border)] pb-1.5 last:border-0 last:pb-0"
-            >
-              <div className="font-medium text-[var(--vl-heading)]">
-                {i.tallerNombre ? `${i.tallerNombre}: ` : ""}
-                {i.descripcion}
-                {i.adicionalAjuste ? " · adicional" : ""}
-              </div>
-              {/* Arbolito de niveles: siempre visible. */}
-              <div className="mt-1.5">
-                <ConceptoCascada
-                  cats={cats}
-                  valueId={valueId}
-                  required
-                  disabled={!editable}
-                  onPick={(id) =>
-                    setDrafts((prev) => ({ ...prev, [i.id]: id }))
-                  }
-                />
-              </div>
-              {path && (
-                <div className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
-                  {path}
-                </div>
-              )}
-              {!ocultarMontos && !compact && (
-                <div className="mt-0.5 font-medium">{money(i.importe)}</div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <div className="rounded-lg border border-[var(--vl-card-border)] p-3 text-xs">
+        <ConceptoCascada
+          cats={cats}
+          valueId={serverId}
+          required
+          disabled={!editable || saving}
+          onPick={(id) => void guardarLeaf(id)}
+        />
+        {saving && (
+          <div className="mt-1 text-[10px] text-[var(--vl-text-muted)]">
+            Guardando…
+          </div>
+        )}
+        {path && !saving && (
+          <div className="mt-1.5 text-[10px] text-[var(--vl-text-muted)]">
+            {path}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -2326,28 +2280,18 @@ function AjusteImportesChecklist({
       ? ot.valorAprobado
       : itemsBase.reduce((a, i) => a + (i.importeOriginal ?? i.importe), 0);
   const [cats, setCats] = useState<CatDiag[]>([]);
-  const [conceptoDrafts, setConceptoDrafts] = useState<Record<string, string | null>>({});
+  const serverConceptoId = otConceptoId(ot);
+  const [conceptoDraft, setConceptoDraft] = useState<string | null | undefined>(
+    undefined
+  );
   const [showAdic, setShowAdic] = useState(false);
   const [adicDesc, setAdicDesc] = useState("");
   const [adicImp, setAdicImp] = useState("");
   const [adicTallerId, setAdicTallerId] = useState("");
-  const [adicConceptoId, setAdicConceptoId] = useState<string | null>(null);
   const [adicSaving, setAdicSaving] = useState(false);
 
-  function conceptoActual(i: OtItem) {
-    return conceptoDrafts[i.id] !== undefined
-      ? conceptoDrafts[i.id]
-      : i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
-  }
-
-  /** Concepto general: de los ítems no adicionales (con drafts). */
-  const sharedConceptoId = (() => {
-    const pool = itemsBase.length > 0 ? itemsBase : items;
-    const ids = pool.map(conceptoActual).filter(Boolean) as string[];
-    if (ids.length === 0) return null;
-    const first = ids[0];
-    return ids.every((id) => id === first) ? first : null;
-  })();
+  const sharedConceptoId =
+    conceptoDraft !== undefined ? conceptoDraft : serverConceptoId;
 
   useEffect(() => {
     void apiFetch<CatDiag[]>("/api/diagnostico/categorias", {}, token)
@@ -2356,16 +2300,11 @@ function AjusteImportesChecklist({
   }, [token]);
 
   useEffect(() => {
-    if (showAdic && adicConceptoId == null && sharedConceptoId) {
-      setAdicConceptoId(sharedConceptoId);
-    }
-  }, [showAdic, sharedConceptoId, adicConceptoId]);
+    setConceptoDraft(undefined);
+  }, [ot.id, serverConceptoId]);
 
-  const conceptoDirty = items.some((i) => {
-    if (conceptoDrafts[i.id] === undefined) return false;
-    const server = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
-    return conceptoDrafts[i.id] !== server;
-  });
+  const conceptoDirty =
+    conceptoDraft !== undefined && conceptoDraft !== serverConceptoId;
   const adicFormDirty =
     !readOnly &&
     showAdic &&
@@ -2376,20 +2315,6 @@ function AjusteImportesChecklist({
     onDirtyChange?.(formDirty);
     return () => onDirtyChange?.(false);
   }, [formDirty, onDirtyChange]);
-
-  function setConceptoTodos(categoriaDiagnosticoId: string | null) {
-    if (readOnly || itemsBase.length === 0) return;
-    setConceptoDrafts((prev) => {
-      const next = { ...prev };
-      for (const i of itemsBase) next[i.id] = categoriaDiagnosticoId;
-      return next;
-    });
-  }
-
-  function setConceptoItem(id: string, categoriaDiagnosticoId: string | null) {
-    if (readOnly) return;
-    setConceptoDrafts((prev) => ({ ...prev, [id]: categoriaDiagnosticoId }));
-  }
 
   async function agregarAdicional(): Promise<boolean> {
     if (readOnly || adicSaving) return false;
@@ -2403,7 +2328,7 @@ function AjusteImportesChecklist({
           descripcion: adicDesc.trim(),
           importe: Number(adicImp),
           tallerProveedorId: adicTallerId || undefined,
-          categoriaDiagnosticoId: adicConceptoId || sharedConceptoId || undefined,
+          categoriaDiagnosticoId: sharedConceptoId || undefined,
           clasificacion: "OTRO",
           clasificacionOtro: "Reparación adicional",
         }),
@@ -2412,7 +2337,6 @@ function AjusteImportesChecklist({
       setAdicDesc("");
       setAdicImp("");
       setAdicTallerId("");
-      setAdicConceptoId(sharedConceptoId);
       setShowAdic(false);
       return true;
     } catch {
@@ -2425,19 +2349,25 @@ function AjusteImportesChecklist({
   async function persistirConceptosYAdic(): Promise<boolean> {
     if (readOnly) return true;
     try {
-      let last: OrdenTrabajo | null = null;
-      for (const i of items) {
-        if (conceptoDrafts[i.id] === undefined) continue;
-        const server = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
-        if (conceptoDrafts[i.id] === server) continue;
-        last = await apiFetch<OrdenTrabajo>(`/api/talleres/${ot.id}/items/${i.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ categoriaDiagnosticoId: conceptoDrafts[i.id] }),
-        }, token);
-      }
-      if (last) {
-        onSaved(last);
-        setConceptoDrafts({});
+      if (conceptoDirty && sharedConceptoId) {
+        const partial = await apiFetch<{
+          id: string;
+          diagnosticos: OrdenTrabajo["diagnosticos"];
+          items?: OtItem[];
+        }>(
+          `/api/diagnostico/ot/${ot.id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({ categoriaId: sharedConceptoId }),
+          },
+          token
+        );
+        onSaved({
+          ...ot,
+          diagnosticos: partial.diagnosticos,
+          items: partial.items ?? ot.items,
+        });
+        setConceptoDraft(undefined);
       }
       if (adicFormDirty) {
         const ok = await agregarAdicional();
@@ -2493,7 +2423,7 @@ function AjusteImportesChecklist({
       <p className="mb-2 text-xs text-[var(--vl-text-muted)]">
         {ocultarMontos
           ? "Detalle de lo que se está editando (sin montos)."
-          : "Solo los tildados del paso anterior. El desglose de niveles aplica a todas las cotizaciones. Si agregás una reparación adicional, elegí el nivel de esa línea."}
+          : "Solo los tildados del paso anterior. Los niveles 1/2/3 son de la OT (un solo concepto para toda la orden)."}
       </p>
 
       {!ocultarMontos && (
@@ -2506,10 +2436,7 @@ function AjusteImportesChecklist({
             <button
               type="button"
               className="inline-flex min-h-10 w-full items-center justify-center rounded-lg border-2 border-dashed border-[#1e4080]/50 bg-[#1e4080]/5 px-3 text-xs font-semibold text-[#1e4080] dark:text-sky-300"
-              onClick={() => {
-                setAdicConceptoId(sharedConceptoId);
-                setShowAdic(true);
-              }}
+              onClick={() => setShowAdic(true)}
             >
               + Agregar ítem fuera de presupuesto
             </button>
@@ -2517,7 +2444,8 @@ function AjusteImportesChecklist({
             <div className="rounded-lg border border-[var(--vl-card-border)] p-3 space-y-2">
               <div className="text-xs font-semibold">Ítem fuera de presupuesto</div>
               <p className="text-[11px] text-[var(--vl-text-muted)]">
-                Se suma al gasto total. No modifica el presupuesto original.
+                Se suma al gasto total. No modifica el presupuesto original. Usa el
+                concepto de la OT.
               </p>
               <select
                 className="w-full rounded-md border p-2 text-sm"
@@ -2542,17 +2470,6 @@ function AjusteImportesChecklist({
                 value={adicImp}
                 onChange={(e) => setAdicImp(e.target.value)}
               />
-              <div>
-                <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
-                  Nivel 1 / 2 / 3 (obligatorio)
-                </div>
-                <ConceptoCascada
-                  cats={cats}
-                  valueId={adicConceptoId ?? sharedConceptoId}
-                  onPick={setAdicConceptoId}
-                  required
-                />
-              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -2578,16 +2495,22 @@ function AjusteImportesChecklist({
       {!ocultarMontos && (
         <div className="mb-3 rounded-lg border border-[var(--vl-card-border)] p-3">
           <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
-            Concepto general · Nivel 1 / 2 / 3 (obligatorio)
+            Concepto de la OT · Nivel 1 / 2 / 3 (obligatorio)
           </div>
           <ConceptoCascada
             cats={cats}
             valueId={sharedConceptoId}
             required
+            disabled={readOnly}
             onPick={(leafId) => {
-              if (!readOnly) setConceptoTodos(leafId);
+              if (!readOnly) setConceptoDraft(leafId);
             }}
           />
+          {!sharedConceptoId && (
+            <p className="mt-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              Obligatorio: completá los 3 niveles de la OT
+            </p>
+          )}
         </div>
       )}
       {itemsBase.length > 0 && (
@@ -2698,21 +2621,6 @@ function AjusteImportesChecklist({
                   )
                 )}
               </div>
-              {!ocultarMontos && (
-                <div className="mt-2">
-                  <div className="mb-1 text-[10px] font-semibold uppercase text-[var(--vl-text-muted)]">
-                    Nivel 1 / 2 / 3 (obligatorio)
-                  </div>
-                  <ConceptoCascada
-                    cats={cats}
-                    valueId={conceptoActual(i)}
-                    required
-                    onPick={(leafId) => {
-                      if (!readOnly) setConceptoItem(i.id, leafId);
-                    }}
-                  />
-                </div>
-              )}
             </div>
           ))}
         </div>

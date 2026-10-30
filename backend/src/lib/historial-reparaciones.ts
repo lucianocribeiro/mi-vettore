@@ -86,6 +86,11 @@ export async function queryHistorialReparaciones(opts: {
               },
             },
             tallerProveedor: true,
+            diagnosticos: {
+              select: { categoriaId: true },
+              orderBy: { createdAt: "asc" },
+              take: 1,
+            },
           },
         },
       },
@@ -103,7 +108,10 @@ export async function queryHistorialReparaciones(opts: {
   );
 
   const rows: HistorialReparacionRow[] = itemsFuente.map((i) => {
-    const catId = i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id;
+    const catId =
+      i.ot.diagnosticos?.[0]?.categoriaId ??
+      i.categoriaDiagnosticoId ??
+      i.categoriaDiagnostico?.id;
     const diag = diagnosticoPathFromId(cats, catId);
     const ot = i.ot;
     const fecha = i.fecha ?? ot.cerradaAt ?? ot.createdAt;

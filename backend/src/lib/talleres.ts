@@ -167,7 +167,7 @@ export function canCerrarOt(rol: Role): boolean {
   return canEditTalleres(rol);
 }
 
-/** Ítems de gasto/presupuesto que deben tener nivel 1-2-3 (concepto) antes del cierre. */
+/** Ítems de gasto/presupuesto relevantes al concepto de la OT (legado / sync). */
 export function itemsQueRequierenConcepto<
   T extends {
     tipo: string;
@@ -184,25 +184,37 @@ export function itemsQueRequierenConcepto<
   return list.filter((i) => i.tipo === "PRESUPUESTO");
 }
 
-/** null si OK; mensaje de error si faltan niveles. */
-export function errorConceptosObligatorios(
-  items: {
+/** Concepto (hoja N3) de la OT: diagnosticos OT primero; si no, legado en ítems. */
+export function otCategoriaDiagnosticoId(ot: {
+  diagnosticos?: { categoriaId: string }[] | null;
+  items?: {
+    tipo: string;
+    aprobado?: boolean | null;
+    categoriaDiagnosticoId?: string | null;
+  }[] | null;
+}): string | null {
+  const fromOt = ot.diagnosticos?.[0]?.categoriaId;
+  if (fromOt) return fromOt;
+  for (const i of itemsQueRequierenConcepto(ot.items ?? [])) {
+    if (i.categoriaDiagnosticoId) return i.categoriaDiagnosticoId;
+  }
+  return null;
+}
+
+/** null si OK; mensaje de error si falta el arbolito a nivel OT. */
+export function errorConceptosObligatorios(ot: {
+  diagnosticos?: { categoriaId: string }[] | null;
+  items?: {
     tipo: string;
     aprobado?: boolean | null;
     categoriaDiagnosticoId?: string | null;
     descripcion?: string | null;
-  }[]
-): string | null {
-  const faltan = itemsQueRequierenConcepto(items).filter(
-    (i) => !i.categoriaDiagnosticoId
-  );
-  if (faltan.length === 0) return null;
-  const nombres = faltan
-    .map((i) => i.descripcion?.trim() || "sin descripción")
-    .slice(0, 3)
-    .join("; ");
-  const mas = faltan.length > 3 ? ` (+${faltan.length - 3})` : "";
-  return `Nivel 1, 2 y 3 obligatorio en cada ítem. Falta en: ${nombres}${mas}`;
+  }[];
+}): string | null {
+  const req = itemsQueRequierenConcepto(ot.items ?? []);
+  if (req.length === 0) return null;
+  if (otCategoriaDiagnosticoId(ot)) return null;
+  return "Nivel 1, 2 y 3 obligatorio en la OT. Completá el arbolito (concepto) antes de continuar.";
 }
 
 /** Aviso al crear la solicitud: Pablo y Silvina (notif automática, reunión 12/08). */

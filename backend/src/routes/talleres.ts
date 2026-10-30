@@ -2872,7 +2872,7 @@ router.post("/:id/avanzar", authenticate, async (req: AuthedRequest, res) => {
 
     // 3 Ajuste → 4 Comparación/cierre.
     if (isAjusteStep(ot.currentStep)) {
-      const errConcepto = errorConceptosObligatorios(ot.items ?? []);
+      const errConcepto = errorConceptosObligatorios(ot);
       if (errConcepto) {
         res.status(400).json({ error: errConcepto });
         return;
@@ -2945,7 +2945,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
       return;
     }
 
-    const errConcepto = errorConceptosObligatorios(ot.items ?? []);
+    const errConcepto = errorConceptosObligatorios(ot);
     if (errConcepto) {
       res.status(400).json({ error: errConcepto });
       return;
@@ -3039,6 +3039,10 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         });
       }
 
+      const catOt =
+        ot.diagnosticos?.[0]?.categoriaId ??
+        ot.items.find((i) => i.categoriaDiagnosticoId)?.categoriaDiagnosticoId ??
+        null;
       await syncMantenimientoDesdeOt(tx, {
         camionetaId: ot.solicitud.camionetaId,
         otId: ot.id,
@@ -3046,7 +3050,9 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         tallerNombre:
           ot.tallerAsignado ?? ot.tallerProveedor?.razonSocial ?? null,
         kmActual: ot.kmAlMomento ?? ot.solicitud.camioneta.km ?? null,
-        itemCategoriaIds: ot.items.map((i) => i.categoriaDiagnosticoId),
+        itemCategoriaIds: catOt
+          ? [catOt]
+          : ot.items.map((i) => i.categoriaDiagnosticoId),
         fecha: new Date(),
       });
 

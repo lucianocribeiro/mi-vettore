@@ -4,6 +4,7 @@ import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { assertRoleOrOverride, parseOverrideComentario } from "../lib/ot-override.js";
 import { Role } from "@prisma/client";
+import { itemsQueRequierenConcepto } from "../lib/talleres.js";
 
 const router = Router();
 
@@ -103,7 +104,7 @@ router.delete("/categorias/:id", ...write, async (req, res) => {
   }
 });
 
-/** Asigna ítems del árbol a una OT (multi). Se carga en el cierre, cuando ya está el gasto. */
+/** Asigna el concepto (arbolito N1/N2/N3) a nivel OT — no por ítem. */
 router.put(
   "/ot/:otId",
   authenticate,
@@ -111,15 +112,10 @@ router.put(
     try {
       const ot = await prisma.ordenTrabajo.findUnique({
         where: { id: req.params.otId },
+        include: { items: true },
       });
       if (!ot) {
         res.status(404).json({ error: "OT no encontrada" });
-        return;
-      }
-      if (ot.currentStep < 6 && !ot.cerradaAt) {
-        res.status(400).json({
-          error: "El diagnóstico detallado se carga en el cierre, cuando ya está declarado el gasto",
-        });
         return;
       }
       const rol = req.user!.rol as Role;
@@ -140,26 +136,39 @@ router.put(
       }
 
       const ids = Array.isArray(req.body?.categoriaIds)
-        ? (req.body.categoriaIds as unknown[]).map(String)
-        : [];
+        ? (req.body.categoriaIds as unknown[]).map(String).filter(Boolean)
+        : req.body?.categoriaId
+          ? [String(req.body.categoriaId)]
+          : [];
       if (ids.length === 0) {
-        res.status(400).json({ error: "Indicá al menos una categoría" });
+        res.status(400).json({ error: "Indicá el concepto (nivel 3)" });
         return;
       }
-      const cats = await prisma.categoriaDiagnostico.findMany({
-        where: { id: { in: ids }, activo: true },
+      // Un solo concepto por OT (primera hoja).
+      const leafId = ids[0];
+      const cat = await prisma.categoriaDiagnostico.findFirst({
+        where: { id: leafId, activo: true },
       });
-      if (cats.length !== ids.length) {
-        res.status(400).json({ error: "Alguna categoría es inválida" });
+      if (!cat) {
+        res.status(400).json({ error: "Categoría inválida" });
+        return;
+      }
+      if (cat.nivel !== 3) {
+        res.status(400).json({ error: "Elegí el nivel 3 (hoja) del arbolito" });
         return;
       }
 
-      // createMany no aplica @default(cuid()) — hay que crear fila a fila.
       await prisma.$transaction(async (tx) => {
         await tx.ordenTrabajoDiagnostico.deleteMany({ where: { otId: ot.id } });
-        for (const categoriaId of ids) {
-          await tx.ordenTrabajoDiagnostico.create({
-            data: { otId: ot.id, categoriaId },
+        await tx.ordenTrabajoDiagnostico.create({
+          data: { otId: ot.id, categoriaId: leafId },
+        });
+        // Sync a ítems relevantes (historial / mantenimiento legado).
+        const need = itemsQueRequierenConcepto(ot.items ?? []);
+        for (const i of need) {
+          await tx.otItem.update({
+            where: { id: i.id },
+            data: { categoriaDiagnosticoId: leafId },
           });
         }
       });
@@ -169,8 +178,12 @@ router.put(
         include: { categoria: true },
         orderBy: { createdAt: "asc" },
       });
-      // Solo devolvemos diagnosticos: el front mergea sin pisar solicitud/presupuestos.
-      res.json({ id: ot.id, diagnosticos });
+      const items = await prisma.otItem.findMany({
+        where: { otId: ot.id },
+        include: { categoriaDiagnostico: true },
+        orderBy: { createdAt: "asc" },
+      });
+      res.json({ id: ot.id, diagnosticos, items });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Error al guardar diagnóstico" });
