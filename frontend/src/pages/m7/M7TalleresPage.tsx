@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useAuth } from "../../auth/AuthContext";
-import { Badge } from "../../components/Badge";
 import {
   Check,
   ChevronLeft,
@@ -134,6 +133,7 @@ type OrdenTrabajo = {
   trabajoDescripcion: string | null;
   sinPresupuesto?: boolean;
   cerradaAt: string | null;
+  createdAt?: string;
   /** Solo los pagos ya registrados (PAGADO) de la OT. */
   movimientos?: { id: string }[];
   solicitud: {
@@ -238,6 +238,81 @@ function money(n: number | null | undefined) {
   return `$${n.toLocaleString("es-AR")}`;
 }
 
+const MESES_CORTOS = [
+  "Ene",
+  "Feb",
+  "Mar",
+  "Abr",
+  "May",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dic",
+] as const;
+
+/** Fecha estilo mock cliente: 12-Oct-2026 */
+function fmtOtFechaLista(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.getDate()}-${MESES_CORTOS[d.getMonth()]}-${d.getFullYear()}`;
+}
+
+/** Ítems que alimentan el listado de proveedores/montos de la card. */
+function otItemsParaLista(ot: OrdenTrabajo): OtItem[] {
+  const all = ot.items ?? [];
+  const gasto = all.filter((i) => i.tipo === "FACTURA" || i.tipo === "RENDICION");
+  if (gasto.length > 0) return gasto;
+  const aprobados = all.filter((i) => i.tipo === "PRESUPUESTO" && i.aprobado);
+  if (aprobados.length > 0) return aprobados;
+  return all.filter((i) => i.tipo === "PRESUPUESTO");
+}
+
+function otTotalLista(ot: OrdenTrabajo): number | null {
+  const t = ot.totales;
+  if (t?.facturado && t.facturado > 0) return t.facturado;
+  if (ot.valorFinal != null && ot.valorFinal > 0) return ot.valorFinal;
+  if (t?.presupuesto && t.presupuesto > 0) return t.presupuesto;
+  if (ot.valorAprobado != null && ot.valorAprobado > 0) return ot.valorAprobado;
+  const sum = otItemsParaLista(ot).reduce(
+    (a, i) => a + (Number.isFinite(i.importe) ? i.importe : 0),
+    0
+  );
+  return sum > 0 ? sum : null;
+}
+
+function otPersonaLista(ot: OrdenTrabajo): string {
+  return (
+    ot.solicitud.chofer?.nombre?.trim() ||
+    otEmpresaNombre(ot) ||
+    "—"
+  );
+}
+
+function otNivelesLista(
+  ot: OrdenTrabajo,
+  cats: { id: string; nombre: string; padreId: string | null; nivel: number }[]
+): { n1: string; n2: string; n3: string } | null {
+  const leafId = otConceptoId(ot);
+  if (!leafId || cats.length === 0) return null;
+  const byId = new Map(cats.map((c) => [c.id, c]));
+  const chain: string[] = [];
+  let cur = byId.get(leafId);
+  while (cur) {
+    chain.unshift(cur.nombre);
+    cur = cur.padreId ? byId.get(cur.padreId) : undefined;
+  }
+  if (chain.length === 0) return null;
+  return {
+    n1: chain[0] ?? "",
+    n2: chain[1] ?? "",
+    n3: chain[2] ?? "",
+  };
+}
+
 export function M7TalleresPage() {
   const { token, user, contextoAcceso } = useAuth();
   const rol = user?.rol;
@@ -267,6 +342,9 @@ export function M7TalleresPage() {
   const [filtroDesde, setFiltroDesde] = useState("");
   const [filtroHasta, setFiltroHasta] = useState("");
   const [talleres, setTalleres] = useState<TallerProveedor[]>([]);
+  const [diagCats, setDiagCats] = useState<
+    { id: string; nombre: string; padreId: string | null; nivel: number }[]
+  >([]);
   const [exportando, setExportando] = useState(false);
   const [comentarioTexto, setComentarioTexto] = useState("");
   const [browseStep, setBrowseStep] = useState<number | null>(null);
@@ -310,6 +388,15 @@ export function M7TalleresPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!token) return;
+    void apiFetch<
+      { id: string; nombre: string; padreId: string | null; nivel: number }[]
+    >("/api/diagnostico/categorias", {}, token)
+      .then(setDiagCats)
+      .catch(() => setDiagCats([]));
+  }, [token]);
 
   useEffect(() => {
     setSelectedId(null);
@@ -784,7 +871,16 @@ export function M7TalleresPage() {
                     {filtroPatente || filtroEmpresa || filtroTaller ? " con ese filtro" : ""}.
                   </p>
                 )}
-                {visibleOts.map((o) => (
+                {visibleOts.map((o) => {
+                  const fechaIso = o.cerradaAt ?? o.createdAt;
+                  const proveedores = groupByTaller(otItemsParaLista(o));
+                  const total = otTotalLista(o);
+                  const niveles = otNivelesLista(o, diagCats);
+                  const paso = Math.min(
+                    (o.currentStep ?? 0) + 1,
+                    OT_STEPS.length
+                  );
+                  return (
                   <div
                     key={o.id}
                     className={`rounded-xl border p-3 ${selectedId === o.id ? "border-slate-900 dark:border-slate-100" : "border-[var(--vl-card-border)]"}`}
@@ -796,21 +892,76 @@ export function M7TalleresPage() {
                         setMobileDetailOpen(true);
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className="w-full text-left"
+                      className="w-full text-left text-xs text-[var(--vl-text)]"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-bold text-[var(--vl-heading)]">{o.numeroOT}</span>
-                        <Badge className="border-slate-200 bg-slate-100 text-slate-600">{o.solicitud.camioneta.patente}</Badge>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-bold text-[var(--vl-heading)]">
+                          {o.numeroOT}
+                        </span>
+                        <span className="text-sm font-bold text-[var(--vl-heading)]">
+                          {o.solicitud.camioneta.patente}
+                        </span>
                       </div>
-                      <div className="mt-1 text-xs text-[var(--vl-text-muted)]">{o.solicitud.falla}</div>
-                      {isOps(rol) && (
-                        <div className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
-                          {[otEmpresaNombre(o), otTallerNombre(o)].filter(Boolean).join(" · ") || "—"}
+                      <div className="mt-0.5 flex items-baseline justify-between gap-2 text-[var(--vl-text-muted)]">
+                        <span>{fmtOtFechaLista(fechaIso)}</span>
+                        <span>
+                          {o.kmAlMomento != null
+                            ? `${o.kmAlMomento.toLocaleString("es-AR")} km`
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex items-baseline justify-between gap-2">
+                        <span className="truncate">{otPersonaLista(o)}</span>
+                        {!ocultarMontos && (
+                          <span className="shrink-0 font-bold text-[var(--vl-heading)]">
+                            {money(total)}
+                          </span>
+                        )}
+                      </div>
+                      {proveedores.length > 0 && (
+                        <div className="mt-1.5 space-y-0.5 border-t border-[var(--vl-card-border)] pt-1.5">
+                          {proveedores.map((g) => (
+                            <div
+                              key={g.nombre}
+                              className="flex items-baseline justify-between gap-2 text-[var(--vl-text-muted)]"
+                            >
+                              <span className="min-w-0 truncate">{g.nombre}</span>
+                              {!ocultarMontos && (
+                                <span className="shrink-0 tabular-nums">
+                                  {g.subtotal.toLocaleString("es-AR")}
+                                </span>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       )}
-                      <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                        <span>{o.cerradaAt ? "Cerrada" : OT_STEPS[o.currentStep]?.label}</span>
-                        {o.urgente && <span className="rounded bg-red-100 px-1.5 text-red-800 dark:bg-red-950 dark:text-red-200">Urgente</span>}
+                      {(niveles?.n1 || niveles?.n2 || niveles?.n3) && (
+                        <div className="mt-1.5 space-y-0.5 text-[11px] text-[var(--vl-text-muted)]">
+                          <div>
+                            {[niveles.n1, niveles.n2, niveles.n3]
+                              .filter(Boolean)
+                              .join(" / ")}
+                          </div>
+                          {niveles.n2 ? <div>{niveles.n2}</div> : null}
+                          {niveles.n3 ? <div>{niveles.n3}</div> : null}
+                        </div>
+                      )}
+                      {!niveles?.n1 && o.solicitud.falla && (
+                        <div className="mt-1.5 text-[11px] text-[var(--vl-text-muted)]">
+                          {o.solicitud.falla}
+                        </div>
+                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                        <span>
+                          {o.cerradaAt
+                            ? "Status Cerrado"
+                            : `Status Abierta ${paso}/${OT_STEPS.length}`}
+                        </span>
+                        {o.urgente && (
+                          <span className="rounded bg-red-100 px-1.5 text-red-800 dark:bg-red-950 dark:text-red-200">
+                            Urgente
+                          </span>
+                        )}
                       </div>
                     </button>
                     {isOps(rol) && (
@@ -826,7 +977,8 @@ export function M7TalleresPage() {
                       </button>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {ot && (
