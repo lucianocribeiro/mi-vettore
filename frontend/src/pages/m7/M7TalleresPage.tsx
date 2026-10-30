@@ -802,7 +802,7 @@ export function M7TalleresPage() {
                       ot={ot}
                       token={token}
                       ocultarMontos={ocultarMontos}
-                      editable={!!ot.cerradaAt && puedeEditarTaller}
+                      editable={puedeEditarTaller}
                       onSaved={replaceOt}
                       onError={setError}
                       className="mt-3"
@@ -2009,10 +2009,16 @@ function CierreConceptosResumen({
       .catch(() => setCats([]));
   }, [token]);
 
-  const items = (ot.items ?? []).filter((i) => {
-    if (i.tipo === "FACTURA" || i.tipo === "RENDICION") return true;
-    return i.tipo === "PRESUPUESTO" && !!i.aprobado;
-  });
+  const all = ot.items ?? [];
+  const gasto = all.filter((i) => i.tipo === "FACTURA" || i.tipo === "RENDICION");
+  const aprobados = all.filter((i) => i.tipo === "PRESUPUESTO" && !!i.aprobado);
+  const presupuestos = all.filter((i) => i.tipo === "PRESUPUESTO");
+  const items =
+    gasto.length > 0
+      ? gasto
+      : aprobados.length > 0
+        ? aprobados
+        : presupuestos;
   const faltan = items.filter((i) => {
     const draft = drafts[i.id];
     const id =
@@ -2027,7 +2033,19 @@ function CierreConceptosResumen({
     return drafts[i.id] !== server;
   });
 
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return (
+      <div className={className}>
+        <div className="text-xs font-semibold text-[var(--vl-heading)]">
+          Niveles 1 / 2 / 3
+        </div>
+        <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+          Todavía no hay ítems para clasificar. Cargá el gasto o el presupuesto
+          y elegí el arbolito acá.
+        </p>
+      </div>
+    );
+  }
 
   async function guardar() {
     if (!editable || !dirty || saving) return;
@@ -2081,10 +2099,8 @@ function CierreConceptosResumen({
       {faltan.length > 0 && (
         <p className="mb-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">
           Falta cargar concepto en {faltan.length} ítem
-          {faltan.length === 1 ? "" : "s"}
-          {editable
-            ? ". Completá los 3 niveles abajo y guardá."
-            : ". Volvé a ajuste de importes."}
+          {faltan.length === 1 ? "" : "s"}. Completá los 3 niveles abajo
+          {editable ? " y guardá." : "."}
         </p>
       )}
       <ul
@@ -2097,11 +2113,7 @@ function CierreConceptosResumen({
             drafts[i.id] !== undefined
               ? drafts[i.id]
               : i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id ?? null;
-          const path =
-            pathConcepto(cats, valueId) ||
-            (i.categoriaDiagnostico
-              ? i.categoriaDiagnostico.nombre
-              : "Sin nivel cargado");
+          const path = pathConcepto(cats, valueId);
           return (
             <li
               key={i.id}
@@ -2112,25 +2124,20 @@ function CierreConceptosResumen({
                 {i.descripcion}
                 {i.adicionalAjuste ? " · adicional" : ""}
               </div>
-              {editable ? (
-                <div className="mt-1.5">
-                  <ConceptoCascada
-                    cats={cats}
-                    valueId={valueId}
-                    required
-                    onPick={(id) =>
-                      setDrafts((prev) => ({ ...prev, [i.id]: id }))
-                    }
-                  />
-                </div>
-              ) : (
-                <div
-                  className={
-                    valueId
-                      ? "text-[var(--vl-text-muted)]"
-                      : "font-medium text-amber-700 dark:text-amber-400"
+              {/* Arbolito de niveles: siempre visible. */}
+              <div className="mt-1.5">
+                <ConceptoCascada
+                  cats={cats}
+                  valueId={valueId}
+                  required
+                  disabled={!editable}
+                  onPick={(id) =>
+                    setDrafts((prev) => ({ ...prev, [i.id]: id }))
                   }
-                >
+                />
+              </div>
+              {path && (
+                <div className="mt-0.5 text-[10px] text-[var(--vl-text-muted)]">
                   {path}
                 </div>
               )}
@@ -2150,11 +2157,13 @@ function ConceptoCascada({
   valueId,
   onPick,
   required,
+  disabled,
 }: {
   cats: CatDiag[];
   valueId: string | null | undefined;
   onPick: (leafId: string | null) => void;
   required?: boolean;
+  disabled?: boolean;
 }) {
   const selected = valueId ? cats.find((c) => c.id === valueId) : null;
   const l3 = selected?.nivel === 3 ? selected : null;
@@ -2197,6 +2206,7 @@ function ConceptoCascada({
           className={selClass}
           value={n1}
           required={required}
+          disabled={disabled}
           onChange={(e) => {
             setN1(e.target.value);
             setN2("");
@@ -2212,7 +2222,7 @@ function ConceptoCascada({
         <select
           className={selClass}
           value={n2}
-          disabled={!n1}
+          disabled={disabled || !n1}
           required={required}
           onChange={(e) => {
             setN2(e.target.value);
@@ -2228,7 +2238,7 @@ function ConceptoCascada({
         <select
           className={selClass}
           value={n3}
-          disabled={!n2}
+          disabled={disabled || !n2}
           required={required}
           onChange={(e) => {
             const id = e.target.value;

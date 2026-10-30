@@ -3571,10 +3571,9 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       (wantsCategoria || wantsOtherEdit) &&
       isAjusteStep(ot.currentStep) &&
       (canEditTalleres(rol));
-    /** Completar niveles 1-2-3 en OT ya cerradas (historial sin concepto). */
-    const conceptoCerradaAllowed =
+    /** Ops puede completar/corregir niveles 1-2-3 en cualquier etapa (abierta o cerrada). */
+    const conceptoOpsAllowed =
       wantsCategoria &&
-      !!ot.cerradaAt &&
       canEditTalleres(rol) &&
       !wantsOtherEdit &&
       !wantsAprobado &&
@@ -3591,7 +3590,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
         sugeridoAllowed ||
         seleccionAllowed ||
         ajusteAllowed ||
-        conceptoCerradaAllowed ||
+        conceptoOpsAllowed ||
         cargaImporteAllowed ||
         (silvinaEdit && wantsSugerido),
       userId: req.user!.id,
@@ -3697,7 +3696,7 @@ router.patch("/:id/items/:itemId", authenticate, async (req: AuthedRequest, res)
       data.aprobado = Boolean(req.body.aprobado);
     }
     if (wantsCategoria) {
-      if (!isAjusteStep(ot.currentStep) && !ot.cerradaAt) {
+      if (!isAjusteStep(ot.currentStep) && !ot.cerradaAt && !canEditTalleres(rol)) {
         res.status(400).json({
           error: "El concepto se asigna en el ajuste de importes",
         });
