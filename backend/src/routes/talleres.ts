@@ -16,6 +16,7 @@ import {
   type TipoOtItem,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { parseDateOnly } from "../lib/date-only.js";
 import {
   camionetasParaUsuarioChofer,
   choferPuedeEditarCamioneta,
@@ -552,7 +553,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
     const sheet = workbook.addWorksheet("Ordenes de trabajo");
     sheet.columns = [
       { header: "OT", key: "ot", width: 12 },
-      { header: "Fecha de reparación", key: "fechaReparacion", width: 16 },
+      { header: "Fecha del siniestro", key: "fechaReparacion", width: 16 },
       { header: "Patente", key: "patente", width: 12 },
       { header: "Empresa", key: "empresa", width: 24 },
       { header: "Estado unidad", key: "estadoUnidad", width: 16 },
@@ -585,6 +586,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       // La fecha que importa es la de la reparación cargada en los ítems (por defecto hoy, editable);
       // si la OT no tiene ninguna, la de cierre o la de creación.
       const fechaReparacion = (
+        ot.fechaSiniestro ??
         ot.items
           ?.map((i) => i.fecha)
           .filter((d): d is Date => !!d)
@@ -762,7 +764,7 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
 const HISTORIAL_COLUMNAS = [
   { header: "OT", key: "ot", width: 12 },
   { header: "Tipo OT", key: "tipoOt", width: 16 },
-  { header: "Fecha de reparación", key: "fecha", width: 16 },
+  { header: "Fecha del siniestro / reparación", key: "fecha", width: 16 },
   { header: "Patente", key: "patente", width: 12 },
   { header: "Empresa de Transporte", key: "empresa", width: 24 },
   { header: "Km", key: "km", width: 10 },
@@ -859,6 +861,7 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
         if (tallerQ && !taller.toLowerCase().includes(tallerQ)) continue;
         // Fecha de reparación: ítem o cierre (la más importante para el filtro).
         const fecha = (
+          ot.fechaSiniestro ??
           it.fecha ??
           ot.cerradaAt ??
           ot.createdAt
@@ -1570,38 +1573,47 @@ function parseImporteExternoOpcional(raw: unknown): { ok: true; value: number } 
   return { ok: true, value: n };
 }
 
+/** OTE visibles para el usuario (ops: todas; empresa: las suyas; chofer: sus unidades). null = sin permiso. */
+async function listarOtExternas(req: AuthedRequest) {
+  const rol = req.user!.rol as Role;
+  let alcance: Prisma.OrdenTrabajoWhereInput = {};
+  if (rol === "EMPRESA") {
+    const me = await prisma.usuario.findUnique({
+      where: { id: req.user!.id },
+      select: { empresaId: true },
+    });
+    alcance = whereOtDeEmpresas(me?.empresaId ? [me.empresaId] : []);
+  } else if (rol === "CHOFER") {
+    const unidades = await camionetasParaUsuarioChofer(
+      req.user!.id,
+      contextoAccesoFromReq(req)
+    );
+    alcance = { solicitud: { camionetaId: { in: unidades.map((c) => c.id) } } };
+  } else if (!isInternalOpsRole(rol)) {
+    return null;
+  }
+  const [ots, cats] = await Promise.all([
+    prisma.ordenTrabajo.findMany({
+      where: { AND: [{ externo: true }, alcance] },
+      include: includeOtExterna,
+      orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
+    }),
+    prisma.categoriaDiagnostico.findMany({
+      select: { id: true, nombre: true, padreId: true, nivel: true },
+    }),
+  ]);
+  return ots.map((ot) => serializeOtExterna(ot, cats));
+}
+
 /** Taller externo (OTE): van directo al historial; importe $ opcional. */
 router.get("/externos", authenticate, async (req: AuthedRequest, res) => {
   try {
-    const rol = req.user!.rol as Role;
-    let alcance: Prisma.OrdenTrabajoWhereInput = {};
-    if (rol === "EMPRESA") {
-      const me = await prisma.usuario.findUnique({
-        where: { id: req.user!.id },
-        select: { empresaId: true },
-      });
-      alcance = whereOtDeEmpresas(me?.empresaId ? [me.empresaId] : []);
-    } else if (rol === "CHOFER") {
-      const unidades = await camionetasParaUsuarioChofer(
-        req.user!.id,
-        contextoAccesoFromReq(req)
-      );
-      alcance = { solicitud: { camionetaId: { in: unidades.map((c) => c.id) } } };
-    } else if (!isInternalOpsRole(rol)) {
+    const ots = await listarOtExternas(req);
+    if (!ots) {
       res.status(403).json({ error: "Sin permiso" });
       return;
     }
-    const [ots, cats] = await Promise.all([
-      prisma.ordenTrabajo.findMany({
-        where: { AND: [{ externo: true }, alcance] },
-        include: includeOtExterna,
-        orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
-      }),
-      prisma.categoriaDiagnostico.findMany({
-        select: { id: true, nombre: true, padreId: true, nivel: true },
-      }),
-    ]);
-    res.json({ ots: ots.map((ot) => serializeOtExterna(ot, cats)) });
+    res.json({ ots });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al listar talleres externos" });
@@ -1626,6 +1638,72 @@ async function solicitanteInhabilitado(userId: string, rol: string): Promise<str
   }
   return null;
 }
+
+/** Excel de talleres externos, con los mismos filtros de la pantalla (patente / empresa). */
+router.get("/externos/export", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const todas = await listarOtExternas(req);
+    if (!todas) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+    const patenteQ = String(req.query?.patente ?? "").trim().toLowerCase();
+    const empresaQ = String(req.query?.empresa ?? "").trim().toLowerCase();
+    const ots = todas.filter(
+      (o) =>
+        (!patenteQ || o.patente.toLowerCase().includes(patenteQ)) &&
+        (!empresaQ || (o.empresa?.nombre ?? "").toLowerCase().includes(empresaQ))
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Talleres externos");
+    sheet.columns = [
+      { header: "OT", key: "ot", width: 12 },
+      { header: "Fecha de reparación", key: "fecha", width: 16 },
+      { header: "Patente", key: "patente", width: 12 },
+      { header: "Empresa", key: "empresa", width: 26 },
+      { header: "Km", key: "km", width: 12 },
+      { header: "Reparación N1", key: "n1", width: 22 },
+      { header: "Reparación N2", key: "n2", width: 22 },
+      { header: "Reparación N3", key: "n3", width: 22 },
+      { header: "Importe", key: "importe", width: 14 },
+      { header: "Comentario", key: "comentario", width: 40 },
+      { header: "Cargada", key: "creada", width: 12 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+    sheet.getColumn("km").numFmt = "#,##0";
+    sheet.getColumn("importe").numFmt = "#,##0.00";
+    for (const o of ots) {
+      sheet.addRow({
+        ot: o.numeroOT,
+        fecha: new Date(o.fechaReparacion).toISOString().slice(0, 10),
+        patente: o.patente,
+        empresa: o.empresa?.nombre ?? "",
+        km: o.kmAlMomento ?? "",
+        n1: o.reparacionNivel1 ?? "",
+        n2: o.reparacionNivel2 ?? "",
+        n3: o.reparacionNivel3 ?? "",
+        importe: o.importe ?? "",
+        comentario: o.comentario ?? "",
+        creada: new Date(o.createdAt).toISOString().slice(0, 10),
+      });
+    }
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+    sheet.autoFilter = { from: "A1", to: "K1" };
+
+    const filename = `talleres_externos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al exportar Excel" });
+  }
+});
 
 router.post("/externos", authenticate, async (req: AuthedRequest, res) => {
   try {
@@ -2206,6 +2284,8 @@ router.post("/", authenticate, async (req: AuthedRequest, res) => {
           sugerenciaChofer: req.body?.sugerenciaChofer
             ? String(req.body.sugerenciaChofer).trim() || null
             : null,
+          // Fecha del siniestro: la que se cargó en la solicitud, o hoy.
+          fechaSiniestro: parseDateOnly(req.body?.fechaSiniestro) ?? parseDateOnly(new Date().toISOString().slice(0, 10)),
           // Tras crear, la solicitud (paso 0) quedó cargada → arranca en presupuesto.
           currentStep: 1,
           maxStepReached: 1,
@@ -2443,6 +2523,19 @@ router.patch("/:id", authenticate, async (req: AuthedRequest, res) => {
       }
       data.montoAutorizado = monto;
       data.valorAprobado = monto;
+    }
+
+    if (req.body?.fechaSiniestro !== undefined) {
+      const d = parseDateOnly(req.body.fechaSiniestro);
+      if (!d) {
+        res.status(400).json({ error: "Fecha del siniestro inválida" });
+        return;
+      }
+      if (!canEditTalleres(rol)) {
+        res.status(403).json({ error: "Sin permiso para cambiar la fecha del siniestro" });
+        return;
+      }
+      data.fechaSiniestro = d;
     }
 
     if (req.body?.plazoEntrega !== undefined) {

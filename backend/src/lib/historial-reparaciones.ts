@@ -114,7 +114,7 @@ export async function queryHistorialReparaciones(opts: {
       i.categoriaDiagnostico?.id;
     const diag = diagnosticoPathFromId(cats, catId);
     const ot = i.ot;
-    const fecha = i.fecha ?? ot.cerradaAt ?? ot.createdAt;
+    const fecha = ot.fechaSiniestro ?? i.fecha ?? ot.cerradaAt ?? ot.createdAt;
     const taller =
       i.tallerNombre ||
       i.tallerProveedor?.razonSocial ||

@@ -112,6 +112,8 @@ type OrdenTrabajo = {
   tallerAsignado: string | null;
   tallerProveedorId?: string | null;
   kmAlMomento?: number | null;
+  /** Fecha del siniestro (la que va al historial y a los Excel). */
+  fechaSiniestro?: string | null;
   sugerenciaChofer?: string | null;
   sugerenciaArchivo?: string | null;
   montoAutorizado: number | null;
@@ -996,6 +998,13 @@ export function M7TalleresPage() {
                   <h3 className="text-xl font-bold text-[var(--vl-heading)]">{ot.numeroOT}</h3>
                   <p className="text-sm text-[var(--vl-text)]">{ot.solicitud.falla}</p>
                   <p className="mt-1 text-xs text-[var(--vl-text-muted)]">{ot.solicitud.detalle}</p>
+                  <FechaSiniestro
+                    ot={ot}
+                    token={token}
+                    editable={puedeEditarTaller}
+                    onSaved={replaceOt}
+                    onError={setError}
+                  />
 
                   {isOps(rol) && token && (
                     <CierreConceptosResumen
@@ -3095,6 +3104,66 @@ function ItemsEditor({
 }
 
 
+/** Fecha del siniestro de la OT: visible para todos, editable por Vettore. */
+function FechaSiniestro({
+  ot,
+  token,
+  editable,
+  onSaved,
+  onError,
+}: {
+  ot: OrdenTrabajo;
+  token: string | null;
+  editable: boolean;
+  onSaved: (ot: OrdenTrabajo) => void;
+  onError: (msg: string | null) => void;
+}) {
+  const actual = (ot.fechaSiniestro ?? ot.createdAt ?? "").slice(0, 10);
+  const [draft, setDraft] = useState(actual);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setDraft(actual), [ot.id, actual]);
+
+  async function guardar(v: string) {
+    if (!token || !v || v === actual) return;
+    setSaving(true);
+    try {
+      const updated = await apiFetch<OrdenTrabajo>(
+        `/api/talleres/${ot.id}`,
+        { method: "PATCH", body: JSON.stringify({ fechaSiniestro: v }) },
+        token
+      );
+      onSaved(updated);
+      onError(null);
+    } catch (e) {
+      setDraft(actual);
+      onError(e instanceof ApiError ? e.message : "No se pudo guardar la fecha del siniestro");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--vl-text-muted)]">
+      <span className="font-semibold">Fecha del siniestro:</span>
+      {editable && token ? (
+        <input
+          type="date"
+          className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1 text-xs text-[var(--vl-text)]"
+          value={draft}
+          disabled={saving}
+          max={todayInputDate()}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            void guardar(e.target.value);
+          }}
+        />
+      ) : (
+        <span className="text-[var(--vl-text)]">{fmtOtFechaLista(ot.fechaSiniestro ?? ot.createdAt)}</span>
+      )}
+    </div>
+  );
+}
+
 function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCreated: (ot: OrdenTrabajo) => void }) {
   const { token, user } = useAuth();
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);
@@ -3105,6 +3174,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
   const [habilitadaCircular, setHabilitadaCircular] = useState(true);
   const [esUrgente, setEsUrgente] = useState<boolean | null>(null);
   const [sugerencia, setSugerencia] = useState("");
+  const [fechaSiniestro, setFechaSiniestro] = useState(todayInputDate);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const esChofer = user?.rol === "CHOFER";
@@ -3196,6 +3266,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
           urgente: !habilitadaCircular || esUrgente === true,
           solicitante: esChofer ? "CHOFER" : "ADMINISTRATIVO",
           sugerenciaChofer: sugerencia.trim() || undefined,
+          fechaSiniestro: fechaSiniestro || undefined,
         }),
       }, token);
       onCreated(created);
@@ -3279,6 +3350,17 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
             </select>
           </label>
         )}
+
+        <label className="text-xs text-[var(--vl-text-muted)]">
+          Fecha del siniestro
+          <input
+            type="date"
+            className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]"
+            value={fechaSiniestro}
+            max={todayInputDate()}
+            onChange={(e) => setFechaSiniestro(e.target.value)}
+          />
+        </label>
 
         <label className="text-xs text-[var(--vl-text-muted)]">
           Kilometraje actual (obligatorio)

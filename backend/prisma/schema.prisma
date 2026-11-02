@@ -473,6 +473,8 @@ model OrdenTrabajo {
   pedidoNotificacionId    String?
   sinPresupuesto          Boolean   @default(false)
   sinPresupuestoMotivo    String?
+  /// Fecha del siniestro (la que importa para el historial y los Excel). Por defecto hoy al crear; editable.
+  fechaSiniestro          DateTime?
   /// Reparación en taller externo (OTE-xxxx): se carga ya cerrada, fuera del circuito OT.
   externo                 Boolean   @default(false)
   cerradaAt               DateTime?

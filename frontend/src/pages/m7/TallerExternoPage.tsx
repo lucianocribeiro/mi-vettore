@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
-import { Plus, X } from "../../components/icons";
-import { apiFetch, ApiError } from "../../lib/api";
+import { Download, Plus, X } from "../../components/icons";
+import { apiDownload, apiFetch, ApiError } from "../../lib/api";
 import { currentAsignacion, isInternalOps, type Camioneta } from "../../types";
 
 type CatDiag = {
@@ -62,6 +62,7 @@ export function TallerExternoPage() {
   const [confirmBorrar, setConfirmBorrar] = useState(false);
   const [borrando, setBorrando] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [exportando, setExportando] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -98,6 +99,26 @@ export function TallerExternoPage() {
     setEditando(false);
   }, [ot?.id]);
 
+  async function exportar() {
+    if (!token) return;
+    setExportando(true);
+    try {
+      const qs = new URLSearchParams();
+      if (filtroPatente.trim()) qs.set("patente", filtroPatente.trim());
+      if (filtroEmpresa.trim()) qs.set("empresa", filtroEmpresa.trim());
+      const q = qs.toString();
+      await apiDownload(
+        `/api/talleres/externos/export${q ? `?${q}` : ""}`,
+        token,
+        "talleres_externos.xlsx"
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo exportar");
+    } finally {
+      setExportando(false);
+    }
+  }
+
   async function borrar() {
     if (!token || !ot) return;
     setBorrando(true);
@@ -122,15 +143,25 @@ export function TallerExternoPage() {
             Taller externo
           </h1>
         </div>
-        {puedeSolicitar && (
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => setShowForm(true)}
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-violet-700 px-3 text-xs font-medium text-white hover:bg-violet-800"
+            onClick={() => void exportar()}
+            disabled={exportando || visibles.length === 0}
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--vl-card-border)] px-3 text-xs font-medium disabled:opacity-50"
           >
-            <Plus size={13} /> Nueva solicitud
+            <Download size={13} /> {exportando ? "Exportando…" : "Exportar Excel"}
           </button>
-        )}
+          {puedeSolicitar && (
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-violet-700 px-3 text-xs font-medium text-white hover:bg-violet-800"
+            >
+              <Plus size={13} /> Nueva solicitud
+            </button>
+          )}
+        </div>
       </div>
 
       {loading && <p className="text-sm text-[var(--vl-text-muted)]">Cargando…</p>}
