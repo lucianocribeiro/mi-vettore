@@ -107,11 +107,18 @@ export async function queryHistorialReparaciones(opts: {
     otsConGasto.has(i.otId) ? i.tipo !== "PRESUPUESTO" : true
   );
 
+  // Si la OT no tiene arbolito ni el ítem concepto, se usa el de otro ítem de la misma OT.
+  const catPorOt = new Map<string, string>();
+  for (const i of items) {
+    if (i.categoriaDiagnosticoId && !catPorOt.has(i.otId)) catPorOt.set(i.otId, i.categoriaDiagnosticoId);
+  }
+
   const rows: HistorialReparacionRow[] = itemsFuente.map((i) => {
     const catId =
       i.ot.diagnosticos?.[0]?.categoriaId ??
       i.categoriaDiagnosticoId ??
-      i.categoriaDiagnostico?.id;
+      i.categoriaDiagnostico?.id ??
+      catPorOt.get(i.otId);
     const diag = diagnosticoPathFromId(cats, catId);
     const ot = i.ot;
     const fecha = ot.fechaSiniestro ?? i.fecha ?? ot.cerradaAt ?? ot.createdAt;

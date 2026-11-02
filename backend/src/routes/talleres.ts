@@ -848,7 +848,9 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
         // Un solo arbolito por OT: el concepto está en la OT (los ítems nuevos ya no lo llevan) → antes salían niveles vacíos.
         const catId =
           ot.diagnosticos?.[0]?.categoriaId ??
-          ("categoriaDiagnosticoId" in it ? it.categoriaDiagnosticoId : null);
+          ("categoriaDiagnosticoId" in it ? it.categoriaDiagnosticoId : null) ??
+          ot.items.find((x) => x.categoriaDiagnosticoId)?.categoriaDiagnosticoId ??
+          null;
         if (!categoriaEnRama(cats, catId, filtroRama)) continue;
         const nivel = diagnosticoPathFromId(cats, catId);
         const taller =
@@ -1147,6 +1149,12 @@ router.post(
             errores.push(`Fila ${r}: concepto "${[n1, n2, n3].filter(Boolean).join(" › ")}" no coincide con el árbol`);
           }
         }
+        // El concepto (Nivel 1/2/3) vive en la OT: si no se actualiza ahí, el export lo pisa con el viejo.
+        const fijarConcepto = async (tx: Prisma.TransactionClient, otId: string) => {
+          if (!categoriaFila) return;
+          await tx.ordenTrabajoDiagnostico.deleteMany({ where: { otId } });
+          await tx.ordenTrabajoDiagnostico.create({ data: { otId, categoriaId: categoriaFila } });
+        };
         const falla = String(row.getCell(cFalla).value ?? "").trim() || "Importación historial";
         const detalle = cDetalle
           ? String(row.getCell(cDetalle).value ?? "").trim()
@@ -1211,6 +1219,7 @@ router.post(
                   ...(cerradaFila ? { cerradaAt: cerradaFila, fechaSiniestro: cerradaFila } : {}),
                 },
               });
+              await fijarConcepto(tx, otNum.id);
               if (item) {
                 await tx.otItem.update({
                   where: { id: item.id },
@@ -1277,6 +1286,7 @@ router.post(
                   kmAlMomento: kmFila ?? existente.kmAlMomento,
                 },
               });
+              await fijarConcepto(tx, existente.id);
               if (descripcion || importe > 0 || categoriaFila) {
                 const firstItem = existente.items[0];
                 if (firstItem) {
@@ -1345,6 +1355,7 @@ router.post(
               kmAlMomento: kmFila,
             },
           });
+          await fijarConcepto(tx, ot.id);
           if (descripcion || importe > 0 || categoriaFila) {
             await tx.otItem.create({
               data: {
