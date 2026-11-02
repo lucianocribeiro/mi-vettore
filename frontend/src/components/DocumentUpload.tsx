@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch, ApiError } from "../lib/api";
+import { DocViewer } from "./DocViewer";
 import {
   formatDate,
   TIPOS_DOCUMENTO_CHOFER,
@@ -233,6 +234,9 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
     }
   }
 
+  /** Documento abierto en el visor (ventana modal con rotar y descargar). */
+  const [visor, setVisor] = useState<{ url: string; nombre: string; mimeType: string; titulo: string } | null>(null);
+
   async function openDoc(id: string) {
     if (!token) return;
     try {
@@ -241,7 +245,13 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
         {},
         token
       );
-      window.open(data.url, "_blank", "noopener,noreferrer");
+      const doc = docs.find((d) => d.id === id);
+      setVisor({
+        url: data.url,
+        nombre: doc?.nombreOriginal || "documento",
+        mimeType: doc?.mimeType ?? "",
+        titulo: doc ? TIPO_DOCUMENTO_LABEL[doc.tipo] ?? doc.tipo : "Documento",
+      });
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo abrir");
     }
@@ -434,6 +444,15 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
 
       {error && (
         <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+      )}
+      {visor && (
+        <DocViewer
+          url={visor.url}
+          nombre={visor.nombre}
+          mimeType={visor.mimeType}
+          titulo={visor.titulo}
+          onClose={() => setVisor(null)}
+        />
       )}
       {previa && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
