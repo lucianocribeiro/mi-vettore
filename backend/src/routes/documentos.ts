@@ -4,6 +4,7 @@ import {
   EstadoValidacionDoc,
   Role,
   TipoDocumento,
+  TipoTransporte,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
@@ -26,7 +27,12 @@ import {
   registrarCorreccionAdmin,
 } from "../lib/correccion-admin.js";
 import { parseDateOnly } from "../lib/date-only.js";
-import { DOCS_UNIDAD, metaDocUnidad } from "../lib/documentos-unidad.js";
+import {
+  DOCS_FRIO_CONDICIONALES,
+  DOCS_UNIDAD,
+  esUnidadSeca,
+  metaDocUnidad,
+} from "../lib/documentos-unidad.js";
 
 const router = Router();
 const upload = multer({
@@ -74,7 +80,7 @@ const TIPOS_UNIDAD = new Set<TipoDocumento>([
   TipoDocumento.FOTO_CARGA,
 ]);
 
-/** Obligatorios (UI / validación blanda). SENASA, Homologación, OTRA_DOCUMENTACION y SEGURO_ACCIDENTES son opcionales. Cédula no lleva vencimiento. */
+/** Obligatorios base (UI / validación blanda). SENASA y Homologación se suman si la unidad no es seco. OTRA_DOCUMENTACION y SEGURO_ACCIDENTES son opcionales. */
 const TIPOS_OBLIGATORIOS = new Set<TipoDocumento>([
   TipoDocumento.DNI_FRENTE,
   TipoDocumento.DNI_DORSO,
@@ -91,6 +97,17 @@ const TIPOS_OBLIGATORIOS = new Set<TipoDocumento>([
   TipoDocumento.FOTO_LATERAL_DER,
   TipoDocumento.FOTO_CARGA,
 ]);
+
+function obligatoriosUnidad(cam: {
+  tipoTransporte?: TipoTransporte | null;
+  tipoServicio?: { nombre: string } | null;
+}): Set<TipoDocumento> {
+  const set = new Set(TIPOS_OBLIGATORIOS);
+  if (!esUnidadSeca(cam)) {
+    for (const t of DOCS_FRIO_CONDICIONALES) set.add(t);
+  }
+  return set;
+}
 
 /** Tipos que admiten varios archivos a la vez (el resto muestra solo el último). */
 const MAX_ARCHIVOS: Partial<Record<TipoDocumento, number>> = {
@@ -138,17 +155,34 @@ function ocultosUnidad(c: {
 }
 
 router.get("/meta", authenticate, async (req, res) => {
-  const ocultos = await tiposOcultos(
-    req.query.choferId ? String(req.query.choferId) : null,
-    req.query.camionetaId ? String(req.query.camionetaId) : null
-  ).catch(() => []);
+  const choferId = req.query.choferId ? String(req.query.choferId) : null;
+  const camionetaId = req.query.camionetaId ? String(req.query.camionetaId) : null;
+  const ocultos = await tiposOcultos(choferId, camionetaId).catch(() => []);
+  let obligatorios = [
+    ...TIPOS_OBLIGATORIOS,
+    ...DOCS_UNIDAD.filter((d) => d.obligatorio).map((d) => d.tipo),
+  ];
+  if (camionetaId) {
+    const cam = await prisma.camioneta
+      .findUnique({
+        where: { id: camionetaId },
+        select: {
+          pideSenasaHomologacion: true,
+          tipoTransporte: true,
+          tipoServicio: { select: { nombre: true } },
+          empresa: { select: { pideSenasa: true } },
+        },
+      })
+      .catch(() => null);
+    if (cam) obligatorios = [...obligatoriosUnidad(cam)];
+  }
   res.json({
     ocultos,
     tipos: Object.values(TipoDocumento),
     tiposChofer: [...TIPOS_CHOFER],
     tiposUnidad: [...TIPOS_UNIDAD],
     conVencimiento: DOCS_UNIDAD.filter((d) => d.vencimiento).map((d) => d.tipo),
-    obligatorios: DOCS_UNIDAD.filter((d) => d.obligatorio).map((d) => d.tipo),
+    obligatorios: [...new Set(obligatorios)],
     docsUnidad: DOCS_UNIDAD,
     storageConfigured: isSupabaseStorageConfigured(),
   });
@@ -254,6 +288,8 @@ router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
             select: {
               id: true,
               pideSenasaHomologacion: true,
+              tipoTransporte: true,
+              tipoServicio: { select: { nombre: true } },
               empresa: { select: { pideSenasa: true } },
             },
           })
@@ -295,7 +331,8 @@ router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
     const resumir = (
       ownerId: string,
       tipos: TipoDocumento[],
-      ocultos: TipoDocumento[]
+      ocultos: TipoDocumento[],
+      obligatorios: Set<TipoDocumento>
     ): ResumenDocs => {
       const r: ResumenDocs = {
         faltantes: [],
@@ -310,7 +347,7 @@ router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
         const doc = ultimo.get(`${ownerId}:${tipo}`);
         const rechazado = doc?.estadoValidacion === EstadoValidacionDoc.RECHAZADO;
         if (!doc || rechazado) {
-          const obligatorio = TIPOS_OBLIGATORIOS.has(tipo);
+          const obligatorio = obligatorios.has(tipo);
           if (obligatorio) r.faltantes.push(tipo);
           r.items.push({ tipo, estado: obligatorio ? "falta" : "opcional", vencimiento: null });
           continue;
@@ -340,14 +377,20 @@ router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
 
     const unidades: Record<string, ResumenDocs> = {};
     for (const c of cams) {
-      unidades[c.id] = resumir(c.id, [...TIPOS_UNIDAD], ocultosUnidad(c));
+      unidades[c.id] = resumir(
+        c.id,
+        [...TIPOS_UNIDAD],
+        ocultosUnidad(c),
+        obligatoriosUnidad(c)
+      );
     }
     const choferes: Record<string, ResumenDocs> = {};
     for (const ch of chs) {
       choferes[ch.id] = resumir(
         ch.id,
         [...TIPOS_CHOFER],
-        ch.pideManipulacion ? [] : [TipoDocumento.HABILITACION_MANIPULACION]
+        ch.pideManipulacion ? [] : [TipoDocumento.HABILITACION_MANIPULACION],
+        TIPOS_OBLIGATORIOS
       );
     }
     res.json({ unidades, choferes });

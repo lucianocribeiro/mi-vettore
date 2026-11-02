@@ -1,4 +1,4 @@
-import { TipoDocumento } from "@prisma/client";
+import { TipoDocumento, TipoTransporte } from "@prisma/client";
 
 export type DocUnidadMeta = {
   tipo: TipoDocumento;
@@ -9,6 +9,21 @@ export type DocUnidadMeta = {
   soloImagen: boolean;
   alerta: boolean;
 };
+
+/** SENASA y Homologación son obligatorios si la unidad no es “seco”. */
+export const DOCS_FRIO_CONDICIONALES: TipoDocumento[] = [
+  TipoDocumento.SENASA,
+  TipoDocumento.HOMOLOGACION,
+];
+
+export function esUnidadSeca(cam: {
+  tipoTransporte?: TipoTransporte | null;
+  tipoServicio?: { nombre: string } | null;
+}): boolean {
+  if (cam.tipoTransporte === TipoTransporte.SECO) return true;
+  const n = cam.tipoServicio?.nombre?.trim().toLowerCase() ?? "";
+  return n.includes("seco");
+}
 
 /** Orden fijo de la ficha de unidad. Fuente única para API, alta, edición y lectura. */
 export const DOCS_UNIDAD: DocUnidadMeta[] = [
@@ -52,6 +67,7 @@ export const DOCS_UNIDAD: DocUnidadMeta[] = [
     tipo: TipoDocumento.SENASA,
     orden: 5,
     label: "SENASA",
+    /** Condicional: obligatorio si la unidad no es seco (ver esUnidadSeca). */
     obligatorio: false,
     vencimiento: true,
     soloImagen: false,
@@ -61,6 +77,7 @@ export const DOCS_UNIDAD: DocUnidadMeta[] = [
     tipo: TipoDocumento.HOMOLOGACION,
     orden: 6,
     label: "Homologación",
+    /** Condicional: obligatorio si la unidad no es seco (ver esUnidadSeca). */
     obligatorio: false,
     vencimiento: false,
     soloImagen: false,

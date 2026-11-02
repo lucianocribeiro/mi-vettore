@@ -115,7 +115,12 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
           (t) => !ocultos.includes(t)
         )
       );
-      setObligatorios(TIPOS_DOCUMENTO_OBLIGATORIOS);
+      // Meta trae SENASA/Homologación cuando la unidad no es seco.
+      setObligatorios(
+        meta?.obligatorios?.length
+          ? [...new Set([...TIPOS_DOCUMENTO_OBLIGATORIOS, ...meta.obligatorios])]
+          : TIPOS_DOCUMENTO_OBLIGATORIOS
+      );
       if (meta?.conVencimiento?.length) {
         setConVencimiento([
           ...new Set([
