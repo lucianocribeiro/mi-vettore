@@ -803,12 +803,21 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
         include: {
           solicitud: {
             include: {
-              camioneta: { include: { empresa: true } },
+              camioneta: {
+                include: {
+                  empresa: true,
+                  // Para el chofer cuando la solicitud no lo tiene (la cargó Vettore o la empresa).
+                  asignaciones: {
+                    select: { periodoDesde: true, periodoHasta: true, chofer: { select: { nombre: true } } },
+                    orderBy: { periodoDesde: "desc" },
+                  },
+                },
+              },
               chofer: true,
             },
           },
           tallerProveedor: true,
-          items: { orderBy: { createdAt: "asc" } },
+          items: { orderBy: { createdAt: "asc" }, include: { tallerProveedor: { select: { razonSocial: true } } } },
           diagnosticos: { select: { categoriaId: true } },
         },
         orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
@@ -844,6 +853,20 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
                 fecha: ot.cerradaAt ?? ot.createdAt,
               },
             ];
+      // Taller de la OT: el del proveedor/asignado, o el de cualquier ítem (presupuestos incluidos).
+      const tallerOt =
+        ot.tallerProveedor?.razonSocial ||
+        ot.tallerAsignado ||
+        ot.items.map((x) => x.tallerNombre || x.tallerProveedor?.razonSocial || "").find(Boolean) ||
+        "";
+      // Chofer: el de la solicitud; si no hay, el asignado a la unidad en la fecha de la OT.
+      const fechaOt = ot.fechaSiniestro ?? ot.createdAt;
+      const asigs = ot.solicitud.camioneta.asignaciones ?? [];
+      const choferOt =
+        ot.solicitud.chofer?.nombre ??
+        asigs.find((a) => a.periodoDesde <= fechaOt && (!a.periodoHasta || a.periodoHasta >= fechaOt))?.chofer.nombre ??
+        asigs[0]?.chofer.nombre ??
+        "";
       for (const it of items) {
         // Un solo arbolito por OT: el concepto está en la OT (los ítems nuevos ya no lo llevan) → antes salían niveles vacíos.
         const catId =
@@ -855,9 +878,8 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
         const nivel = diagnosticoPathFromId(cats, catId);
         const taller =
           ("tallerNombre" in it && it.tallerNombre) ||
-          ot.tallerProveedor?.razonSocial ||
-          ot.tallerAsignado ||
-          "";
+          ("tallerProveedor" in it && it.tallerProveedor?.razonSocial) ||
+          tallerOt;
         if (tallerQ && !taller.toLowerCase().includes(tallerQ)) continue;
         // Fecha de reparación: ítem o cierre (la más importante para el filtro).
         const fecha = (
@@ -879,7 +901,7 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
             ot.solicitud.falla,
             taller,
             it.descripcion,
-            ot.solicitud.chofer?.nombre ?? "",
+            choferOt,
             nivel.nivel1 ?? "",
             nivel.nivel2 ?? "",
             nivel.nivel3 ?? "",
@@ -901,7 +923,7 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
           km: ot.kmAlMomento ?? "",
           falla: ot.solicitud.falla,
           detalle: ot.solicitud.detalle,
-          chofer: ot.solicitud.chofer?.nombre ?? "",
+          chofer: choferOt,
           taller,
           descripcion: it.descripcion,
           importe: it.importe,

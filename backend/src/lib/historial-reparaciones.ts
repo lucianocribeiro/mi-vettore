@@ -81,7 +81,15 @@ export async function queryHistorialReparaciones(opts: {
           include: {
             solicitud: {
               include: {
-                camioneta: { include: { empresa: true } },
+                camioneta: {
+                  include: {
+                    empresa: true,
+                    asignaciones: {
+                      select: { periodoDesde: true, periodoHasta: true, chofer: { select: { nombre: true } } },
+                      orderBy: { periodoDesde: "desc" },
+                    },
+                  },
+                },
                 chofer: true,
               },
             },
@@ -109,8 +117,12 @@ export async function queryHistorialReparaciones(opts: {
 
   // Si la OT no tiene arbolito ni el ítem concepto, se usa el de otro ítem de la misma OT.
   const catPorOt = new Map<string, string>();
+  // Ídem taller: si el ítem no lo tiene, el de otro ítem de la OT (p. ej. el presupuesto).
+  const tallerPorOt = new Map<string, string>();
   for (const i of items) {
     if (i.categoriaDiagnosticoId && !catPorOt.has(i.otId)) catPorOt.set(i.otId, i.categoriaDiagnosticoId);
+    const t = i.tallerNombre || i.tallerProveedor?.razonSocial || "";
+    if (t && !tallerPorOt.has(i.otId)) tallerPorOt.set(i.otId, t);
   }
 
   const rows: HistorialReparacionRow[] = itemsFuente.map((i) => {
@@ -127,6 +139,7 @@ export async function queryHistorialReparaciones(opts: {
       i.tallerProveedor?.razonSocial ||
       ot.tallerProveedor?.razonSocial ||
       ot.tallerAsignado ||
+      tallerPorOt.get(i.otId) ||
       "";
 
     return {
@@ -136,7 +149,14 @@ export async function queryHistorialReparaciones(opts: {
       externo: ot.externo,
       patente: ot.solicitud.camioneta.patente,
       empresa: ot.solicitud.camioneta.empresa?.nombre ?? null,
-      chofer: ot.solicitud.chofer?.nombre ?? null,
+      // Sin chofer en la solicitud (la cargó Vettore o la empresa): el asignado a la unidad en esa fecha.
+      chofer:
+        ot.solicitud.chofer?.nombre ??
+        ot.solicitud.camioneta.asignaciones.find(
+          (a) => a.periodoDesde <= fecha && (!a.periodoHasta || a.periodoHasta >= fecha)
+        )?.chofer.nombre ??
+        ot.solicitud.camioneta.asignaciones[0]?.chofer.nombre ??
+        null,
       falla: ot.solicitud.falla,
       descripcion: i.descripcion,
       importe: i.importe,
