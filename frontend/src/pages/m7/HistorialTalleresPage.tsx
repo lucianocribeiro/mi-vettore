@@ -296,21 +296,19 @@ export function HistorialTalleresPage() {
     if (!token) return;
     setExportando(true);
     try {
-      if (importModo === "nuevos") {
-        await descargarPlantilla();
-      } else {
-        const qs = buildQs({
-          ...filtrosConceptos,
-          ...(vista !== "conceptos" && busqueda.trim()
-            ? { q: busqueda.trim() }
-            : {}),
-        });
-        await apiDownload(
-          `/api/talleres/historial/export${qs}`,
-          token,
-          "historial_talleres.xlsx"
-        );
-      }
+      // Siempre exporta los datos cargados (con los filtros de la pantalla).
+      // La plantilla vacía para cargas nuevas se baja aparte.
+      const qs = buildQs({
+        ...filtrosConceptos,
+        ...(vista !== "conceptos" && busqueda.trim()
+          ? { q: busqueda.trim() }
+          : {}),
+      });
+      await apiDownload(
+        `/api/talleres/historial/export${qs}`,
+        token,
+        "historial_talleres.xlsx"
+      );
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo exportar");
     } finally {
@@ -409,6 +407,15 @@ export function HistorialTalleresPage() {
               />
               Actualizar datos
             </label>
+            {importModo === "nuevos" && (
+              <button
+                type="button"
+                onClick={() => void descargarPlantilla()}
+                className="font-semibold text-[#1e4080] underline dark:text-sky-300"
+              >
+                Bajar plantilla
+              </button>
+            )}
             <label className="inline-flex cursor-pointer items-center rounded-md border border-[#1e4080]/40 bg-[var(--vl-page)] px-2 py-1 font-semibold text-[#1e4080] dark:text-sky-300">
               {importando ? "Importando…" : "Importar Excel"}
               <input

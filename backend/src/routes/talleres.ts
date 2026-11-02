@@ -764,12 +764,10 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
 const HISTORIAL_COLUMNAS = [
   { header: "OT", key: "ot", width: 12 },
   { header: "Tipo OT", key: "tipoOt", width: 16 },
-  { header: "Fecha del siniestro / reparación", key: "fecha", width: 16 },
+  { header: "Fecha", key: "fecha", width: 12 },
   { header: "Patente", key: "patente", width: 12 },
   { header: "Empresa de Transporte", key: "empresa", width: 24 },
   { header: "Km", key: "km", width: 10 },
-  { header: "Fecha solicitud", key: "fechaSolicitud", width: 14 },
-  { header: "Cerrada", key: "cerrada", width: 12 },
   { header: "Falla", key: "falla", width: 28 },
   { header: "Detalle", key: "detalle", width: 32 },
   { header: "Chofer", key: "chofer", width: 22 },
@@ -899,7 +897,6 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
           ot: ot.numeroOT,
           tipoOt: ot.externo ? "Taller externo" : "OT",
           km: ot.kmAlMomento ?? "",
-          fechaSolicitud: ot.solicitud.createdAt.toISOString().slice(0, 10),
           falla: ot.solicitud.falla,
           detalle: ot.solicitud.detalle,
           chofer: ot.solicitud.chofer?.nombre ?? "",
@@ -908,14 +905,13 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
           importe: it.importe,
           tipo: it.tipo,
           fecha,
-          cerrada: ot.cerradaAt ? ot.cerradaAt.toISOString().slice(0, 10) : "",
         });
       }
     }
 
     if (sheet.rowCount <= 1) {
       res.status(404).json({
-        error: "No hay OT para exportar. Para cargar datos nuevos marcá «Datos nuevos» y exportá.",
+        error: "No hay reparaciones para exportar con estos filtros.",
       });
       return;
     }
@@ -963,7 +959,6 @@ router.get("/historial/plantilla", authenticate, async (req: AuthedRequest, res)
       ot: "",
       tipoOt: "OT",
       km: 120000,
-      fechaSolicitud: hoy,
       falla: "Service",
       detalle: "Ejemplo: borrar esta fila",
       chofer: "",
@@ -972,7 +967,6 @@ router.get("/historial/plantilla", authenticate, async (req: AuthedRequest, res)
       importe: 85000,
       tipo: "FACTURA",
       fecha: hoy,
-      cerrada: hoy,
       n1: ej.nivel1 ?? "",
       n2: ej.nivel2 ?? "",
       n3: ej.nivel3 ?? "",
@@ -998,7 +992,7 @@ router.get("/historial/plantilla", authenticate, async (req: AuthedRequest, res)
       "Obligatorias: Patente y Falla. El resto es opcional pero recomendado.",
       "OT: dejar vacío para cargas nuevas. Si tiene número (viene del export), 'Actualizar datos' modifica esa OT.",
       "Tipo OT: 'OT' (taller interno) o 'Taller externo' (OTE: importe $ opcional).",
-      "Fechas: AAAA-MM-DD. Cerrada es la fecha de la reparación. Km: kilometraje al momento de la reparación.",
+      "Fecha: AAAA-MM-DD, una sola por fila: fecha del siniestro (OT) o de la reparación (taller externo). Km: kilometraje al momento de la reparación.",
       "Tipo: FACTURA, RENDICION o PRESUPUESTO (si se deja vacío, FACTURA). Chofer es solo de referencia.",
       "Nivel 1 / 2 / 3: copiar exactamente desde la hoja Conceptos.",
       "La patente debe existir en la flota; si no, la fila se omite.",
@@ -1074,7 +1068,7 @@ router.post(
       const cTaller = col("taller");
       const cDesc = col("descripcion", "descripción");
       const cImporte = col("importe", "monto");
-      const cCerrada = col("cerrada", "fecha");
+      const cCerrada = col("fecha", "fecha del siniestro / reparacion", "cerrada");
       const cFechaItem = col("fecha item");
       const cFechaSol = col("fecha solicitud");
       const cKm = col("km", "kilometraje");
@@ -1214,7 +1208,7 @@ router.post(
                 data: {
                   tallerAsignado: taller || otNum.tallerAsignado,
                   kmAlMomento: kmFila ?? otNum.kmAlMomento,
-                  ...(cerradaFila ? { cerradaAt: cerradaFila } : {}),
+                  ...(cerradaFila ? { cerradaAt: cerradaFila, fechaSiniestro: cerradaFila } : {}),
                 },
               });
               if (item) {
@@ -1279,6 +1273,7 @@ router.post(
                   tallerAsignado: taller || existente.tallerAsignado,
                   valorFinal: importe > 0 ? importe : existente.valorFinal,
                   cerradaAt: fecha,
+                  fechaSiniestro: fecha,
                   kmAlMomento: kmFila ?? existente.kmAlMomento,
                 },
               });
@@ -1346,6 +1341,7 @@ router.post(
               tallerAsignado: taller || null,
               valorFinal: importe > 0 ? importe : null,
               cerradaAt: fecha,
+              fechaSiniestro: fecha,
               kmAlMomento: kmFila,
             },
           });
