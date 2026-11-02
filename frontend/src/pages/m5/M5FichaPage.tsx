@@ -127,6 +127,121 @@ function toggleEstado(arr: EstadoEntidad[], v: EstadoEntidad): EstadoEntidad[] {
   return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
 }
 
+/** Filtro avanzado de Choferes y Empresas (mismo criterio que Unidades: se guarda en el navegador). */
+type SiNo = "" | "si" | "no";
+type AbmChoferAdvFilters = {
+  empresaIds: string[];
+  estados: EstadoEntidad[];
+  dueno: SiNo;
+  unidad: "" | "con" | "sin";
+  licencia: "" | "vencida" | "por_vencer" | "vigente" | "sin_fecha";
+};
+const EMPTY_ABM_CHOFER_ADV: AbmChoferAdvFilters = { empresaIds: [], estados: [], dueno: "", unidad: "", licencia: "" };
+type AbmEmpresaAdvFilters = {
+  estados: EstadoEntidad[];
+  mantenimiento: SiNo;
+  taller: SiNo;
+  multi: SiNo;
+  unidades: "" | "con" | "sin";
+  choferes: "" | "con" | "sin";
+};
+const EMPTY_ABM_EMPRESA_ADV: AbmEmpresaAdvFilters = { estados: [], mantenimiento: "", taller: "", multi: "", unidades: "", choferes: "" };
+
+function loadAdv<T extends object>(key: string, empty: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? { ...empty, ...(JSON.parse(raw) as Partial<T>) } : empty;
+  } catch {
+    return empty;
+  }
+}
+function useAdvFilter<T extends object>(key: string, empty: T) {
+  const [value, setValue] = useState<T>(() => loadAdv(key, empty));
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(key + ".open") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(key + ".open", open ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [key, value, open]);
+  return { value, setValue, open, setOpen };
+}
+
+function AdvPanel({ open, onToggle, activo, onLimpiar, children }: { open: boolean; onToggle: () => void; activo: boolean; onLimpiar: () => void; children: ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)]">
+      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-[var(--vl-text)]">
+        <span>
+          Filtro avanzado
+          {activo ? <span className="ml-2 text-xs font-normal text-[var(--vl-text-muted)]">(activo)</span> : null}
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-[var(--vl-text-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="space-y-4 border-t border-[var(--vl-card-border)] px-3 py-3">
+          {children}
+          {activo && (
+            <button type="button" onClick={onLimpiar} className="text-xs font-medium text-[#1e4080] underline-offset-2 hover:underline">
+              Limpiar filtros avanzados
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdvOpciones<V extends string>({ titulo, value, onChange, opciones }: { titulo: string; value: V; onChange: (v: V) => void; opciones: [V, string][] }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">{titulo}</p>
+      <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+        {opciones.map(([v, l]) => (
+          <label key={v || "todos"} className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]">
+            <input type="radio" checked={value === v} onChange={() => onChange(v)} />
+            {l}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdvEstados({ value, onChange }: { value: EstadoEntidad[]; onChange: (v: EstadoEntidad[]) => void }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">Estado</p>
+      <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+        {ESTADOS_ENTIDAD.map((e) => (
+          <label key={e} className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]">
+            <input type="checkbox" checked={value.includes(e)} onChange={() => onChange(toggleEstado(value, e))} />
+            {estadoLabel(e)}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Días desde hoy hasta la fecha (negativo = vencida). null si no hay fecha. */
+function diasHasta(fecha: string | null | undefined): number | null {
+  if (!fecha) return null;
+  const d = new Date(fecha);
+  if (Number.isNaN(d.getTime())) return null;
+  const hoy = new Date();
+  const a = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  const b = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return Math.round((b - a) / 86400000);
+}
+
 type CreateKind =
   | "camioneta"
   | "chofer"
@@ -220,6 +335,8 @@ export function M5FichaPage() {
   const [advUnidad, setAdvUnidad] = useState<AbmUnidadAdvFilters>(() =>
     loadAbmUnidadAdv()
   );
+  const advChofer = useAdvFilter<AbmChoferAdvFilters>("vl.abm.choferes.advFilters.v1", EMPTY_ABM_CHOFER_ADV);
+  const advEmpresa = useAdvFilter<AbmEmpresaAdvFilters>("vl.abm.empresas.advFilters.v1", EMPTY_ABM_EMPRESA_ADV);
   const [exportando, setExportando] = useState(false);
   const [form, setForm] = useState<
     | null
@@ -1132,13 +1249,31 @@ export function M5FichaPage() {
     [empresas]
   );
 
+  const advEmpresaActivo = useMemo(() => {
+    const a = advEmpresa.value;
+    return a.estados.length > 0 || !!a.mantenimiento || !!a.taller || !!a.multi || !!a.unidades || !!a.choferes;
+  }, [advEmpresa.value]);
+
   const empresasFiltradas = useMemo(() => {
     const q = abmQuery.trim().toLowerCase();
     const todas = Array.isArray(empresas) ? empresas : [];
-    const list =
-      estadoFiltro.empresas === "TODOS"
-        ? todas
-        : todas.filter((e) => estadoEmpresa(e) === estadoFiltro.empresas);
+    const a = advEmpresa.value;
+    const siNo = (f: SiNo, v: boolean | undefined) => !f || (f === "si") === !!v;
+    const conSin = (f: "" | "con" | "sin", n: number) => !f || (f === "con") === n > 0;
+    const list = todas
+      .filter((e) =>
+        a.estados.length > 0
+          ? a.estados.includes(estadoEmpresa(e))
+          : estadoFiltro.empresas === "TODOS" || estadoEmpresa(e) === estadoFiltro.empresas
+      )
+      .filter(
+        (e) =>
+          siNo(a.mantenimiento, e.verMantenimiento) &&
+          siNo(a.taller, e.verTaller) &&
+          siNo(a.multi, e.permiteMultiCamioneta) &&
+          conSin(a.unidades, (e.unidades ?? []).filter((u) => u.estado !== "INACTIVA").length) &&
+          conSin(a.choferes, (e.choferes ?? []).filter((c) => c.estado !== "INACTIVO").length)
+      );
     if (!q) return list;
     return list.filter((e) => {
       const choferesTxt = (e.choferes ?? [])
@@ -1155,7 +1290,7 @@ export function M5FichaPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [empresas, abmQuery, estadoFiltro.empresas]);
+  }, [empresas, abmQuery, estadoFiltro.empresas, advEmpresa.value]);
 
   const tiposServicioFiltrados = useMemo(() => {
     const q = abmQuery.trim().toLowerCase();
@@ -1332,10 +1467,40 @@ export function M5FichaPage() {
     [choferesDeEmpresa]
   );
 
+  const advChoferActivo = useMemo(() => {
+    const a = advChofer.value;
+    return a.empresaIds.length > 0 || a.estados.length > 0 || !!a.dueno || !!a.unidad || !!a.licencia;
+  }, [advChofer.value]);
+
+  /** Choferes con una unidad asignada hoy (asignación abierta). */
+  const choferesConUnidad = useMemo(() => {
+    const set = new Set<string>();
+    for (const cam of Array.isArray(camionetas) ? camionetas : []) {
+      for (const as of cam.asignaciones ?? []) if (!as.periodoHasta) set.add(as.choferId);
+    }
+    return set;
+  }, [camionetas]);
+
   const choferesFiltrados = useMemo(() => {
-    const list = choferesDeEmpresa.filter(
-      (c) => estadoFiltro.chofer === "TODOS" || c.estado === estadoFiltro.chofer
-    );
+    const a = advChofer.value;
+    const list = choferesDeEmpresa
+      .filter((c) =>
+        a.estados.length > 0
+          ? a.estados.includes(c.estado)
+          : estadoFiltro.chofer === "TODOS" || c.estado === estadoFiltro.chofer
+      )
+      .filter((c) => a.empresaIds.length === 0 || a.empresaIds.includes(c.empresaId ?? ""))
+      .filter((c) => !a.dueno || (a.dueno === "si") === !!c.esDuenoFlota)
+      .filter((c) => !a.unidad || (a.unidad === "con") === choferesConUnidad.has(c.id))
+      .filter((c) => {
+        if (!a.licencia) return true;
+        const d = diasHasta(c.licenciaVencimiento);
+        if (a.licencia === "sin_fecha") return d === null;
+        if (d === null) return false;
+        if (a.licencia === "vencida") return d < 0;
+        if (a.licencia === "por_vencer") return d >= 0 && d <= 30;
+        return d > 30;
+      });
     const q = abmQuery.trim().toLowerCase();
     if (!q) return list;
     return list.filter((c) => {
@@ -1353,7 +1518,7 @@ export function M5FichaPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [choferesDeEmpresa, abmQuery, estadoFiltro.chofer, empresaNombrePorId]);
+  }, [choferesDeEmpresa, abmQuery, estadoFiltro.chofer, empresaNombrePorId, advChofer.value, choferesConUnidad]);
 
   const usuariosFiltrados = useMemo(() => {
     const internos: Role[] = ["ADMINISTRADOR", "OPERACIONES", "SUGERENCIAS"];
@@ -1879,11 +2044,65 @@ export function M5FichaPage() {
         <>
           <div className="mb-4 space-y-3">
             <EstadoChips
-              value={estadoFiltro.chofer}
-              onChange={(v) => setEstadoFiltro((p) => ({ ...p, chofer: v }))}
+              value={advChofer.value.estados.length > 0 ? "TODOS" : estadoFiltro.chofer}
+              onChange={(v) => {
+                setEstadoFiltro((p) => ({ ...p, chofer: v }));
+                advChofer.setValue((a) => ({ ...a, estados: [] }));
+              }}
               counts={choferCounts}
               sinInactivar
             />
+            <AdvPanel
+              open={advChofer.open}
+              onToggle={() => advChofer.setOpen((o) => !o)}
+              activo={advChoferActivo}
+              onLimpiar={() => advChofer.setValue(EMPTY_ABM_CHOFER_ADV)}
+            >
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">Empresa de transporte</p>
+                <div className="flex max-h-36 flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
+                  {[...empresas]
+                    .sort((x, y) => x.nombre.localeCompare(y.nombre, "es"))
+                    .map((e) => (
+                      <label key={e.id} className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]">
+                        <input
+                          type="checkbox"
+                          checked={advChofer.value.empresaIds.includes(e.id)}
+                          onChange={() => advChofer.setValue((a) => ({ ...a, empresaIds: toggleStr(a.empresaIds, e.id) }))}
+                        />
+                        {e.nombre}
+                      </label>
+                    ))}
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <AdvOpciones
+                  titulo="Unidad asignada"
+                  value={advChofer.value.unidad}
+                  onChange={(v) => advChofer.setValue((a) => ({ ...a, unidad: v }))}
+                  opciones={[["", "Todos"], ["con", "Con unidad"], ["sin", "Sin unidad"]]}
+                />
+                <AdvOpciones
+                  titulo="Dueño de flota"
+                  value={advChofer.value.dueno}
+                  onChange={(v) => advChofer.setValue((a) => ({ ...a, dueno: v }))}
+                  opciones={[["", "Todos"], ["si", "Sí"], ["no", "No"]]}
+                />
+              </div>
+              <AdvOpciones
+                titulo="Vencimiento de licencia"
+                value={advChofer.value.licencia}
+                onChange={(v) => advChofer.setValue((a) => ({ ...a, licencia: v }))}
+                opciones={[["", "Todos"], ["vencida", "Vencida"], ["por_vencer", "Vence en 30 días"], ["vigente", "Vigente"], ["sin_fecha", "Sin fecha"]]}
+              />
+              <AdvEstados
+                value={advChofer.value.estados}
+                onChange={(estados) => {
+                  advChofer.setValue((a) => ({ ...a, estados }));
+                  setEstadoFiltro((p) => ({ ...p, chofer: "TODOS" }));
+                }}
+              />
+            </AdvPanel>
             <p className="text-[11px] text-[var(--vl-text-muted)]">
               Mostrando {choferesFiltrados.length} de {choferCounts.TODOS}
             </p>
@@ -2093,10 +2312,59 @@ export function M5FichaPage() {
         <>
         <div className="mb-4 space-y-3">
           <EstadoChips
-            value={estadoFiltro.empresas}
-            onChange={(v) => setEstadoFiltro((p) => ({ ...p, empresas: v }))}
+            value={advEmpresa.value.estados.length > 0 ? "TODOS" : estadoFiltro.empresas}
+            onChange={(v) => {
+              setEstadoFiltro((p) => ({ ...p, empresas: v }));
+              advEmpresa.setValue((a) => ({ ...a, estados: [] }));
+            }}
             counts={empresaCounts}
           />
+          <AdvPanel
+            open={advEmpresa.open}
+            onToggle={() => advEmpresa.setOpen((o) => !o)}
+            activo={advEmpresaActivo}
+            onLimpiar={() => advEmpresa.setValue(EMPTY_ABM_EMPRESA_ADV)}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AdvOpciones
+                titulo="Ve Mantenimiento"
+                value={advEmpresa.value.mantenimiento}
+                onChange={(v) => advEmpresa.setValue((a) => ({ ...a, mantenimiento: v }))}
+                opciones={[["", "Todas"], ["si", "Sí"], ["no", "No"]]}
+              />
+              <AdvOpciones
+                titulo="Ve Taller"
+                value={advEmpresa.value.taller}
+                onChange={(v) => advEmpresa.setValue((a) => ({ ...a, taller: v }))}
+                opciones={[["", "Todas"], ["si", "Sí"], ["no", "No"]]}
+              />
+              <AdvOpciones
+                titulo="Unidades"
+                value={advEmpresa.value.unidades}
+                onChange={(v) => advEmpresa.setValue((a) => ({ ...a, unidades: v }))}
+                opciones={[["", "Todas"], ["con", "Con unidades"], ["sin", "Sin unidades"]]}
+              />
+              <AdvOpciones
+                titulo="Choferes"
+                value={advEmpresa.value.choferes}
+                onChange={(v) => advEmpresa.setValue((a) => ({ ...a, choferes: v }))}
+                opciones={[["", "Todas"], ["con", "Con choferes"], ["sin", "Sin choferes"]]}
+              />
+              <AdvOpciones
+                titulo="Varias unidades por chofer"
+                value={advEmpresa.value.multi}
+                onChange={(v) => advEmpresa.setValue((a) => ({ ...a, multi: v }))}
+                opciones={[["", "Todas"], ["si", "Sí"], ["no", "No"]]}
+              />
+            </div>
+            <AdvEstados
+              value={advEmpresa.value.estados}
+              onChange={(estados) => {
+                advEmpresa.setValue((a) => ({ ...a, estados }));
+                setEstadoFiltro((p) => ({ ...p, empresas: "TODOS" }));
+              }}
+            />
+          </AdvPanel>
           <p className="text-[11px] text-[var(--vl-text-muted)]">
             Mostrando {empresasFiltradas.length} de {empresaCounts.TODOS}
           </p>
