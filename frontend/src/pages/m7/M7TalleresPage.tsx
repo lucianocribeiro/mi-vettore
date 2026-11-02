@@ -1235,6 +1235,37 @@ export function M7TalleresPage() {
                         </p>
                       )}
 
+                      {(isAsignacionOPresupuestoStep(displayStep) || isSeleccionStep(displayStep)) &&
+                        ot.sinPresupuesto &&
+                        !vistaChofer &&
+                        (ot.items ?? []).some((i) => i.tipo !== "PRESUPUESTO") && (
+                          <div className="space-y-2">
+                            <p className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                              <strong>Sin presupuesto.</strong> El gasto se cargó en <strong>Ajuste</strong>; se edita en esa etapa.
+                            </p>
+                            <ItemsEditor
+                              ot={ot}
+                              token={token!}
+                              talleres={talleres}
+                              tipo="FACTURA"
+                              lockTipo
+                              readOnly
+                              desc=""
+                              setDesc={() => {}}
+                              imp=""
+                              setImp={() => {}}
+                              obs=""
+                              setObs={() => {}}
+                              tallerId=""
+                              setTallerId={() => {}}
+                              busy={busy}
+                              onSaved={replaceOt}
+                              onError={setError}
+                            />
+                          </div>
+                        )}
+
+
                       {isAjusteStep(displayStep) && (
                         vistaChofer ? (
                           <p className="rounded-lg border border-[var(--vl-card-border)] bg-slate-100/80 p-3 text-xs text-[var(--vl-text-muted)] dark:bg-slate-900/50">
@@ -1618,6 +1649,9 @@ export function M7TalleresPage() {
                           void call(`/api/talleres/${ot.id}/reabrir`, {
                             method: "POST",
                             body: "{}",
+                          }).then((u) => {
+                            // Ir a la etapa real (ajuste), donde está el ítem cargado.
+                            if (u) setBrowseStep(null);
                           })
                         }
                         className="inline-flex min-h-11 items-center justify-center rounded-xl border-2 border-amber-500 px-4 text-sm font-semibold text-amber-800 dark:text-amber-200"
