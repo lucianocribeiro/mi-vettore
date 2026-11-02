@@ -1893,7 +1893,9 @@ export function M5FichaPage() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => setDrawer({ tipo: "chofer", item: c })}
+                onClick={() => {
+                  if (canEdit) openEditChofer(c);
+                }}
                 className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4 text-left transition hover:border-slate-400 hover:shadow-sm dark:hover:border-slate-500"
               >
                 <div className="text-xs text-[var(--vl-text-muted)]">
@@ -2790,16 +2792,6 @@ export function M5FichaPage() {
                     Para {fEquipoFrio}: {tiposFrioPermitidos.join(", ")}
                   </p>
                 )}
-              </Field>
-              <Field label="Documentación que se pide">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={fPideSenasaHomol}
-                    onChange={(e) => setFPideSenasaHomol(e.target.checked)}
-                  />
-                  SENASA y Homologación (opcionales)
-                </label>
               </Field>
               <Field label="Estado">
                 <select

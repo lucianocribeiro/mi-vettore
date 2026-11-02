@@ -27,16 +27,6 @@ function todayInputDate() {
   return `${y}-${m}-${day}`;
 }
 
-const FALLAS_COMUNES = [
-  "Pérdida de gas / equipo de frío",
-  "Frenos",
-  "Neumáticos / gomería",
-  "Batería / no arranca",
-  "Problema eléctrico",
-  "Motor / mecánica general",
-  "Otros",
-] as const;
-
 const OT_STEPS = [
   { code: "solicitud", label: "Solicitud", owner: null as string | null, detail: "Ingreso de la orden de trabajo: unidad, problema y si puede circular." },
   { code: "presupuesto", label: "Presupuesto", owner: "Vettore", detail: "Cargá presupuestos por proveedor. Solo se muestran los subtotales por proveedor." },
@@ -102,6 +92,8 @@ type OtItem = {
   categoriaDiagnostico?: { id: string; nombre: string; nivel: number; padreId: string | null } | null;
   clasificacion?: ClasificacionGasto | null;
   clasificacionOtro?: string | null;
+  /** Fecha de reparación del ítem (editable al cargarlo; por defecto hoy). */
+  fecha?: string | null;
 };
 
 type OtFactura = {
@@ -1247,6 +1239,15 @@ export function M7TalleresPage() {
                               <strong>Sin presupuesto.</strong> Cargá el importe del gasto acá.
                               No se compara contra un presupuesto aprobado.
                             </p>
+                            {/* Arbolito N1/N2/N3 también sin presupuesto: es obligatorio para pasar al cierre. */}
+                            <CierreConceptosResumen
+                              ot={ot}
+                              token={token!}
+                              editable={editandoPasoActual && puedeEditarTaller}
+                              onSaved={replaceOt}
+                              onError={setError}
+                              className="rounded-lg border border-[var(--vl-card-border)] p-3"
+                            />
                             <ItemsEditor
                               ot={ot}
                               token={token!}
@@ -2976,6 +2977,7 @@ function ItemsEditor({
         <thead>
           <tr className="text-xs text-[var(--vl-text-muted)]">
             <th className="py-1 font-semibold">Descripción</th>
+            <th className="py-1 font-semibold">Fecha de reparación</th>
             <th className="py-1 font-semibold">Mano obra / Materiales</th>
             {!showSubtotales && <th className="py-1 font-semibold">Importe</th>}
             {!readOnly && <th className="py-1" />}
@@ -2985,7 +2987,7 @@ function ItemsEditor({
             <tbody key={g.nombre}>
               <tr>
                 <td
-                  colSpan={2 + (showSubtotales ? 0 : 1) + (readOnly ? 0 : 1)}
+                  colSpan={3 + (showSubtotales ? 0 : 1) + (readOnly ? 0 : 1)}
                   className="pb-1 pt-2"
                 >
                   <div className="flex items-center justify-between text-[11px] font-semibold">
@@ -2997,6 +2999,7 @@ function ItemsEditor({
               {g.items.map((i) => (
                 <tr key={i.id} className="border-t border-[var(--vl-card-border)]">
                   <td className="py-1">{i.descripcion}</td>
+                  <td>{fmtOtFechaLista(i.fecha ?? null)}</td>
                   <td>{clasifLabel(i)}</td>
                   {!showSubtotales && <td>{money(i.importe)}</td>}
                   {!readOnly && (
@@ -3024,7 +3027,7 @@ function ItemsEditor({
         <input className="rounded-md border p-2 text-sm" placeholder="Descripción" value={desc} onChange={(e) => setDesc(e.target.value)} />
         <input className="min-h-11 rounded-md border p-2 text-base font-medium" placeholder="Importe $" type="number" value={imp} onChange={(e) => setImp(e.target.value)} />
         <label className="text-xs text-[var(--vl-text-muted)] sm:col-span-2">
-          Fecha
+          Fecha de reparación
           <input
             type="date"
             className="mt-1 w-full rounded-md border p-2 text-sm text-[var(--vl-text)]"
@@ -3097,7 +3100,6 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);
   const [empresaId, setEmpresaId] = useState("");
   const [camionetaId, setCamionetaId] = useState("");
-  const [falla, setFalla] = useState(user?.rol === "CHOFER" ? "" : FALLAS_COMUNES[0]);
   const [detalle, setDetalle] = useState("");
   const [kmDraft, setKmDraft] = useState("");
   const [habilitadaCircular, setHabilitadaCircular] = useState(true);
@@ -3161,9 +3163,10 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
 
   async function submit() {
     if (!token || !camionetaId) return;
-    const problema = esChofer ? detalle.trim() : falla === "Otros" ? detalle.trim() : falla;
+    // Sin menú de fallas: el problema se describe en el detalle (igual para chofer, empresa y Vettore).
+    const problema = detalle.trim();
     if (!problema) {
-      setErr(esChofer ? "Describí el problema" : "Indicá la falla");
+      setErr("Describí el problema");
       return;
     }
     const km = Number(kmDraft);
@@ -3206,7 +3209,7 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
   const puedeEnviar =
     !!camionetaId &&
     (!opsInterno || !!empresaId) &&
-    !!(esChofer ? detalle.trim() : falla === "Otros" ? detalle.trim() : falla) &&
+    !!detalle.trim() &&
     Number.isFinite(Number(kmDraft)) &&
     Number(kmDraft) >= 0 &&
     (!selected || opsInterno || Number(kmDraft) >= selected.km) &&
@@ -3329,12 +3332,10 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
             <textarea rows={4} className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" placeholder='Ej. "se rompió la caja"' value={detalle} onChange={(e) => setDetalle(e.target.value)} />
           </label>
         ) : (
-          <>
-            <select className="mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" value={falla} onChange={(e) => setFalla(e.target.value)}>
-              {FALLAS_COMUNES.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
-            <textarea rows={2} className="mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" placeholder="Detalle" value={detalle} onChange={(e) => setDetalle(e.target.value)} />
-          </>
+          <label className="text-xs text-[var(--vl-text-muted)]">
+            Detalle del problema
+            <textarea rows={3} className="mt-1 mb-3 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] p-2 text-sm text-[var(--vl-text)]" placeholder="Detalle" value={detalle} onChange={(e) => setDetalle(e.target.value)} />
+          </label>
         )}
         <fieldset className="mb-3">
           <legend className="text-xs text-[var(--vl-text-muted)]">¿La unidad puede circular?</legend>

@@ -34,7 +34,8 @@ const FOTO_HINT: Partial<Record<TipoDocumento, string>> = {
   FOTO_CARGA: "Caja / zona de carga por dentro.",
 };
 
-export async function compressImageIfNeeded(file: File): Promise<File | Blob> {
+/** Comprime la imagen y, si `rotacion` (grados: 0/90/180/270) no es 0, la rota antes de subirla. */
+export async function compressImageIfNeeded(file: File, rotacion = 0): Promise<File | Blob> {
   if (!file.type.startsWith("image/")) return file;
   const maxWidth = 1600;
   const quality = 0.7;
@@ -43,12 +44,16 @@ export async function compressImageIfNeeded(file: File): Promise<File | Blob> {
   const scale = bitmap.width > maxWidth ? maxWidth / bitmap.width : 1;
   const w = Math.round(bitmap.width * scale);
   const h = Math.round(bitmap.height * scale);
+  const rot = ((rotacion % 360) + 360) % 360;
+  const girada = rot === 90 || rot === 270;
   const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = girada ? h : w;
+  canvas.height = girada ? w : h;
   const ctx = canvas.getContext("2d");
   if (!ctx) return file;
-  ctx.drawImage(bitmap, 0, 0, w, h);
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((rot * Math.PI) / 180);
+  ctx.drawImage(bitmap, -w / 2, -h / 2, w, h);
   bitmap.close();
 
   const blob = await new Promise<Blob | null>((resolve) =>
@@ -79,6 +84,10 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
     TIPOS_DOCUMENTO_OBLIGATORIOS
   );
   const canValidate = user?.rol === "OPERACIONES" || user?.rol === "ADMINISTRADOR";
+  /** Imagen elegida que todavía no se subió: se muestra para poder rotarla antes de guardar. */
+  const [previa, setPrevia] = useState<{ tipo: TipoDocumento; file: File; url: string; rot: number } | null>(null);
+  const previaUrl = previa?.url;
+  useEffect(() => () => { if (previaUrl) URL.revokeObjectURL(previaUrl); }, [previaUrl]);
   const load = useCallback(async () => {
     if (!token || (!choferId && !camionetaId)) return;
     setLoading(true);
@@ -142,11 +151,24 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
       );
       return;
     }
+    // Documentos en imagen (cédula, DNI, licencia…): vista previa para rotar antes de guardar.
+    if (file.type.startsWith("image/") && !TIPOS_FOTO_VEHICULO.includes(tipoDoc)) {
+      setError(null);
+      setPrevia({ tipo: tipoDoc, file, url: URL.createObjectURL(file), rot: 0 });
+      return;
+    }
+    await subir(tipoDoc, file, 0);
+  }
+
+  async function subir(tipoDoc: TipoDocumento, file: File, rotacion: number) {
+    if (!token) return;
+    const needsVenc = conVencimiento.includes(tipoDoc);
+    const vencimiento = vencByTipo[tipoDoc] ?? "";
     setUploading(true);
     setTipoUploading(tipoDoc);
     setError(null);
     try {
-      const compressed = await compressImageIfNeeded(file);
+      const compressed = await compressImageIfNeeded(file, rotacion);
       const fd = new FormData();
       fd.append("archivo", compressed);
       fd.append("tipo", tipoDoc);
@@ -412,6 +434,50 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
 
       {error && (
         <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+      )}
+      {previa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <div className="flex max-h-[92vh] w-full max-w-lg flex-col gap-3 rounded-xl bg-[var(--vl-card)] p-4 shadow-xl">
+            <div className="text-sm font-semibold text-[var(--vl-heading)]">
+              {TIPO_DOCUMENTO_LABEL[previa.tipo] ?? previa.tipo} · revisá cómo se ve antes de guardar
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800" style={{ height: "55vh" }}>
+              <img
+                src={previa.url}
+                alt="Vista previa del documento"
+                className="max-h-full max-w-full object-contain transition-transform"
+                style={{ transform: `rotate(${previa.rot}deg)`, maxHeight: previa.rot % 180 ? "min(55vh, 100%)" : undefined }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex gap-2">
+                <button type="button" className="rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold" onClick={() => setPrevia((p) => p && { ...p, rot: (p.rot + 270) % 360 })}>
+                  ↺ Rotar a la izquierda
+                </button>
+                <button type="button" className="rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold" onClick={() => setPrevia((p) => p && { ...p, rot: (p.rot + 90) % 360 })}>
+                  Rotar a la derecha ↻
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" className="rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs" onClick={() => setPrevia(null)}>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-[#1e4080] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                  disabled={uploading}
+                  onClick={() => {
+                    const p = previa;
+                    setPrevia(null);
+                    void subir(p.tipo, p.file, p.rot);
+                  }}
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
       {loading && (
         <p className="text-xs text-[var(--vl-text-muted)]">Cargando docs…</p>

@@ -582,12 +582,14 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
       if (estadoQ === "abierta" && ot.cerradaAt) continue;
       if (estadoQ === "cerrada" && !ot.cerradaAt) continue;
 
+      // La fecha que importa es la de la reparación cargada en los ítems (por defecto hoy, editable);
+      // si la OT no tiene ninguna, la de cierre o la de creación.
       const fechaReparacion = (
-        ot.cerradaAt ??
         ot.items
           ?.map((i) => i.fecha)
           .filter((d): d is Date => !!d)
           .sort((a, b) => b.getTime() - a.getTime())[0] ??
+        ot.cerradaAt ??
         ot.createdAt
       )
         .toISOString()
@@ -654,6 +656,7 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
         },
         facturas: true,
         movimientos: true,
+        diagnosticos: { select: { categoriaId: true } },
       },
       orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
       take: 300,
@@ -682,9 +685,10 @@ router.get("/historial", authenticate, async (req: AuthedRequest, res) => {
       const presupuestoItems = ot.items.filter((i) => i.tipo === "PRESUPUESTO");
       const repuestos = (facturaItems.length ? facturaItems : presupuestoItems).map(
         (i) => {
+          // Un solo arbolito por OT: primero el concepto de la OT, después el del ítem (OT viejas).
           const diag = diagnosticoPathFromId(
             cats,
-            i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id
+            ot.diagnosticos?.[0]?.categoriaId ?? i.categoriaDiagnosticoId ?? i.categoriaDiagnostico?.id
           );
           return {
             descripcion: i.descripcion,
@@ -805,6 +809,7 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
           },
           tallerProveedor: true,
           items: { orderBy: { createdAt: "asc" } },
+          diagnosticos: { select: { categoriaId: true } },
         },
         orderBy: [{ cerradaAt: "desc" }, { createdAt: "desc" }],
         take: 1000,
@@ -840,7 +845,10 @@ router.get("/historial/export", authenticate, async (req: AuthedRequest, res) =>
               },
             ];
       for (const it of items) {
-        const catId = "categoriaDiagnosticoId" in it ? it.categoriaDiagnosticoId : null;
+        // Un solo arbolito por OT: el concepto está en la OT (los ítems nuevos ya no lo llevan) → antes salían niveles vacíos.
+        const catId =
+          ot.diagnosticos?.[0]?.categoriaId ??
+          ("categoriaDiagnosticoId" in it ? it.categoriaDiagnosticoId : null);
         if (!categoriaEnRama(cats, catId, filtroRama)) continue;
         const nivel = diagnosticoPathFromId(cats, catId);
         const taller =
