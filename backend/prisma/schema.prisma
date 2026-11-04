@@ -321,6 +321,8 @@ model EmpresaTransporte {
   contacto               String?
   /// Mail de contacto de la empresa.
   email                  String?
+  /// CBU o alias bancario (solo edición / Excel; no se muestra en el listado).
+  cbuAlias               String?
   /// Legado PROPIA/ALIADA: ya no se usa en ABM (se mantiene por compat).
   tipo                   TipoEmpresa      @default(ALIADA)
   /// Si true, un mismo chofer puede tener varias camionetas activas de esta empresa.

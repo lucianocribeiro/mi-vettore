@@ -29,6 +29,7 @@ export const FLOTA_COLUMNAS: Record<HojaFlota, Columna[]> = {
     { header: "CUIT", key: "cuit", width: 16 },
     { header: "Email", key: "email", width: 28 },
     { header: "Teléfono", key: "telefono", width: 16 },
+    { header: "CBU o Alias", key: "cbuAlias", width: 28 },
     { header: "Mantenimiento", key: "mantenimiento", width: 14 },
     { header: "Taller", key: "taller", width: 10 },
   ],
@@ -66,6 +67,7 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
     cuit: CUIT_EJEMPLO,
     email: "contacto@empresa.com",
     telefono: "2644000000",
+    cbuAlias: "empresa.alias.mp",
     mantenimiento: "SI",
     taller: "SI",
   },
@@ -161,6 +163,7 @@ export type FilaEmpresa = {
   cuit: string;
   email: string;
   contacto: string;
+  cbuAlias: string;
   verMantenimiento: boolean;
   verTaller: boolean;
 };
@@ -286,6 +289,7 @@ export async function parseFlotaWorkbook(
         cuit,
         email,
         contacto,
+        cbuAlias: txt(row, "cbuAlias"),
         verMantenimiento: parseSiNo(
           txt(row, "mantenimiento") || txt(row, "vermantenimiento")
         ),

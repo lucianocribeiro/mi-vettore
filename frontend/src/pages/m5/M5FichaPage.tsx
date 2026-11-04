@@ -364,6 +364,7 @@ export function M5FichaPage() {
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
   const [fCuit, setFCuit] = useState("");
   const [fEmailEmpresa, setFEmailEmpresa] = useState("");
+  const [fCbuAlias, setFCbuAlias] = useState("");
   const [fPatente, setFPatente] = useState("");
   const [fMarca, setFMarca] = useState("");
   const [fModelo, setFModelo] = useState("");
@@ -602,6 +603,7 @@ export function M5FichaPage() {
     setFEstadoChofer("ACTIVO");
     setFCuit("");
     setFEmailEmpresa("");
+    setFCbuAlias("");
     setFPasswordEmpresa("");
     setFPatente("");
     setFMarca("");
@@ -652,6 +654,7 @@ export function M5FichaPage() {
     setFNombre(item.nombre);
     setFCuit(item.cuit ?? "");
     setFEmailEmpresa(item.email ?? "");
+    setFCbuAlias(item.cbuAlias ?? "");
     setFPasswordEmpresa("");
     setFVerMant(!!item.verMantenimiento);
     setFVerTaller(!!item.verTaller);
@@ -799,6 +802,7 @@ export function M5FichaPage() {
           nombre: fNombre,
           cuit: fCuit || null,
           email: fEmailEmpresa.trim() || null,
+          cbuAlias: fCbuAlias.trim() || null,
           password: fPasswordEmpresa || undefined,
           verMantenimiento: fVerMant,
           verTaller: fVerTaller,
@@ -2834,6 +2838,14 @@ export function M5FichaPage() {
                   value={fEmailEmpresa}
                   onChange={(e) => setFEmailEmpresa(e.target.value)}
                   placeholder="contacto@empresa.com"
+                />
+              </Field>
+              <Field label="CBU o Alias">
+                <input
+                  className={inputClass}
+                  value={fCbuAlias}
+                  onChange={(e) => setFCbuAlias(e.target.value)}
+                  placeholder="CBU o alias bancario"
                 />
               </Field>
               <Field label="Módulos">

@@ -68,6 +68,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
           cuit: e.cuit ?? "",
           email,
           telefono,
+          cbuAlias: e.cbuAlias ?? "",
           mantenimiento: e.verMantenimiento ? "SI" : "NO",
           taller: e.verTaller ? "SI" : "NO",
         };
@@ -120,6 +121,9 @@ router.post("/", ...write, async (req, res) => {
         email: email || null,
         contacto: req.body?.contacto
           ? String(req.body.contacto).trim()
+          : null,
+        cbuAlias: req.body?.cbuAlias
+          ? String(req.body.cbuAlias).trim()
           : null,
         permiteMultiCamioneta:
           req.body?.permiteMultiCamioneta === undefined
@@ -174,6 +178,7 @@ router.put("/:id", ...write, async (req, res) => {
       activo?: boolean;
       email?: string | null;
       contacto?: string | null;
+      cbuAlias?: string | null;
       permiteMultiCamioneta?: boolean;
       verMantenimiento?: boolean;
       verTaller?: boolean;
@@ -196,6 +201,11 @@ router.put("/:id", ...write, async (req, res) => {
     if (req.body?.contacto !== undefined) {
       data.contacto = req.body.contacto
         ? String(req.body.contacto).trim()
+        : null;
+    }
+    if (req.body?.cbuAlias !== undefined) {
+      data.cbuAlias = req.body.cbuAlias
+        ? String(req.body.cbuAlias).trim()
         : null;
     }
     if (req.body?.permiteMultiCamioneta !== undefined) {

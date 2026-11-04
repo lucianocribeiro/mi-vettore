@@ -263,6 +263,8 @@ export type Empresa = {
   cuit: string | null;
   email?: string | null;
   contacto: string | null;
+  /** CBU o alias bancario (ficha / Excel; no se muestra en el listado). */
+  cbuAlias?: string | null;
   /** Legado; no se edita en ABM. */
   tipo?: TipoEmpresa;
   /** Si true, un mismo chofer puede tener varias camionetas activas de esta empresa. */
