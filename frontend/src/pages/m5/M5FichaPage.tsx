@@ -1308,9 +1308,26 @@ export function M5FichaPage() {
     );
   }, [tiposServicio, abmQuery]);
 
+  const [verTalleresBaja, setVerTalleresBaja] = useState(false);
+  // Dar de baja un taller: no se borra (queda en el historial de OT y pagos); sólo deja de ofrecerse.
+  async function cambiarEstadoTaller(t: TallerProveedor, activo: boolean) {
+    if (!token) return;
+    if (!activo && !window.confirm(`¿Dar de baja a ${t.razonSocial}?\n\nNo se borra: sus OT y pagos quedan en el historial. Podés reactivarlo cuando quieras.`)) return;
+    try {
+      if (activo) {
+        await apiFetch(`/api/talleres-proveedores/${t.id}`, { method: "PUT", body: JSON.stringify({ activo: true }) }, token);
+      } else {
+        await apiFetch(`/api/talleres-proveedores/${t.id}`, { method: "DELETE" }, token);
+      }
+      setTalleres((prev) => prev.map((x) => (x.id === t.id ? { ...x, activo } : x)));
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo actualizar el taller");
+    }
+  }
+
   const talleresFiltrados = useMemo(() => {
     const q = abmQuery.trim().toLowerCase();
-    const list = Array.isArray(talleres) ? talleres : [];
+    const list = (Array.isArray(talleres) ? talleres : []).filter((t) => verTalleresBaja || t.activo !== false);
     if (!q) return list;
     return list.filter((t) => {
       const hay = [
@@ -1326,7 +1343,7 @@ export function M5FichaPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [talleres, abmQuery]);
+  }, [talleres, abmQuery, verTalleresBaja]);
 
   const unidadesDeEmpresaAsig = useMemo(() => {
     if (!asigEmpresaId) return [] as Camioneta[];
@@ -2608,11 +2625,17 @@ export function M5FichaPage() {
       )}
 
       {!loading && !error && tab === "talleres" && (
+        <label className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+          <input type="checkbox" checked={verTalleresBaja} onChange={(e) => setVerTalleresBaja(e.target.checked)} />
+          Mostrar talleres dados de baja
+        </label>
+      )}
+      {!loading && !error && tab === "talleres" && (
         <EntityTable
           headers={["CUIT", "Razón social", "Tipos", "Mail", "Celular", ""]}
           rows={talleresFiltrados.map((t) => [
             t.cuit,
-            t.razonSocial,
+            t.activo === false ? `${t.razonSocial} (de baja)` : t.razonSocial,
             (t.tipos ?? []).map((x) => x.tipo).join(", ") || "—",
             t.mail ?? "—",
             t.celular ?? "—",
@@ -2635,6 +2658,13 @@ export function M5FichaPage() {
                   }}
                 >
                   Editar
+                </button>
+                <button
+                  type="button"
+                  className={t.activo === false ? "text-emerald-700 hover:underline" : "text-red-600 hover:underline"}
+                  onClick={() => void cambiarEstadoTaller(t, t.activo === false)}
+                >
+                  {t.activo === false ? "Reactivar" : "Dar de baja"}
                 </button>
               </div>
             ) : (

@@ -565,9 +565,27 @@ export function TalleresProveedoresPanel({
     ? tipos
     : (Object.keys(TIPO_TALLER_LABEL) as TipoTaller[]);
 
+  // Dar de baja: el taller no se borra (queda en el historial de OT y pagos); sólo deja de ofrecerse.
+  const [verBajas, setVerBajas] = useState(false);
+  async function cambiarEstado(t: TallerProveedor, activo: boolean) {
+    if (!token) return;
+    if (!activo && !window.confirm(`¿Dar de baja a ${t.razonSocial}?\n\nNo se borra: sus OT y pagos quedan en el historial. Podés reactivarlo cuando quieras.`)) return;
+    try {
+      if (activo) {
+        await apiFetch(`/api/talleres-proveedores/${t.id}`, { method: "PUT", body: JSON.stringify({ activo: true }) }, token);
+      } else {
+        await apiFetch(`/api/talleres-proveedores/${t.id}`, { method: "DELETE" }, token);
+      }
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo actualizar el taller");
+    }
+  }
+
   const itemsFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return items.filter((t) => {
+      if (!verBajas && t.activo === false) return false;
       if (filtroTipo && !(t.tipos ?? []).some((x) => x.tipo === filtroTipo)) {
         return false;
       }
@@ -584,7 +602,7 @@ export function TalleresProveedoresPanel({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [items, filtroTipo, busqueda]);
+  }, [items, filtroTipo, busqueda, verBajas]);
 
   const pagoObjetivo = pagoModal ? montoObjetivoPago() : 0;
   const pagoSumaMetodos = sumLineas();
@@ -666,6 +684,10 @@ export function TalleresProveedoresPanel({
                 ))}
               </select>
             </label>
+            <label className="flex items-center gap-2 pb-2 text-xs text-[var(--vl-text-muted)]">
+              <input type="checkbox" checked={verBajas} onChange={(e) => setVerBajas(e.target.checked)} />
+              Mostrar dados de baja
+            </label>
             {(filtroTipo || busqueda.trim()) && (
               <p className="pb-2 text-[11px] text-[var(--vl-text-muted)]">
                 Mostrando {itemsFiltrados.length} de {items.length}
@@ -691,7 +713,12 @@ export function TalleresProveedoresPanel({
                     onClick={() => setContactoTaller(t)}
                   >
                     <td className="px-3 py-2">{t.cuit}</td>
-                    <td className="px-3 py-2">{t.razonSocial}</td>
+                    <td className={`px-3 py-2${t.activo === false ? " text-[var(--vl-text-muted)] line-through" : ""}`}>
+                      {t.razonSocial}
+                      {t.activo === false && (
+                        <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-600 no-underline dark:text-red-400">De baja</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-1">
                         {(t.tipos ?? []).length
@@ -723,6 +750,18 @@ export function TalleresProveedoresPanel({
                           }}
                         >
                           Editar
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className={t.activo === false ? "ml-2 text-xs text-emerald-700 underline dark:text-emerald-400" : "ml-2 text-xs text-red-600 underline dark:text-red-400"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void cambiarEstado(t, t.activo === false);
+                          }}
+                        >
+                          {t.activo === false ? "Reactivar" : "Dar de baja"}
                         </button>
                       )}
                     </td>
