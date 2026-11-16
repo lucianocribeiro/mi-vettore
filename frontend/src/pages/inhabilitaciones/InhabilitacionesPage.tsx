@@ -151,6 +151,9 @@ export function InhabilitacionesPage() {
   const [editando, setEditando] = useState<Inhabilitacion | null>(null);
   const [showMotivos, setShowMotivos] = useState(false);
   const [nuevoMotivo, setNuevoMotivo] = useState("");
+  const [editMotivo, setEditMotivo] = useState<{ id: string; nombre: string } | null>(
+    null
+  );
   const [busyMotivo, setBusyMotivo] = useState(false);
   const hoy = hoyIso();
 
@@ -258,6 +261,27 @@ export function InhabilitacionesPage() {
     }
   }
 
+  async function guardarMotivoEditado() {
+    if (!token || !editMotivo || !editMotivo.nombre.trim()) return;
+    setBusyMotivo(true);
+    try {
+      await apiFetch(
+        `/api/inhabilitaciones/motivos/${editMotivo.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ nombre: editMotivo.nombre.trim() }),
+        },
+        token
+      );
+      setEditMotivo(null);
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo guardar");
+    } finally {
+      setBusyMotivo(false);
+    }
+  }
+
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3 sm:mb-6">
@@ -308,19 +332,70 @@ export function InhabilitacionesPage() {
             {motivos.map((m) => (
               <li
                 key={m.id}
-                className="flex items-center justify-between gap-2 text-sm text-[var(--vl-text)]"
+                className="flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--vl-text)]"
               >
-                <span className={m.activo ? "" : "text-[var(--vl-text-muted)] line-through"}>
-                  {m.nombre}
-                </span>
-                <button
-                  type="button"
-                  disabled={busyMotivo}
-                  onClick={() => void toggleMotivo(m)}
-                  className="text-xs font-medium text-[#1e4080] underline-offset-2 hover:underline"
-                >
-                  {m.activo ? "Desactivar" : "Reactivar"}
-                </button>
+                {editMotivo?.id === m.id ? (
+                  <>
+                    <input
+                      className="min-h-9 min-w-[10rem] flex-1 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 text-sm"
+                      value={editMotivo.nombre}
+                      onChange={(e) =>
+                        setEditMotivo({ id: m.id, nombre: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void guardarMotivoEditado();
+                        if (e.key === "Escape") setEditMotivo(null);
+                      }}
+                      autoFocus
+                    />
+                    <div className="flex shrink-0 gap-3 text-xs font-medium">
+                      <button
+                        type="button"
+                        disabled={busyMotivo || !editMotivo.nombre.trim()}
+                        onClick={() => void guardarMotivoEditado()}
+                        className="text-emerald-700 hover:underline dark:text-emerald-400"
+                      >
+                        Guardar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyMotivo}
+                        onClick={() => setEditMotivo(null)}
+                        className="text-[var(--vl-text-muted)] hover:underline"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span
+                      className={
+                        m.activo ? "" : "text-[var(--vl-text-muted)] line-through"
+                      }
+                    >
+                      {m.nombre}
+                    </span>
+                    <div className="flex shrink-0 gap-3 text-xs font-medium">
+                      <button
+                        type="button"
+                        disabled={busyMotivo}
+                        onClick={() => setEditMotivo({ id: m.id, nombre: m.nombre })}
+                        className="text-[#1e4080] underline-offset-2 hover:underline"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyMotivo}
+                        onClick={() => void toggleMotivo(m)}
+                        className="text-[#1e4080] underline-offset-2 hover:underline"
+                      >
+                        {m.activo ? "Desactivar" : "Reactivar"}
+                      </button>
+                    </div>
+                  </>
+                )}
               </li>
             ))}
             {motivos.length === 0 && (
