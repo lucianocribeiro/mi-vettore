@@ -142,7 +142,14 @@ router.get("/", ...ops, async (_req, res) => {
     res.json(items);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Error al listar inhabilitaciones" });
+    const msg = err instanceof Error ? err.message : String(err);
+    const faltaMigracion =
+      /motivoId|aplicadaAt|MotivoInhabilitacion|does not exist|column/i.test(msg);
+    res.status(500).json({
+      error: faltaMigracion
+        ? "Falta migrar la base: ejecutá npx prisma migrate deploy en el backend (motivos / aplicadaAt)."
+        : "Error al listar inhabilitaciones",
+    });
   }
 });
 
