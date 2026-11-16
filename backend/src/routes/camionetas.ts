@@ -677,7 +677,8 @@ router.get("/km-registros", authenticate, async (req: AuthedRequest, res) => {
 
     let camionetaIds: string[] | null = null;
     if (rol === "CHOFER") {
-      const ids = await camionetasParaUsuarioChofer(req.user!.id, ctx);
+      const units = await camionetasParaUsuarioChofer(req.user!.id, ctx);
+      const ids = units.map((u) => u.id);
       if (camionetaId && !ids.includes(camionetaId)) {
         res.status(403).json({ error: "Sin acceso a esta unidad" });
         return;
