@@ -607,13 +607,13 @@ router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
       : null;
     const rows = await prisma.kmRegistro.findMany({
       where: {
-        createdAt: { gte: desde, lte: hasta },
+        fecha: { gte: desde, lte: hasta },
         ...(patente
           ? { camioneta: { patente: { contains: patente, mode: "insensitive" } } }
           : {}),
       },
       include: { camioneta: { select: { patente: true, id: true } } },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
     });
 
     if (String(req.query.format ?? "") === "xlsx") {
@@ -630,7 +630,7 @@ router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
       sheet.getRow(1).font = { bold: true };
       for (const r of rows) {
         sheet.addRow({
-          fecha: r.createdAt.toISOString(),
+          fecha: (r.fecha ?? r.createdAt).toISOString(),
           patente: r.camioneta.patente,
           kmAnterior: r.kmAnterior,
           kmNuevo: r.kmNuevo,
@@ -652,6 +652,67 @@ router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al generar reporte de km" });
+  }
+});
+
+/** Historial de cargas de km (chofer/empresa: solo su flota; ops: todo). */
+router.get("/km-registros", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    const rol = req.user!.rol;
+    if (
+      rol !== "CHOFER" &&
+      rol !== "EMPRESA" &&
+      rol !== "ADMINISTRADOR" &&
+      rol !== "OPERACIONES"
+    ) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
+    }
+
+    const take = Math.min(Number(req.query.limit) || 80, 300);
+    const camionetaId = req.query.camionetaId
+      ? String(req.query.camionetaId)
+      : undefined;
+    const ctx = contextoAccesoFromReq(req);
+
+    let camionetaIds: string[] | null = null;
+    if (rol === "CHOFER") {
+      const ids = await camionetasParaUsuarioChofer(req.user!.id, ctx);
+      if (camionetaId && !ids.includes(camionetaId)) {
+        res.status(403).json({ error: "Sin acceso a esta unidad" });
+        return;
+      }
+      camionetaIds = camionetaId ? [camionetaId] : ids;
+    } else if (rol === "EMPRESA") {
+      const empresaIds = await empresaIdsDeDueno(req.user!.id);
+      if (!empresaIds.length) {
+        res.json({ registros: [] });
+        return;
+      }
+      const units = await prisma.camioneta.findMany({
+        where: {
+          empresaId: { in: empresaIds },
+          ...(camionetaId ? { id: camionetaId } : {}),
+        },
+        select: { id: true },
+      });
+      camionetaIds = units.map((u) => u.id);
+    } else if (camionetaId) {
+      camionetaIds = [camionetaId];
+    }
+
+    const registros = await prisma.kmRegistro.findMany({
+      where: camionetaIds ? { camionetaId: { in: camionetaIds } } : {},
+      include: {
+        camioneta: { select: { id: true, patente: true } },
+      },
+      orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
+      take,
+    });
+    res.json({ registros });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al listar registros de km" });
   }
 });
 
@@ -1287,6 +1348,12 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
       }
       const next = Math.floor(km);
       const allowDecrease = canAdminCorregir(req.user!.rol);
+      const fechaKm =
+        parseDate(req.body?.fecha ?? req.body?.fechaKm) ?? new Date();
+      if (fechaKm.getTime() > Date.now() + 86400000) {
+        res.status(400).json({ error: "La fecha del kilometraje no puede ser futura" });
+        return;
+      }
       const applied = await applyKmUpdate(prisma, {
         camionetaId,
         existingKm: existing.km,
@@ -1294,13 +1361,14 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
         userId: req.user!.id,
         allowDecrease,
         motivo: req.body?.motivo ?? req.body?.overrideComentario,
+        fecha: fechaKm,
       });
       if (!applied.ok) {
         res.status(applied.status).json({ error: applied.error });
         return;
       }
       data.km = next;
-      data.kmActualizadoAt = new Date();
+      data.kmActualizadoAt = fechaKm;
       kmAnomalia = applied.anomalia;
       if (kmAnomalia) {
         await prisma.avisoInterno.createMany({

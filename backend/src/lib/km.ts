@@ -14,6 +14,8 @@ export async function applyKmUpdate(
     userId: string | null;
     allowDecrease: boolean;
     motivo?: string | null;
+    /** Fecha del odómetro (default: ahora). */
+    fecha?: Date | null;
   }
 ): Promise<
   | { ok: true; anomalia: boolean; delta: number }
@@ -41,6 +43,7 @@ export async function applyKmUpdate(
   }
   const delta = next - opts.existingKm;
   const anomalia = delta > kmAnomaliaMaxDelta();
+  const fecha = opts.fecha ?? new Date();
   await db.kmRegistro.create({
     data: {
       camionetaId: opts.camionetaId,
@@ -49,6 +52,7 @@ export async function applyKmUpdate(
       delta,
       anomalia,
       userId: opts.userId,
+      fecha,
     },
   });
   return { ok: true, anomalia, delta };

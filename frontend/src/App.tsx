@@ -11,6 +11,7 @@ import { M4AlertasPage } from "./pages/m4/M4AlertasPage";
 import { M5FichaPage } from "./pages/m5/M5FichaPage";
 import { M3ComunicacionesPage } from "./pages/m3/M3ComunicacionesPage";
 import { M6MantenimientoPage } from "./pages/m6/M6MantenimientoPage";
+import { M6KmRegistroPage } from "./pages/m6/M6KmRegistroPage";
 import { M7TalleresPage } from "./pages/m7/M7TalleresPage";
 import { HistorialTalleresPage } from "./pages/m7/HistorialTalleresPage";
 import { InhabilitacionesPage } from "./pages/inhabilitaciones/InhabilitacionesPage";
@@ -142,6 +143,16 @@ export default function App() {
                 <SugerenciasOnlyGate>
                   <ModuloEmpresaGate modulo="mantenimiento">
                     <M6MantenimientoPage />
+                  </ModuloEmpresaGate>
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
+              path="/m6/km"
+              element={
+                <SugerenciasOnlyGate>
+                  <ModuloEmpresaGate modulo="mantenimiento">
+                    <M6KmRegistroPage />
                   </ModuloEmpresaGate>
                 </SugerenciasOnlyGate>
               }

@@ -112,6 +112,10 @@ const NAV: NavItem[] = [
       "OPERACIONES",
       "EMPRESA",
     ],
+    children: [
+      { to: "/m6", label: "Panel unidades" },
+      { to: "/m6/km", label: "Registro km" },
+    ],
   },
   {
     to: "/sugerencias",

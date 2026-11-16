@@ -872,11 +872,14 @@ model KmRegistro {
   delta       Int
   anomalia    Boolean  @default(false)
   userId      String?
+  /// Fecha del kilometraje (puede ser distinta al momento de carga).
+  fecha       DateTime @default(now())
   createdAt   DateTime @default(now())
 
   camioneta Camioneta @relation(fields: [camionetaId], references: [id], onDelete: Cascade)
 
   @@index([camionetaId, createdAt])
+  @@index([camionetaId, fecha])
 }
 
 /// Correcciones de admin (Silvina/Patricio/Julieta) con motivo obligatorio.
