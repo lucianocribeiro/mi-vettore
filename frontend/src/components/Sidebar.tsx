@@ -122,8 +122,8 @@ const NAV: NavItem[] = [
   },
   {
     to: "/m3",
-    label: "Agenda ops",
-    sub: "Ayuda memoria",
+    label: "Comunicaciones",
+    sub: "Portal + agenda ops",
     icon: MessageSquare,
     roles: [
       "ADMINISTRADOR",

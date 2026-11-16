@@ -9,6 +9,12 @@ import {
 import { fechasCobertura, formCambiosUrl } from "../lib/comunicaciones-fechas.js";
 import { isSmtpConfigured } from "../lib/mailer.js";
 import {
+  enviarDocumentacion,
+  enviarMailingGeneral,
+  listDestinatariosPortal,
+} from "../lib/mailing-portal.js";
+import {
+  runAlertasDocumentos,
   runAlertasVencimientos,
   runRecordatorioKm,
 } from "../lib/recordatorios.js";
@@ -21,6 +27,22 @@ const OPS_ROLES = new Set([
   "ADMINISTRADOR",
   "OPERACIONES",
 ]);
+
+function requireOps(req: AuthedRequest, res: import("express").Response): boolean {
+  if (req.user!.rol === "CHOFER" || req.user!.rol === "CLIENTE") {
+    res.status(403).json({ error: "Sin acceso a comunicaciones" });
+    return false;
+  }
+  return true;
+}
+
+function requireTrigger(req: AuthedRequest, res: import("express").Response): boolean {
+  if (!OPS_ROLES.has(req.user!.rol)) {
+    res.status(403).json({ error: "Sin permiso para enviar comunicaciones" });
+    return false;
+  }
+  return true;
+}
 
 const FLUJO = [
   {
@@ -77,10 +99,7 @@ const FLUJO = [
 ];
 
 router.get("/meta", authenticate, async (req: AuthedRequest, res) => {
-  if (req.user!.rol === "CHOFER" || req.user!.rol === "CLIENTE") {
-    res.status(403).json({ error: "Sin acceso a comunicaciones" });
-    return;
-  }
+  if (!requireOps(req, res)) return;
   const cob = fechasCobertura();
   res.json({
     flujo: FLUJO,
@@ -96,12 +115,213 @@ router.get("/meta", authenticate, async (req: AuthedRequest, res) => {
   });
 });
 
-router.get("/", authenticate, async (req: AuthedRequest, res) => {
+/** Destinatarios con mail en la base (empresas + choferes), filtrable por empresa. */
+router.get("/destinatarios", authenticate, async (req: AuthedRequest, res) => {
   try {
-    if (req.user!.rol === "CHOFER" || req.user!.rol === "CLIENTE") {
-      res.status(403).json({ error: "Sin acceso a comunicaciones" });
+    if (!requireOps(req, res)) return;
+    const empresaIds = String(req.query.empresaIds ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const q = req.query.q ? String(req.query.q) : undefined;
+    const destinatarios = await listDestinatariosPortal({
+      empresaIds: empresaIds.length ? empresaIds : undefined,
+      q,
+    });
+    const empresas = await prisma.empresaTransporte.findMany({
+      where: { activo: true },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+    });
+    res.json({ destinatarios, empresas });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al listar destinatarios" });
+  }
+});
+
+/** Documentos de la base para adjuntar (chofer / unidad). */
+router.get("/documentos", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireOps(req, res)) return;
+    const choferId = req.query.choferId ? String(req.query.choferId) : undefined;
+    const camionetaId = req.query.camionetaId
+      ? String(req.query.camionetaId)
+      : undefined;
+    const empresaId = req.query.empresaId
+      ? String(req.query.empresaId)
+      : undefined;
+    const take = Math.min(Number(req.query.limit) || 80, 200);
+
+    const docs = await prisma.documentoEntidad.findMany({
+      where: {
+        ...(choferId ? { choferId } : {}),
+        ...(camionetaId ? { camionetaId } : {}),
+        ...(empresaId
+          ? {
+              OR: [
+                { chofer: { empresaId } },
+                { camioneta: { empresaId } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        chofer: { select: { id: true, nombre: true, apellido: true } },
+        camioneta: { select: { id: true, patente: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take,
+    });
+    res.json({
+      documentos: docs.map((d) => ({
+        id: d.id,
+        tipo: d.tipo,
+        mimeType: d.mimeType,
+        nombreOriginal: d.nombreOriginal,
+        vencimiento: d.vencimiento,
+        estadoValidacion: d.estadoValidacion,
+        chofer: d.chofer
+          ? {
+              id: d.chofer.id,
+              nombre: `${d.chofer.nombre} ${d.chofer.apellido}`.trim(),
+            }
+          : null,
+        camioneta: d.camioneta
+          ? { id: d.camioneta.id, patente: d.camioneta.patente }
+          : null,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al listar documentos" });
+  }
+});
+
+router.get("/plantillas", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireOps(req, res)) return;
+    const soloActivas = req.query.todas !== "1";
+    const plantillas = await prisma.plantillaComunicacion.findMany({
+      where: soloActivas ? { activo: true } : undefined,
+      orderBy: [{ orden: "asc" }, { nombre: "asc" }],
+    });
+    res.json({ plantillas });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al listar plantillas" });
+  }
+});
+
+router.post("/plantillas", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireTrigger(req, res)) return;
+    const codigo = String(req.body?.codigo ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_");
+    const nombre = String(req.body?.nombre ?? "").trim();
+    const asunto = String(req.body?.asunto ?? "").trim();
+    const cuerpo = String(req.body?.cuerpo ?? "").trim();
+    if (!codigo || !nombre || !asunto || !cuerpo) {
+      res.status(400).json({ error: "codigo, nombre, asunto y cuerpo son obligatorios" });
       return;
     }
+    const plantilla = await prisma.plantillaComunicacion.create({
+      data: {
+        codigo,
+        nombre,
+        asunto,
+        cuerpo,
+        programable: Boolean(req.body?.programable),
+        activo: req.body?.activo !== false,
+        orden: Number(req.body?.orden) || 0,
+      },
+    });
+    res.status(201).json({ plantilla });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Error al crear plantilla",
+    });
+  }
+});
+
+router.patch("/plantillas/:id", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireTrigger(req, res)) return;
+    const id = String(req.params.id);
+    const data: Record<string, unknown> = {};
+    for (const k of ["nombre", "asunto", "cuerpo"] as const) {
+      if (req.body?.[k] != null) data[k] = String(req.body[k]).trim();
+    }
+    if (req.body?.programable != null) data.programable = Boolean(req.body.programable);
+    if (req.body?.activo != null) data.activo = Boolean(req.body.activo);
+    if (req.body?.orden != null) data.orden = Number(req.body.orden) || 0;
+    const plantilla = await prisma.plantillaComunicacion.update({
+      where: { id },
+      data,
+    });
+    res.json({ plantilla });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al actualizar plantilla" });
+  }
+});
+
+/** Mailing general (selección base + externos, con/sin adjuntos). */
+router.post("/enviar", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireTrigger(req, res)) return;
+    const result = await enviarMailingGeneral({
+      asunto: String(req.body?.asunto ?? ""),
+      cuerpo: String(req.body?.cuerpo ?? ""),
+      destinatarioKeys: Array.isArray(req.body?.destinatarioKeys)
+        ? req.body.destinatarioKeys.map(String)
+        : [],
+      emailsExternos: req.body?.emailsExternos ?? req.body?.emails ?? [],
+      documentoIds: Array.isArray(req.body?.documentoIds)
+        ? req.body.documentoIds.map(String)
+        : [],
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({
+      error: err instanceof Error ? err.message : "Error al enviar mailing",
+    });
+  }
+});
+
+/** Envío de documentación a externos (multi-email). */
+router.post("/enviar-docs", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireTrigger(req, res)) return;
+    const result = await enviarDocumentacion({
+      asunto: req.body?.asunto ? String(req.body.asunto) : undefined,
+      cuerpo: req.body?.cuerpo ? String(req.body.cuerpo) : undefined,
+      emails: Array.isArray(req.body?.emails)
+        ? req.body.emails.map(String)
+        : String(req.body?.emails ?? "").split(/[,;]+/),
+      documentoIds: Array.isArray(req.body?.documentoIds)
+        ? req.body.documentoIds.map(String)
+        : [],
+      destinatarioKeys: Array.isArray(req.body?.destinatarioKeys)
+        ? req.body.destinatarioKeys.map(String)
+        : [],
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({
+      error: err instanceof Error ? err.message : "Error al enviar documentación",
+    });
+  }
+});
+
+router.get("/", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireOps(req, res)) return;
     const take = Math.min(Number(req.query.limit) || 100, 500);
     const tipoRaw = req.query.tipo ? String(req.query.tipo).toUpperCase() : "";
     const where =
@@ -162,10 +382,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
 /** Disparo manual (demo / reintento) — roles de operación. */
 router.post("/disparar", authenticate, async (req: AuthedRequest, res) => {
   try {
-    if (!OPS_ROLES.has(req.user!.rol)) {
-      res.status(403).json({ error: "Sin permiso para disparar comunicaciones" });
-      return;
-    }
+    if (!requireTrigger(req, res)) return;
     const tipoRaw = String(req.body?.tipo ?? "").toUpperCase();
     if (!(tipoRaw in TipoComunicacion)) {
       res.status(400).json({
@@ -184,13 +401,10 @@ router.post("/disparar", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
-/** Disparo manual recordatorios km / vencimientos. */
+/** Disparo manual recordatorios km / vencimientos / documentos. */
 router.post("/recordatorios", authenticate, async (req: AuthedRequest, res) => {
   try {
-    if (!OPS_ROLES.has(req.user!.rol)) {
-      res.status(403).json({ error: "Sin permiso" });
-      return;
-    }
+    if (!requireTrigger(req, res)) return;
     const kind = String(req.body?.kind ?? "all").toLowerCase();
     const out: Record<string, unknown> = {};
     if (kind === "km" || kind === "all") {
@@ -198,6 +412,9 @@ router.post("/recordatorios", authenticate, async (req: AuthedRequest, res) => {
     }
     if (kind === "vencimientos" || kind === "all") {
       out.vencimientos = await runAlertasVencimientos();
+    }
+    if (kind === "documentos" || kind === "all") {
+      out.documentos = await runAlertasDocumentos();
     }
     res.status(201).json(out);
   } catch (err) {

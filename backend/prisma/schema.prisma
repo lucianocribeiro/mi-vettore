@@ -610,6 +610,10 @@ enum TipoComunicacion {
   ALERTA_LICENCIA
   ALERTA_DOCUMENTO
   ALERTA_KM_ANOMALIA
+  /// Mailing manual desde el portal (texto libre o plantilla).
+  MAILING_MANUAL
+  /// Envío de documentación a externos / multi-destinatario.
+  MAILING_DOCS
 }
 
 enum EstadoComunicacion {
@@ -621,6 +625,8 @@ enum EstadoComunicacion {
 enum DestinatarioTipo {
   CLIENTE
   CHOFER
+  EMPRESA
+  EXTERNO
 }
 
 model Comunicacion {
@@ -646,6 +652,21 @@ model Comunicacion {
   @@index([tipo])
   @@index([loteId])
   @@index([estado])
+}
+
+/// Plantillas predeterminadas del portal de comunicaciones.
+model PlantillaComunicacion {
+  id          String   @id @default(cuid())
+  codigo      String   @unique
+  nombre      String
+  asunto      String
+  cuerpo      String
+  /// Si true, puede usarse en envíos programados / recordatorios.
+  programable Boolean  @default(false)
+  activo      Boolean  @default(true)
+  orden       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 enum TipoOtItem {

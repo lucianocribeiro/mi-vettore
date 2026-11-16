@@ -49,8 +49,18 @@ export function tipoLabel(tipo: TipoComunicacion): string {
       return "Alerta VTV";
     case TipoComunicacion.ALERTA_LICENCIA:
       return "Alerta licencia";
-    default:
-      return String(tipo);
+    case TipoComunicacion.ALERTA_DOCUMENTO:
+      return "Alerta documento";
+    case TipoComunicacion.ALERTA_KM_ANOMALIA:
+      return "Alerta km anomalía";
+    case TipoComunicacion.MAILING_MANUAL:
+      return "Mailing portal";
+    case TipoComunicacion.MAILING_DOCS:
+      return "Envío documentación";
+    default: {
+      const _exhaustive: never = tipo;
+      return String(_exhaustive);
+    }
   }
 }
 
@@ -498,6 +508,11 @@ export async function runComunicacion(
     case TipoComunicacion.ALERTA_KM_ANOMALIA:
       throw new Error(
         `Usá POST /api/comunicaciones/recordatorios para ${tipo}`
+      );
+    case TipoComunicacion.MAILING_MANUAL:
+    case TipoComunicacion.MAILING_DOCS:
+      throw new Error(
+        `Usá POST /api/comunicaciones/enviar o /enviar-docs para ${tipo}`
       );
     default: {
       const _exhaustive: never = tipo;

@@ -71,3 +71,25 @@ export async function signedDocumentoUrl(
   }
   return { ok: true, url: data.signedUrl };
 }
+
+/** Descarga un archivo de Storage como Buffer (para adjuntar en mails). */
+export async function downloadDocumentoBuffer(
+  path: string
+): Promise<
+  { ok: true; buffer: Buffer; contentType?: string } | { ok: false; error: string }
+> {
+  const sb = getSupabaseAdmin();
+  if (!sb) {
+    return { ok: false, error: "Supabase Storage no configurado" };
+  }
+  const { data, error } = await sb.storage.from(docsBucket()).download(path);
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? "No se pudo descargar el archivo" };
+  }
+  const ab = await data.arrayBuffer();
+  return {
+    ok: true,
+    buffer: Buffer.from(ab),
+    contentType: data.type || undefined,
+  };
+}

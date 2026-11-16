@@ -1,10 +1,20 @@
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 
+export type MailAttachment = {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+};
+
 export type MailPayload = {
-  to: string;
+  to: string | string[];
   subject: string;
   text: string;
+  html?: string;
+  cc?: string | string[];
+  bcc?: string | string[];
+  attachments?: MailAttachment[];
 };
 
 let transporter: Transporter | null = null;
@@ -46,12 +56,17 @@ export async function sendOtMail(
   payload: MailPayload
 ): Promise<{ ok: true; simulated: boolean } | { ok: false; error: string }> {
   if (!isOtEmailEnabled()) {
+    const dest = Array.isArray(payload.to) ? payload.to.join(", ") : payload.to;
     console.log(
-      `[mail:ot-pausado] Esperando OT_EMAIL_ENABLED + SMTP. Destino previsto: ${payload.to} | ${payload.subject}`
+      `[mail:ot-pausado] Esperando OT_EMAIL_ENABLED + SMTP. Destino previsto: ${dest} | ${payload.subject}`
     );
     return { ok: true, simulated: true };
   }
   return sendMail(payload);
+}
+
+function destLabel(to: string | string[]) {
+  return Array.isArray(to) ? to.join(", ") : to;
 }
 
 /**
@@ -62,18 +77,31 @@ export async function sendMail(
 ): Promise<{ ok: true; simulated: boolean } | { ok: false; error: string }> {
   const from = process.env.SMTP_FROM || "noreply@vettore.test";
   const tx = getTransporter();
+  const to = payload.to;
   if (!tx) {
     console.log(
-      `[mail:simulado] → ${payload.to} | ${payload.subject}\n${payload.text.slice(0, 200)}…`
+      `[mail:simulado] → ${destLabel(to)} | ${payload.subject}` +
+        (payload.attachments?.length
+          ? ` | adjuntos=${payload.attachments.length}`
+          : "") +
+        `\n${payload.text.slice(0, 200)}…`
     );
     return { ok: true, simulated: true };
   }
   try {
     await tx.sendMail({
       from,
-      to: payload.to,
+      to,
+      cc: payload.cc,
+      bcc: payload.bcc,
       subject: payload.subject,
       text: payload.text,
+      html: payload.html,
+      attachments: payload.attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        contentType: a.contentType,
+      })),
     });
     return { ok: true, simulated: false };
   } catch (err) {
@@ -81,4 +109,23 @@ export async function sendMail(
     console.error("[mail:error]", msg);
     return { ok: false, error: msg };
   }
+}
+
+/** Normaliza y valida una lista de emails (coma/punto y coma / array). */
+export function parseEmailList(raw: unknown): string[] {
+  const parts = Array.isArray(raw)
+    ? raw.map(String)
+    : String(raw ?? "")
+        .split(/[,;\s]+/)
+        .map((s) => s.trim());
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const p of parts) {
+    const e = p.trim().toLowerCase();
+    if (!e || !emailRe.test(e) || seen.has(e)) continue;
+    seen.add(e);
+    out.push(e);
+  }
+  return out;
 }
