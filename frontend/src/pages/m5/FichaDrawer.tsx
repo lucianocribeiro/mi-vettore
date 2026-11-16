@@ -160,12 +160,20 @@ export function FichaDrawer({
                 <Row label="Equipo de frÃ­o" value={cam.equipoFrio || "â€”"} />
                 <Row label="Capacidad" value={capacidadLabel} />
                 <Row
-                  label="Tipo de frÃ­o"
+                  label="Tipo de frío"
                   value={
                     cam.tipoServicio?.nombre ||
                     cam.tipoTransporte?.toLowerCase() ||
-                    "â€”"
+                    "—"
                   }
+                />
+                <Row
+                  label="SENASA"
+                  value={cam.pideSenasaHomologacion === false ? "No se pide" : "Obligatorio"}
+                />
+                <Row
+                  label="Homologación"
+                  value={cam.pideSenasaHomologacion === false ? "No se pide" : "Obligatorio"}
                 />
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[var(--vl-text-muted)]">Estado</span>

@@ -3103,6 +3103,28 @@ export function M5FichaPage() {
                   </p>
                 )}
               </Field>
+              <Field label="Documentación que se pide">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fPideSenasaHomol}
+                    onChange={(e) => setFPideSenasaHomol(e.target.checked)}
+                  />
+                  SENASA
+                </label>
+                <label className="mt-2 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fPideSenasaHomol}
+                    onChange={(e) => setFPideSenasaHomol(e.target.checked)}
+                  />
+                  Homologación
+                </label>
+                <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                  Si están desmarcados, no se piden ni se validan en Documentación
+                  (p. ej. unidades seco).
+                </p>
+              </Field>
               <Field label="Estado">
                 <select
                   className={inputClass}
