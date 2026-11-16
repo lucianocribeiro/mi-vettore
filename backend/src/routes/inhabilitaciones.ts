@@ -7,6 +7,7 @@ import {
   esInhabilitacionFutura,
   hoyDateOnly,
   procesarInhabilitacionesProgramadas,
+  runReporteInhabilitadosManana,
 } from "../lib/inhabilitaciones.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
 
@@ -129,6 +130,17 @@ router.post("/procesar-programadas", ...ops, async (_req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al procesar inhabilitaciones" });
+  }
+});
+
+/** Disparo manual del mail/campanita de inhabilitados del día siguiente. */
+router.post("/reporte-manana", ...ops, async (_req, res) => {
+  try {
+    const result = await runReporteInhabilitadosManana();
+    res.status(201).json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al generar reporte de mañana" });
   }
 });
 

@@ -155,6 +155,7 @@ export function InhabilitacionesPage() {
     null
   );
   const [busyMotivo, setBusyMotivo] = useState(false);
+  const [busyReporte, setBusyReporte] = useState(false);
   const hoy = hoyIso();
 
   const load = useCallback(async () => {
@@ -223,6 +224,30 @@ export function InhabilitacionesPage() {
       await load();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo reactivar");
+    }
+  }
+
+  async function dispararReporteManana() {
+    if (!token) return;
+    setBusyReporte(true);
+    try {
+      const r = await apiFetch<{
+        fechaManana: string;
+        choferes: unknown[];
+        unidades: unknown[];
+        empresas: unknown[];
+        enviadosMail: number;
+        simulated: boolean;
+      }>("/api/inhabilitaciones/reporte-manana", { method: "POST" }, token);
+      alert(
+        `Reporte ${r.fechaManana}\n` +
+          `Choferes: ${r.choferes.length} · Unidades: ${r.unidades.length} · Empresas: ${r.empresas.length}\n` +
+          `Mails: ${r.enviadosMail}${r.simulated ? " (simulado)" : ""}`
+      );
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo enviar el reporte");
+    } finally {
+      setBusyReporte(false);
     }
   }
 
@@ -298,13 +323,23 @@ export function InhabilitacionesPage() {
             Programá con antelación, editá fechas (también hacia atrás) y consultá el histórico.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowMotivos((v) => !v)}
-          className="rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold text-[var(--vl-heading)]"
-        >
-          {showMotivos ? "Ocultar motivos" : "ABM motivos"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busyReporte}
+            onClick={() => void dispararReporteManana()}
+            className="rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold text-[var(--vl-heading)] disabled:opacity-50"
+          >
+            {busyReporte ? "Enviando…" : "Mail inhabilitados mañana"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMotivos((v) => !v)}
+            className="rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold text-[var(--vl-heading)]"
+          >
+            {showMotivos ? "Ocultar motivos" : "ABM motivos"}
+          </button>
+        </div>
       </div>
 
       {showMotivos && (

@@ -8,7 +8,10 @@ import {
   runRecordatorioKm,
   runRecordatorioKm10Dias,
 } from "./recordatorios.js";
-import { procesarInhabilitacionesProgramadas } from "./inhabilitaciones.js";
+import {
+  procesarInhabilitacionesProgramadas,
+  runReporteInhabilitadosManana,
+} from "./inhabilitaciones.js";
 
 /**
  * Cron en zona configurada (default America/Argentina/Buenos_Aires).
@@ -103,5 +106,27 @@ export function startComunicacionesScheduler(): void {
       { timezone: tz }
     );
     console.log(`[inhabilitaciones] programado aplicar/vencer 00:05 diario TZ=${tz}`);
+  }
+
+  // Reporte interno: quiénes estarán inhabilitados mañana (reunión 13/11).
+  if (cron.validate("0 17 * * 1-5")) {
+    cron.schedule(
+      "0 17 * * 1-5",
+      () => {
+        void runReporteInhabilitadosManana()
+          .then((r) =>
+            console.log(
+              `[inhabilitaciones] reporte mañana ${r.fechaManana}: choferes=${r.choferes.length} unidades=${r.unidades.length} mail=${r.enviadosMail}${r.simulated ? " (simulado)" : ""}`
+            )
+          )
+          .catch((err) =>
+            console.error("[inhabilitaciones] error reporte mañana", err)
+          );
+      },
+      { timezone: tz }
+    );
+    console.log(
+      `[inhabilitaciones] programado reporte inhabilitados mañana 17:00 Lun–Vie TZ=${tz}`
+    );
   }
 }

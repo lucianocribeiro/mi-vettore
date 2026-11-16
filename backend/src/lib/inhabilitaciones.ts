@@ -396,3 +396,203 @@ export async function procesarInhabilitacionesProgramadas(): Promise<{
 
   return { aplicadas, vencidas };
 }
+
+function addDaysDateOnly(base: Date, days: number): Date {
+  const d = new Date(base.getTime());
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+function fmtDia(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${day}/${m}/${y}`;
+}
+
+export type ReporteInhabilitadosManana = {
+  fechaManana: string;
+  choferes: Array<{
+    nombre: string;
+    empresa: string | null;
+    motivo: string;
+    desde: string;
+    hasta: string | null;
+  }>;
+  unidades: Array<{
+    patente: string;
+    empresa: string | null;
+    motivo: string;
+    tipo: string | null;
+    desde: string;
+    hasta: string | null;
+  }>;
+  empresas: Array<{
+    nombre: string;
+    motivo: string;
+    desde: string;
+    hasta: string | null;
+  }>;
+  enviadosMail: number;
+  avisos: number;
+  simulated: boolean;
+};
+
+/**
+ * Reporte diario (reunión 13/11): choferes/unidades/empresas inhabilitados el día siguiente.
+ * Mail al grupo interno + campanita ops/admin.
+ */
+export async function runReporteInhabilitadosManana(): Promise<ReporteInhabilitadosManana> {
+  const { parseEmailList, sendMail } = await import("./mailer.js");
+  const manana = addDaysDateOnly(hoyDateOnly(), 1);
+
+  const abiertas = await prisma.inhabilitacion.findMany({
+    where: {
+      cerradaAt: null,
+      desde: { lte: manana },
+      OR: [{ hasta: null }, { hasta: { gte: manana } }],
+      entidad: { in: ["CHOFER", "UNIDAD", "EMPRESA"] },
+    },
+    include: {
+      chofer: {
+        select: {
+          nombre: true,
+          apellido: true,
+          empresa: { select: { nombre: true } },
+        },
+      },
+      camioneta: {
+        select: {
+          patente: true,
+          empresa: { select: { nombre: true } },
+        },
+      },
+      empresa: { select: { nombre: true } },
+    },
+    orderBy: [{ entidad: "asc" }, { desde: "asc" }],
+  });
+
+  const choferes: ReporteInhabilitadosManana["choferes"] = [];
+  const unidades: ReporteInhabilitadosManana["unidades"] = [];
+  const empresas: ReporteInhabilitadosManana["empresas"] = [];
+
+  for (const i of abiertas) {
+    const desde = fmtDia(i.desde);
+    const hasta = i.hasta ? fmtDia(i.hasta) : null;
+    if (i.entidad === "CHOFER" && i.chofer) {
+      choferes.push({
+        nombre: `${i.chofer.nombre} ${i.chofer.apellido}`.trim(),
+        empresa: i.chofer.empresa?.nombre ?? null,
+        motivo: i.motivo,
+        desde,
+        hasta,
+      });
+    } else if (i.entidad === "UNIDAD" && i.camioneta) {
+      unidades.push({
+        patente: i.camioneta.patente,
+        empresa: i.camioneta.empresa?.nombre ?? null,
+        motivo: i.motivo,
+        tipo: i.tipo,
+        desde,
+        hasta,
+      });
+    } else if (i.entidad === "EMPRESA" && i.empresa) {
+      empresas.push({
+        nombre: i.empresa.nombre,
+        motivo: i.motivo,
+        desde,
+        hasta,
+      });
+    }
+  }
+
+  const labelManana = fmtDia(manana);
+  const lineas: string[] = [
+    `Inhabilitaciones vigentes para el ${labelManana}`,
+    "",
+    `Choferes (${choferes.length}):`,
+  ];
+  if (!choferes.length) lineas.push("  — ninguno —");
+  for (const c of choferes) {
+    lineas.push(
+      `  • ${c.nombre}${c.empresa ? ` (${c.empresa})` : ""} — ${c.motivo}` +
+        ` · ${c.desde}${c.hasta ? ` → ${c.hasta}` : ""}`
+    );
+  }
+  lineas.push("", `Unidades (${unidades.length}):`);
+  if (!unidades.length) lineas.push("  — ninguna —");
+  for (const u of unidades) {
+    lineas.push(
+      `  • ${u.patente}${u.empresa ? ` (${u.empresa})` : ""}` +
+        `${u.tipo ? ` [${u.tipo}]` : ""} — ${u.motivo}` +
+        ` · ${u.desde}${u.hasta ? ` → ${u.hasta}` : ""}`
+    );
+  }
+  lineas.push("", `Empresas (${empresas.length}):`);
+  if (!empresas.length) lineas.push("  — ninguna —");
+  for (const e of empresas) {
+    lineas.push(
+      `  • ${e.nombre} — ${e.motivo} · ${e.desde}${e.hasta ? ` → ${e.hasta}` : ""}`
+    );
+  }
+  lineas.push("", "— Mi Vettore · reporte automático");
+
+  const cuerpo = lineas.join("\n");
+  const asunto = `Inhabilitados mañana ${labelManana} — ${choferes.length} choferes / ${unidades.length} unidades`;
+
+  await prisma.avisoInterno.createMany({
+    data: [
+      {
+        rolDestino: "OPERACIONES",
+        titulo: `Inhabilitados ${labelManana}`,
+        mensaje: `${choferes.length} choferes, ${unidades.length} unidades, ${empresas.length} empresas.`,
+      },
+      {
+        rolDestino: "ADMINISTRADOR",
+        titulo: `Inhabilitados ${labelManana}`,
+        mensaje: `${choferes.length} choferes, ${unidades.length} unidades, ${empresas.length} empresas.`,
+      },
+    ],
+  });
+
+  const fromEnv = parseEmailList(
+    process.env.INHABILITACIONES_REPORT_EMAILS ||
+      process.env.OPS_REPORT_EMAILS ||
+      ""
+  );
+  let emails = fromEnv;
+  if (!emails.length) {
+    const opsUsers = await prisma.usuario.findMany({
+      where: {
+        estado: "ACTIVO",
+        rol: { in: ["ADMINISTRADOR", "OPERACIONES"] },
+      },
+      select: { email: true },
+    });
+    emails = parseEmailList(opsUsers.map((u) => u.email));
+  }
+
+  let enviadosMail = 0;
+  let simulated = true;
+  if (emails.length) {
+    const mail = await sendMail({
+      to: emails,
+      subject: asunto,
+      text: cuerpo,
+    });
+    if (mail.ok) {
+      enviadosMail = emails.length;
+      simulated = mail.simulated;
+    }
+  }
+
+  return {
+    fechaManana: labelManana,
+    choferes,
+    unidades,
+    empresas,
+    enviadosMail,
+    avisos: 2,
+    simulated,
+  };
+}
