@@ -25,7 +25,12 @@ import { uploadDocumento } from "../lib/supabase-storage.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
 import { estadoEntidadFrom, MOTIVOS_INHABILITAR_UNIDAD } from "../lib/estado-entidad.js";
 import { errorEquipoTipoFrio } from "../lib/equipo-frio.js";
-import { sincronizarInhabilitacionUnidad } from "../lib/inhabilitaciones.js";
+import {
+  datosInhabilitacionDe,
+  esInhabilitacionFutura,
+  sincronizarInhabilitacion,
+  sincronizarInhabilitacionUnidad,
+} from "../lib/inhabilitaciones.js";
 
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
@@ -1493,11 +1498,36 @@ router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
       destino = motivo as EstadoCamioneta;
     }
     const inhabilitar = estado === "INHABILITADO";
+    const datos = datosInhabilitacionDe(req.body, req.user?.id);
+    const desde = datos.desde ?? parseDate(req.body?.desde) ?? new Date();
+    const programada = inhabilitar && esInhabilitacionFutura(desde);
+
+    if (programada) {
+      const actual = await prisma.camioneta.findUnique({
+        where: { id: req.params.id },
+        include: includeAsignaciones,
+      });
+      if (!actual) {
+        res.status(404).json({ error: "Camioneta no encontrada" });
+        return;
+      }
+      await sincronizarInhabilitacion(prisma, "UNIDAD", actual.id, true, {
+        ...datos,
+        desde,
+        hasta: datos.hasta !== undefined ? datos.hasta : parseDate(req.body?.hasta),
+        tipo: destino,
+        motivoPorDefecto:
+          destino === "DE_VACACIONES" ? "De vacaciones" : "Fuera de servicio",
+      });
+      res.json(actual);
+      return;
+    }
+
     const item = await prisma.camioneta.update({
       where: { id: req.params.id },
       data: {
         estado: destino,
-        estadoDesde: inhabilitar ? parseDate(req.body?.desde) ?? new Date() : null,
+        estadoDesde: inhabilitar ? desde : null,
         estadoHasta: inhabilitar ? parseDate(req.body?.hasta) : null,
       },
       include: includeAsignaciones,

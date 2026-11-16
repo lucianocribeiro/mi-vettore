@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAuth } from "../../auth/AuthContext";
+import { apiFetch } from "../../lib/api";
 import { Field, FormModal, inputClass } from "./FormModal";
 
 export type DatosInhabilitar = {
@@ -7,12 +9,16 @@ export type DatosInhabilitar = {
   hasta: string;
   /** Solo unidades: DE_VACACIONES / FUERA_SERVICIO. */
   motivo?: string;
+  /** Motivo del catálogo ABM (compartido). */
+  motivoId?: string;
 };
 
 export const TIPOS_INHABILITAR_UNIDAD = [
   { value: "FUERA_SERVICIO", label: "Fuera de servicio" },
   { value: "DE_VACACIONES", label: "De vacaciones" },
 ];
+
+type MotivoCat = { id: string; nombre: string; activo: boolean; orden: number };
 
 function hoy() {
   const d = new Date();
@@ -37,21 +43,40 @@ export function InhabilitarDialog({
   onClose: () => void;
   onSubmit: (datos: DatosInhabilitar) => Promise<void>;
 }) {
+  const { token } = useAuth();
+  const [motivos, setMotivos] = useState<MotivoCat[]>([]);
+  const [motivoId, setMotivoId] = useState(inicial?.motivoId ?? "");
   const [detalle, setDetalle] = useState(inicial?.detalle ?? "");
   const [desde, setDesde] = useState(inicial?.desde ?? hoy());
   const [hasta, setHasta] = useState(inicial?.hasta ?? "");
-  const [motivo, setMotivo] = useState(inicial?.motivo ?? TIPOS_INHABILITAR_UNIDAD[0].value);
+  const [motivo, setMotivo] = useState(
+    inicial?.motivo ?? TIPOS_INHABILITAR_UNIDAD[0].value
+  );
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    void apiFetch<MotivoCat[]>("/api/inhabilitaciones/motivos", {}, token)
+      .then((list) => {
+        setMotivos(list);
+        if (!inicial?.motivoId && list[0]) setMotivoId(list[0].id);
+      })
+      .catch(() => setMotivos([]));
+  }, [token, inicial?.motivoId]);
+
+  const programada = desde > hoy();
 
   return (
     <FormModal
       title={titulo}
-      submitLabel={submitLabel}
+      submitLabel={
+        programada ? "Programar inhabilitación" : submitLabel
+      }
       error={error}
       onClose={onClose}
       onSubmit={async () => {
-        if (!detalle.trim()) {
-          setError("Contá el motivo de la inhabilitación");
+        if (!motivoId && !detalle.trim()) {
+          setError("Elegí un motivo del listado o escribí el detalle");
           return;
         }
         if (hasta && hasta < desde) {
@@ -60,10 +85,16 @@ export function InhabilitarDialog({
         }
         setError(null);
         try {
+          const cat = motivos.find((m) => m.id === motivoId);
+          const texto =
+            detalle.trim() ||
+            cat?.nombre ||
+            "Sin motivo registrado";
           await onSubmit({
-            detalle: detalle.trim(),
+            detalle: texto,
             desde,
             hasta,
+            motivoId: motivoId || undefined,
             ...(esUnidad ? { motivo } : {}),
           });
         } catch (err) {
@@ -72,9 +103,19 @@ export function InhabilitarDialog({
       }}
     >
       {aviso && <p className="text-xs text-[var(--vl-text-muted)]">{aviso}</p>}
+      {programada && (
+        <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+          Queda programada: se inhabilita automáticamente el {desde}
+          {hasta ? ` y se reactiva el ${hasta}` : ""}.
+        </p>
+      )}
       {esUnidad && (
-        <Field label="Tipo">
-          <select className={inputClass} value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+        <Field label="Tipo operativo (unidad)">
+          <select
+            className={inputClass}
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+          >
             {TIPOS_INHABILITAR_UNIDAD.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
@@ -84,13 +125,26 @@ export function InhabilitarDialog({
         </Field>
       )}
       <Field label="Motivo">
+        <select
+          className={inputClass}
+          value={motivoId}
+          onChange={(e) => setMotivoId(e.target.value)}
+        >
+          <option value="">Elegí un motivo…</option>
+          {motivos.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.nombre}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Detalle (opcional)">
         <textarea
           className={inputClass}
-          rows={3}
+          rows={2}
           value={detalle}
           onChange={(e) => setDetalle(e.target.value)}
-          placeholder="Ej: documentación vencida, choque, licencia…"
-          required
+          placeholder="Aclaración, motivo propio u observaciones…"
         />
       </Field>
       <div className="grid grid-cols-2 gap-3">
@@ -112,6 +166,9 @@ export function InhabilitarDialog({
           />
         </Field>
       </div>
+      <p className="text-[11px] text-[var(--vl-text-muted)]">
+        Podés cargar fechas hacia atrás (olvidos) o programar hacia adelante.
+      </p>
     </FormModal>
   );
 }

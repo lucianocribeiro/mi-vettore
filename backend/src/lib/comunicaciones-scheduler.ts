@@ -8,6 +8,7 @@ import {
   runRecordatorioKm,
   runRecordatorioKm10Dias,
 } from "./recordatorios.js";
+import { procesarInhabilitacionesProgramadas } from "./inhabilitaciones.js";
 
 /**
  * Cron en zona configurada (default America/Argentina/Buenos_Aires).
@@ -82,5 +83,25 @@ export function startComunicacionesScheduler(): void {
       { timezone: tz }
     );
     console.log(`[comunicaciones] programado alertas VTV/licencia/docs 08:30 diario TZ=${tz}`);
+  }
+
+  // Inhabilitaciones: aplica programadas (desde ≤ hoy) y reactiva vencidas (hasta < hoy).
+  if (cron.validate("5 0 * * *")) {
+    cron.schedule(
+      "5 0 * * *",
+      () => {
+        void procesarInhabilitacionesProgramadas()
+          .then((r) =>
+            console.log(
+              `[inhabilitaciones] programadas aplicadas=${r.aplicadas} vencidas=${r.vencidas}`
+            )
+          )
+          .catch((err) =>
+            console.error("[inhabilitaciones] error procesar programadas", err)
+          );
+      },
+      { timezone: tz }
+    );
+    console.log(`[inhabilitaciones] programado aplicar/vencer 00:05 diario TZ=${tz}`);
   }
 }

@@ -6,13 +6,17 @@ import { InhabilitarDialog } from "../m5/InhabilitarDialog";
 
 type Persona = { id: string; nombre: string | null; email: string } | null;
 
+type MotivoCat = { id: string; nombre: string; activo: boolean; orden: number };
+
 type Inhabilitacion = {
   id: string;
   entidad: "EMPRESA" | "CHOFER" | "UNIDAD";
   tipo: string | null;
   motivo: string;
+  motivoId?: string | null;
   desde: string;
   hasta: string | null;
+  aplicadaAt?: string | null;
   createdAt: string;
   cerradaAt: string | null;
   empresa: { id: string; nombre: string; cuit: string } | null;
@@ -30,11 +34,12 @@ type Inhabilitacion = {
     modelo: string | null;
     empresa: { id: string; nombre: string } | null;
   } | null;
+  motivoCat?: { id: string; nombre: string } | null;
   creadoPor: Persona;
   cerradaPor: Persona;
 };
 
-type Situacion = "VIGENTE" | "VENCIDA" | "CERRADA";
+type Situacion = "PROGRAMADA" | "VIGENTE" | "VENCIDA" | "CERRADA";
 type Vista = Situacion | "TODAS";
 
 const ENTIDAD_LABEL = { EMPRESA: "Empresa", CHOFER: "Chofer", UNIDAD: "Unidad" } as const;
@@ -44,18 +49,41 @@ const TIPO_UNIDAD_LABEL: Record<string, string> = {
 };
 
 const VISTAS: { id: Vista; label: string; on: string }[] = [
-  { id: "VIGENTE", label: "Vigentes", on: "border-amber-600 bg-amber-500/20 text-amber-900 dark:border-amber-400 dark:text-amber-100" },
-  { id: "VENCIDA", label: "Vencidas", on: "border-red-600 bg-red-500/20 text-red-900 dark:border-red-400 dark:text-red-100" },
-  { id: "CERRADA", label: "Historial", on: "border-slate-600 bg-slate-500/20 text-slate-900 dark:border-slate-400 dark:text-slate-100" },
-  { id: "TODAS", label: "Todas", on: "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900" },
+  {
+    id: "VIGENTE",
+    label: "Vigentes",
+    on: "border-amber-600 bg-amber-500/20 text-amber-900 dark:border-amber-400 dark:text-amber-100",
+  },
+  {
+    id: "PROGRAMADA",
+    label: "Programadas",
+    on: "border-sky-600 bg-sky-500/20 text-sky-900 dark:border-sky-400 dark:text-sky-100",
+  },
+  {
+    id: "VENCIDA",
+    label: "Vencidas",
+    on: "border-red-600 bg-red-500/20 text-red-900 dark:border-red-400 dark:text-red-100",
+  },
+  {
+    id: "CERRADA",
+    label: "Historial",
+    on: "border-slate-600 bg-slate-500/20 text-slate-900 dark:border-slate-400 dark:text-slate-100",
+  },
+  {
+    id: "TODAS",
+    label: "Todas",
+    on: "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900",
+  },
 ];
 
 const SITUACION_STYLE: Record<Situacion, string> = {
+  PROGRAMADA: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
   VIGENTE: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
   VENCIDA: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200",
   CERRADA: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
 const SITUACION_LABEL: Record<Situacion, string> = {
+  PROGRAMADA: "Programada",
   VIGENTE: "Vigente",
   VENCIDA: "Vencida",
   CERRADA: "Reactivado",
@@ -69,6 +97,8 @@ function hoyIso() {
 
 function situacion(i: Inhabilitacion, hoy: string): Situacion {
   if (i.cerradaAt) return "CERRADA";
+  if (!i.aplicadaAt && i.desde.slice(0, 10) > hoy) return "PROGRAMADA";
+  if (!i.aplicadaAt && i.desde.slice(0, 10) <= hoy) return "VIGENTE";
   if (i.hasta && i.hasta.slice(0, 10) < hoy) return "VENCIDA";
   return "VIGENTE";
 }
@@ -80,16 +110,19 @@ function nombreDe(i: Inhabilitacion) {
   return "—";
 }
 
-function detalleDe(i: Inhabilitacion) {
+function detalleDe(i: Inhabilitacion, sinEmpresa: boolean) {
   if (i.empresa) return `CUIT ${i.empresa.cuit}`;
-  if (i.chofer) return [`DNI ${i.chofer.dni}`, i.chofer.empresa?.nombre].filter(Boolean).join(" · ");
+  if (i.chofer) {
+    const parts = [`DNI ${i.chofer.dni}`];
+    if (!sinEmpresa && i.chofer.empresa?.nombre) parts.push(i.chofer.empresa.nombre);
+    return parts.join(" · ");
+  }
   if (i.camioneta) {
-    return [
-      [i.camioneta.marca, i.camioneta.modelo].filter(Boolean).join(" "),
-      i.camioneta.empresa?.nombre,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    const parts = [[i.camioneta.marca, i.camioneta.modelo].filter(Boolean).join(" ")].filter(
+      Boolean
+    );
+    if (!sinEmpresa && i.camioneta.empresa?.nombre) parts.push(i.camioneta.empresa.nombre);
+    return parts.join(" · ");
   }
   return "";
 }
@@ -108,12 +141,17 @@ const ESTADO_URL = { EMPRESA: "empresas", CHOFER: "choferes", UNIDAD: "camioneta
 export function InhabilitacionesPage() {
   const { token } = useAuth();
   const [items, setItems] = useState<Inhabilitacion[]>([]);
+  const [motivos, setMotivos] = useState<MotivoCat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vista, setVista] = useState<Vista>("VIGENTE");
-  const [entidad, setEntidad] = useState<"" | Inhabilitacion["entidad"]>("");
+  /** Por defecto: choferes + unidades (sin empresas), como pidió el cliente. */
+  const [entidad, setEntidad] = useState<"" | "FLOTA" | Inhabilitacion["entidad"]>("FLOTA");
   const [q, setQ] = useState("");
   const [editando, setEditando] = useState<Inhabilitacion | null>(null);
+  const [showMotivos, setShowMotivos] = useState(false);
+  const [nuevoMotivo, setNuevoMotivo] = useState("");
+  const [busyMotivo, setBusyMotivo] = useState(false);
   const hoy = hoyIso();
 
   const load = useCallback(async () => {
@@ -121,7 +159,14 @@ export function InhabilitacionesPage() {
     setLoading(true);
     setError(null);
     try {
-      setItems(await apiFetch<Inhabilitacion[]>("/api/inhabilitaciones", {}, token));
+      const [list, cats] = await Promise.all([
+        apiFetch<Inhabilitacion[]>("/api/inhabilitaciones", {}, token),
+        apiFetch<MotivoCat[]>("/api/inhabilitaciones/motivos?todas=1", {}, token).catch(
+          () => [] as MotivoCat[]
+        ),
+      ]);
+      setItems(list);
+      setMotivos(cats);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar");
     } finally {
@@ -133,17 +178,26 @@ export function InhabilitacionesPage() {
     void load();
   }, [load]);
 
+  const sinEmpresa = entidad === "FLOTA" || entidad === "CHOFER" || entidad === "UNIDAD";
+
   const base = useMemo(() => {
     const t = q.trim().toLowerCase();
     return items.filter((i) => {
-      if (entidad && i.entidad !== entidad) return false;
+      if (entidad === "FLOTA" && i.entidad === "EMPRESA") return false;
+      if (entidad && entidad !== "FLOTA" && i.entidad !== entidad) return false;
       if (!t) return true;
-      return [nombreDe(i), detalleDe(i), i.motivo].join(" ").toLowerCase().includes(t);
+      return [nombreDe(i), detalleDe(i, false), i.motivo].join(" ").toLowerCase().includes(t);
     });
   }, [items, entidad, q]);
 
   const counts = useMemo(() => {
-    const c: Record<Vista, number> = { VIGENTE: 0, VENCIDA: 0, CERRADA: 0, TODAS: base.length };
+    const c: Record<Vista, number> = {
+      PROGRAMADA: 0,
+      VIGENTE: 0,
+      VENCIDA: 0,
+      CERRADA: 0,
+      TODAS: base.length,
+    };
     for (const i of base) c[situacion(i, hoy)]++;
     return c;
   }, [base, hoy]);
@@ -169,16 +223,112 @@ export function InhabilitacionesPage() {
     }
   }
 
+  async function crearMotivo() {
+    if (!token || !nuevoMotivo.trim()) return;
+    setBusyMotivo(true);
+    try {
+      await apiFetch(
+        "/api/inhabilitaciones/motivos",
+        { method: "POST", body: JSON.stringify({ nombre: nuevoMotivo.trim() }) },
+        token
+      );
+      setNuevoMotivo("");
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo crear");
+    } finally {
+      setBusyMotivo(false);
+    }
+  }
+
+  async function toggleMotivo(m: MotivoCat) {
+    if (!token) return;
+    setBusyMotivo(true);
+    try {
+      await apiFetch(
+        `/api/inhabilitaciones/motivos/${m.id}`,
+        { method: "PUT", body: JSON.stringify({ activo: !m.activo }) },
+        token
+      );
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "No se pudo actualizar");
+    } finally {
+      setBusyMotivo(false);
+    }
+  }
+
   return (
     <div>
-      <div className="mb-5 sm:mb-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
-            Seguimiento
-          </span>
-          <h1 className="text-lg font-bold text-[var(--vl-heading)] sm:text-xl">Inhabilitaciones</h1>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3 sm:mb-6">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
+              Seguimiento
+            </span>
+            <h1 className="text-lg font-bold text-[var(--vl-heading)] sm:text-xl">
+              Inhabilitaciones
+            </h1>
+          </div>
+          <p className="mt-1 text-xs text-[var(--vl-text-muted)]">
+            Programá con antelación, editá fechas (también hacia atrás) y consultá el histórico.
+          </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowMotivos((v) => !v)}
+          className="rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold text-[var(--vl-heading)]"
+        >
+          {showMotivos ? "Ocultar motivos" : "ABM motivos"}
+        </button>
       </div>
+
+      {showMotivos && (
+        <div className="mb-5 rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-4">
+          <h2 className="text-sm font-semibold text-[var(--vl-heading)]">
+            Motivos (compartido choferes / unidades / empresas)
+          </h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <input
+              className="min-h-10 min-w-[12rem] flex-1 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 text-sm"
+              placeholder="Nuevo motivo…"
+              value={nuevoMotivo}
+              onChange={(e) => setNuevoMotivo(e.target.value)}
+            />
+            <button
+              type="button"
+              disabled={busyMotivo || !nuevoMotivo.trim()}
+              onClick={() => void crearMotivo()}
+              className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+            >
+              Agregar
+            </button>
+          </div>
+          <ul className="mt-3 space-y-1.5">
+            {motivos.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center justify-between gap-2 text-sm text-[var(--vl-text)]"
+              >
+                <span className={m.activo ? "" : "text-[var(--vl-text-muted)] line-through"}>
+                  {m.nombre}
+                </span>
+                <button
+                  type="button"
+                  disabled={busyMotivo}
+                  onClick={() => void toggleMotivo(m)}
+                  className="text-xs font-medium text-[#1e4080] underline-offset-2 hover:underline"
+                >
+                  {m.activo ? "Desactivar" : "Reactivar"}
+                </button>
+              </li>
+            ))}
+            {motivos.length === 0 && (
+              <li className="text-xs text-[var(--vl-text-muted)]">Todavía no hay motivos.</li>
+            )}
+          </ul>
+        </div>
+      )}
 
       <div className="mb-4 space-y-3">
         <div className="flex flex-wrap gap-2">
@@ -201,16 +351,17 @@ export function InhabilitacionesPage() {
             onChange={(e) => setEntidad(e.target.value as typeof entidad)}
             className="min-h-10 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 text-sm text-[var(--vl-text)]"
           >
-            <option value="">Empresas, choferes y unidades</option>
-            <option value="EMPRESA">Solo empresas</option>
+            <option value="FLOTA">Choferes y unidades (sin empresas)</option>
+            <option value="">Todas las entidades</option>
             <option value="CHOFER">Solo choferes</option>
             <option value="UNIDAD">Solo unidades</option>
+            <option value="EMPRESA">Solo empresas</option>
           </select>
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar nombre, patente, empresa o motivo…"
+            placeholder="Buscar nombre, patente o motivo…"
             className="min-h-10 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] px-3 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080] sm:max-w-md"
           />
         </div>
@@ -229,7 +380,11 @@ export function InhabilitacionesPage() {
             <div
               key={i.id}
               className={`rounded-xl border bg-[var(--vl-card)] p-4 ${
-                s === "VENCIDA" ? "border-red-400 dark:border-red-700" : "border-[var(--vl-card-border)]"
+                s === "VENCIDA"
+                  ? "border-red-400 dark:border-red-700"
+                  : s === "PROGRAMADA"
+                    ? "border-sky-400 dark:border-sky-700"
+                    : "border-[var(--vl-card-border)]"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -239,7 +394,9 @@ export function InhabilitacionesPage() {
                     {i.tipo && TIPO_UNIDAD_LABEL[i.tipo] ? ` · ${TIPO_UNIDAD_LABEL[i.tipo]}` : ""}
                   </div>
                   <div className="truncate font-semibold text-[var(--vl-heading)]">{nombreDe(i)}</div>
-                  <div className="truncate text-xs text-[var(--vl-text-muted)]">{detalleDe(i)}</div>
+                  <div className="truncate text-xs text-[var(--vl-text-muted)]">
+                    {detalleDe(i, sinEmpresa)}
+                  </div>
                 </div>
                 <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-bold ${SITUACION_STYLE[s]}`}>
                   {SITUACION_LABEL[s]}
@@ -252,9 +409,12 @@ export function InhabilitacionesPage() {
                 <dt className="text-[var(--vl-text-muted)]">Período</dt>
                 <dd className="text-[var(--vl-text)]">
                   {formatDate(i.desde)} → {i.hasta ? formatDate(i.hasta) : "sin fecha"}
-                  <span className="text-[var(--vl-text-muted)]"> · {dias(i.desde, i.cerradaAt)} días</span>
+                  <span className="text-[var(--vl-text-muted)]">
+                    {" "}
+                    · {dias(i.desde, i.cerradaAt)} días
+                  </span>
                 </dd>
-                <dt className="text-[var(--vl-text-muted)]">Inhabilitó</dt>
+                <dt className="text-[var(--vl-text-muted)]">Registró</dt>
                 <dd className="text-[var(--vl-text)]">
                   {quien(i.creadoPor)} · {formatDate(i.createdAt)}
                 </dd>
@@ -270,13 +430,15 @@ export function InhabilitacionesPage() {
 
               {!i.cerradaAt && (
                 <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => void reactivar(i)}
-                    className="text-emerald-700 hover:underline dark:text-emerald-400"
-                  >
-                    Reactivar
-                  </button>
+                  {s !== "PROGRAMADA" && (
+                    <button
+                      type="button"
+                      onClick={() => void reactivar(i)}
+                      className="text-emerald-700 hover:underline dark:text-emerald-400"
+                    >
+                      Reactivar
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setEditando(i)}
@@ -295,10 +457,13 @@ export function InhabilitacionesPage() {
         <InhabilitarDialog
           titulo={`Editar inhabilitación · ${nombreDe(editando)}`}
           submitLabel="Guardar"
+          esUnidad={editando.entidad === "UNIDAD"}
           inicial={{
             detalle: editando.motivo,
             desde: editando.desde.slice(0, 10),
             hasta: editando.hasta ? editando.hasta.slice(0, 10) : "",
+            motivoId: editando.motivoId ?? editando.motivoCat?.id,
+            motivo: editando.tipo ?? undefined,
           }}
           onClose={() => setEditando(null)}
           onSubmit={async (d) => {
@@ -307,7 +472,12 @@ export function InhabilitacionesPage() {
                 `/api/inhabilitaciones/${editando.id}`,
                 {
                   method: "PUT",
-                  body: JSON.stringify({ motivo: d.detalle, desde: d.desde, hasta: d.hasta || null }),
+                  body: JSON.stringify({
+                    motivo: d.detalle,
+                    motivoId: d.motivoId || null,
+                    desde: d.desde,
+                    hasta: d.hasta || null,
+                  }),
                 },
                 token
               );

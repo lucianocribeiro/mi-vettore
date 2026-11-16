@@ -5,7 +5,11 @@ import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
 import { estadoEntidadFrom } from "../lib/estado-entidad.js";
-import { datosInhabilitacionDe, sincronizarInhabilitacion } from "../lib/inhabilitaciones.js";
+import {
+  datosInhabilitacionDe,
+  esInhabilitacionFutura,
+  sincronizarInhabilitacion,
+} from "../lib/inhabilitaciones.js";
 import { ensureUsuarioForChofer } from "../lib/usuario-chofer.js";
 import { generateTempPassword } from "../lib/temp-password.js";
 import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.js";
@@ -433,6 +437,24 @@ router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "Estado inválido" });
       return;
     }
+    const datos = datosInhabilitacionDe(req.body, req.user?.id);
+    const programada =
+      estado === "INHABILITADO" && esInhabilitacionFutura(datos.desde);
+
+    if (programada) {
+      const actual = await prisma.chofer.findUnique({
+        where: { id: req.params.id },
+        include: includeAsignaciones,
+      });
+      if (!actual) {
+        res.status(404).json({ error: "Chofer no encontrado" });
+        return;
+      }
+      await sincronizarInhabilitacion(prisma, "CHOFER", actual.id, true, datos);
+      res.json(actual);
+      return;
+    }
+
     const item = await prisma.chofer.update({
       where: { id: req.params.id },
       data: { estado: EstadoChofer[estado] },
@@ -443,7 +465,7 @@ router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
       "CHOFER",
       item.id,
       estado === "INHABILITADO",
-      datosInhabilitacionDe(req.body, req.user?.id)
+      datos
     );
     res.json(item);
   } catch {

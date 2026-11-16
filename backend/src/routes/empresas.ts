@@ -9,6 +9,7 @@ import { estadoEntidadFrom } from "../lib/estado-entidad.js";
 import {
   cerrarInhabilitacionesDeEmpresa,
   datosInhabilitacionDe,
+  esInhabilitacionFutura,
   inhabilitarDependientesDeEmpresa,
   reactivarDependientesDeEmpresa,
   sincronizarInhabilitacion,
@@ -352,6 +353,18 @@ router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
       return;
     }
     const datos = datosInhabilitacionDe(req.body, req.user?.id);
+    const programada =
+      estado === "INHABILITADO" && esInhabilitacionFutura(datos.desde);
+
+    if (programada) {
+      await prisma.$transaction(async (tx) => {
+        await sincronizarInhabilitacion(tx, "EMPRESA", actual.id, true, datos);
+        await inhabilitarDependientesDeEmpresa(tx, actual.id, datos);
+      });
+      res.json(actual);
+      return;
+    }
+
     const item = await prisma.$transaction(async (tx) => {
       await sincronizarInhabilitacion(tx, "EMPRESA", actual.id, estado === "INHABILITADO", datos);
       if (estado === "INACTIVO") {
