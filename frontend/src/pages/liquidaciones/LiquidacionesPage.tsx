@@ -15,11 +15,11 @@ export function LiquidacionesPage() {
   );
 
   return (
-    <div className="-mx-1 flex min-h-[min(920px,calc(100dvh-5.5rem))] flex-col overflow-hidden rounded-xl border border-[var(--vl-card-border)] bg-[#070b14] md:-mx-0">
+    <div className="-m-4 flex h-[calc(100dvh-7.5rem)] min-h-[640px] flex-col overflow-hidden bg-[#070b14] sm:-m-5 md:-m-6 md:h-[calc(100dvh-6.5rem)]">
       <iframe
         title="Liquidaciones"
         src={src}
-        className="h-[min(920px,calc(100dvh-5.5rem))] w-full flex-1 border-0 bg-[#070b14]"
+        className="h-full w-full flex-1 border-0 bg-[#070b14]"
         allow="downloads"
       />
     </div>

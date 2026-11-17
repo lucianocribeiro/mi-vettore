@@ -5,15 +5,14 @@ ROOT = Path(__file__).resolve().parent.parent
 tpl = (ROOT / "src" / "template.html").read_text(encoding="utf-8")
 
 CSS_EXTRA = """
-/* Integración Mi Vettore: usa el menú de la app; acá solo el contenido. */
-.side .brand,.side .search,.side > .nav{display:none!important}
-.side{width:200px;flex-basis:200px;padding-top:8px}
-html,body{background:transparent}
-.app{min-height:100%}
-@media (max-width:900px){
-  .side{display:none!important}
-  .app{display:block}
-}
+/* Integración Mi Vettore: menú de la app afuera; acá solo contenido. */
+.side{display:none!important}
+.app{display:block;min-height:100%}
+html,body{margin:0;height:100%;background:var(--bg)}
+.main{min-height:100%}
+.topbar{height:44px;padding:0 18px}
+.content{padding:14px 18px 40px;max-width:none}
+.head h1{font-size:18px}
 .role[data-locked="1"]{display:none!important}
 """
 
@@ -120,9 +119,9 @@ else:
 old_tabs = """  document.getElementById('tabs').innerHTML='';document.getElementById('ttl').textContent='Liquidaciones · '+(MODS.find(m=>m[0]===UI.mod)||['','',''])[2];
   document.getElementById('subnav').innerHTML=`<div class="grp">Submódulos</div>`+MODS.slice(0,6).map(([k,n,l])=>`<a class="${UI.mod===k?'on':''}" data-a="mod" data-k="${k}">${l}</a>`).join('')+`<div class="grp">Consulta y configuración</div>`+MODS.slice(6).map(([k,n,l])=>`<a class="${UI.mod===k?'on':''}" data-a="mod" data-k="${k}">${l}</a>`).join('');"""
 
-new_tabs = """  document.getElementById('ttl').textContent='Liquidaciones · '+(MODS.find(m=>m[0]===UI.mod)||['','',''])[2];
+new_tabs = """  document.getElementById('ttl').textContent=(MODS.find(m=>m[0]===UI.mod)||['','','Liquidaciones'])[2];
   document.getElementById('tabs').innerHTML=MODS.map(([k,n,l])=>`<button class="tab ${UI.mod===k?'on':''}" data-a="mod" data-k="${k}">${l}</button>`).join('');
-  document.getElementById('subnav').innerHTML=`<div class="grp">Submódulos</div>`+MODS.slice(0,6).map(([k,n,l])=>`<a class="${UI.mod===k?'on':''}" data-a="mod" data-k="${k}">${l}</a>`).join('')+`<div class="grp">Consulta y configuración</div>`+MODS.slice(6).map(([k,n,l])=>`<a class="${UI.mod===k?'on':''}" data-a="mod" data-k="${k}">${l}</a>`).join('');"""
+  const sn=document.getElementById('subnav');if(sn)sn.innerHTML='';"""
 
 if old_tabs in tpl:
     tpl = tpl.replace(old_tabs, new_tabs)

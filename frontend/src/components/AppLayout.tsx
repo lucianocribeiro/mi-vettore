@@ -92,10 +92,22 @@ export function AppLayout() {
         <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="hidden items-center justify-end border-b border-[var(--vl-card-border)] bg-[var(--vl-main)] px-4 py-2 md:flex">
+          <div
+            className={`hidden items-center justify-end border-b px-4 py-2 md:flex ${
+              wideShell
+                ? "border-[#1e293b] bg-[#070b14]"
+                : "border-[var(--vl-card-border)] bg-[var(--vl-main)]"
+            }`}
+          >
             <AvisosBell />
           </div>
-          <main className="min-h-0 flex-1 overflow-y-auto bg-[var(--vl-main)] p-4 sm:p-5 md:p-6 safe-bottom">
+          <main
+            className={`min-h-0 flex-1 overflow-y-auto safe-bottom ${
+              wideShell
+                ? "bg-[#070b14] p-0"
+                : "bg-[var(--vl-main)] p-4 sm:p-5 md:p-6"
+            }`}
+          >
             <Outlet />
           </main>
         </div>
