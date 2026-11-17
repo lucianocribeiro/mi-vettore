@@ -28,6 +28,8 @@ tpl = tpl.replace(
 DB_ADAPTER = r"""
 /* ===== Mi Vettore: persistencia via /api/liquidaciones ===== */
 (function(){
+  // Si se abre el embed a pantalla completa (F5 en URL vieja), volver a la app con menú.
+  try{if(window.top===window.self){location.replace('/liquidaciones'+location.search);return}}catch(e){}
   const TOKEN_KEY='mi-vettore-token';
   function token(){try{return localStorage.getItem(TOKEN_KEY)||''}catch(e){return ''}}
   async function api(method, url, body){

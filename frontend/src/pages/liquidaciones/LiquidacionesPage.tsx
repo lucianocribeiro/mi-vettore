@@ -9,8 +9,9 @@ import { useAuth } from "../../auth/AuthContext";
 export function LiquidacionesPage() {
   const { user } = useAuth();
   const role = user?.rol === "ADMINISTRADOR" ? "admin" : "operador";
+  // Ojo: no usar /liquidaciones/… (choca con la ruta React al hacer F5).
   const src = useMemo(
-    () => `/liquidaciones/index.html?role=${encodeURIComponent(role)}`,
+    () => `/liq-embed/index.html?role=${encodeURIComponent(role)}`,
     [role]
   );
 
