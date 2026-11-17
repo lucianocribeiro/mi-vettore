@@ -4,23 +4,22 @@ import { useAuth } from "../../auth/AuthContext";
 /**
  * Módulo Liquidaciones (prototipo v7 integrado).
  * Solo roles internos: el gate está en App/Sidebar.
- * El HTML vive en /liquidaciones/index.html y persiste vía /api/liquidaciones.
+ * El HTML vive en /liq-embed/index.html (no en /liquidaciones, para no romper F5).
  */
 export function LiquidacionesPage() {
   const { user } = useAuth();
   const role = user?.rol === "ADMINISTRADOR" ? "admin" : "operador";
-  // Ojo: no usar /liquidaciones/… (choca con la ruta React al hacer F5).
   const src = useMemo(
     () => `/liq-embed/index.html?role=${encodeURIComponent(role)}`,
     [role]
   );
 
   return (
-    <div className="-m-4 flex h-[calc(100dvh-7.5rem)] min-h-[640px] flex-col overflow-hidden bg-[#070b14] sm:-m-5 md:-m-6 md:h-[calc(100dvh-6.5rem)]">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-[#070b14]">
       <iframe
         title="Liquidaciones"
         src={src}
-        className="h-full w-full flex-1 border-0 bg-[#070b14]"
+        className="h-full min-h-0 w-full flex-1 border-0 bg-[#070b14]"
         allow="downloads"
       />
     </div>
