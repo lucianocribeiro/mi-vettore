@@ -900,6 +900,17 @@ model CorreccionAdmin {
   @@index([createdAt])
 }
 
+/// Documentos del módulo Liquidaciones (KV compatible con el prototipo: adel/…, fact/…, liq/…).
+model LiquidacionDoc {
+  path         String   @id
+  data         Json?
+  updatedById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
 /// Línea de base de mantenimiento (import 2026 / OT cerradas). No es carga libre del chofer.
 model RegistroMantenimiento {
   id           String    @id @default(cuid())

@@ -17,6 +17,7 @@ import { HistorialTalleresPage } from "./pages/m7/HistorialTalleresPage";
 import { InhabilitacionesPage } from "./pages/inhabilitaciones/InhabilitacionesPage";
 import { TallerExternoPage } from "./pages/m7/TallerExternoPage";
 import { DocumentacionPage } from "./pages/documentacion/DocumentacionPage";
+import { LiquidacionesPage } from "./pages/liquidaciones/LiquidacionesPage";
 import { SugerenciasPage } from "./pages/SugerenciasPage";
 import { isInternalOps } from "./types";
 
@@ -201,6 +202,16 @@ export default function App() {
                 <SugerenciasOnlyGate>
                   <VettoreOpsGate>
                     <InhabilitacionesPage />
+                  </VettoreOpsGate>
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
+              path="/liquidaciones"
+              element={
+                <SugerenciasOnlyGate>
+                  <VettoreOpsGate>
+                    <LiquidacionesPage />
                   </VettoreOpsGate>
                 </SugerenciasOnlyGate>
               }

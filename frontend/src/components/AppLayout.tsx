@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch, ApiError } from "../lib/api";
 import { isSugerenciasOnly } from "../types";
@@ -13,6 +13,8 @@ export function AppLayout() {
   const [sugerenciaOpen, setSugerenciaOpen] = useState(false);
   const { user, token } = useAuth();
   const onlySugerencias = isSugerenciasOnly(user?.rol);
+  const location = useLocation();
+  const wideShell = location.pathname.startsWith("/liquidaciones");
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -33,7 +35,11 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-dvh w-full justify-center p-0 sm:p-3 md:p-6">
-      <div className="relative flex w-full max-w-6xl flex-col overflow-hidden bg-[var(--vl-shell)] shadow-none sm:rounded-2xl sm:border sm:border-[var(--vl-shell-border)] sm:shadow-xl md:flex-row md:min-h-[min(900px,calc(100dvh-3rem))]">
+      <div
+        className={`relative flex w-full flex-col overflow-hidden bg-[var(--vl-shell)] shadow-none sm:rounded-2xl sm:border sm:border-[var(--vl-shell-border)] sm:shadow-xl md:flex-row md:min-h-[min(900px,calc(100dvh-3rem))] ${
+          wideShell ? "max-w-[1600px]" : "max-w-6xl"
+        }`}
+      >
         <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-[var(--vl-sidebar-border)] bg-[var(--vl-sidebar)] px-2 py-2.5 md:hidden safe-top sm:gap-3 sm:px-3">
           <button
             type="button"

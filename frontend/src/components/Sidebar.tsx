@@ -144,6 +144,13 @@ const NAV: NavItem[] = [
       "OPERACIONES",
     ],
   },
+  {
+    to: "/liquidaciones",
+    label: "Liquidaciones",
+    sub: "Quincenal",
+    icon: CreditCard,
+    roles: ["ADMINISTRADOR", "OPERACIONES"],
+  },
 ];
 
 type Props = {

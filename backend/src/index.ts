@@ -27,6 +27,7 @@ const { talleresProveedoresRouter } = require("./routes/talleres-proveedores.js"
 const { documentosRouter } = require("./routes/documentos.js");
 const { flotaImportRouter } = require("./routes/flota-import.js");
 const { diagnosticoRouter } = require("./routes/diagnostico.js");
+const { liquidacionesRouter } = require("./routes/liquidaciones.js");
 const { startComunicacionesScheduler } = require("./lib/comunicaciones-scheduler.js");
 const { isSmtpConfigured } = require("./lib/mailer.js");
 const { getUploadsRoot } = require("./lib/uploads.js");
@@ -51,7 +52,7 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: "4mb" }));
+app.use(express.json({ limit: "8mb" }));
 app.use("/uploads", express.static(getUploadsRoot()));
 
 app.get("/api/health", (_req: any, res: any) => {
@@ -85,6 +86,7 @@ app.use("/api/inhabilitaciones", inhabilitacionesRouter);
 app.use("/api/marcas-camioneta", marcasCamionetaRouter);
 app.use("/api/sugerencias", sugerenciasRouter);
 app.use("/api/alertas", alertasRouter);
+app.use("/api/liquidaciones", liquidacionesRouter);
 
 /** Producción single-host: servir el build de Vite desde ../frontend/dist */
 const serveFrontend = process.env.SERVE_FRONTEND === "true";
