@@ -52,12 +52,32 @@ const ITEM_DATE: Record<MantItemKey, (c: Camioneta) => string | null | undefined
   bateria: (c) => c.fechaCambioBateria,
 };
 
+const ITEM_KM: Record<MantItemKey, (c: Camioneta) => number | null | undefined> = {
+  aceite: (c) => c.kmUltimoAceite,
+  correa: (c) => c.kmCambioCorrea,
+  neumaticos: (c) => c.kmCambioNeumaticos,
+  bateria: (c) => c.kmCambioBateria,
+};
+
 const ITEM_LABEL: Record<MantItemKey, string> = {
   aceite: "Aceite",
   correa: "Distribución",
   neumaticos: "Neumáticos",
   bateria: "Batería",
 };
+
+function formatMantCambio(c: Camioneta, key: MantItemKey): string {
+  const fecha = formatDate(ITEM_DATE[key](c));
+  const km = ITEM_KM[key](c);
+  const kmTxt =
+    km != null && Number.isFinite(km)
+      ? `${Number(km).toLocaleString("es-AR")} km`
+      : null;
+  if (fecha !== "—" && kmTxt) return `${fecha} · ${kmTxt}`;
+  if (fecha !== "—") return fecha;
+  if (kmTxt) return kmTxt;
+  return "—";
+}
 
 const ITEM_LINE: Record<SemaforoLevel, string> = {
   ok: "text-[var(--vl-text-muted)]",
@@ -496,13 +516,14 @@ export function M6MantenimientoPage() {
                           ["aceite", "correa", "neumaticos", "bateria"] as MantItemKey[]
                         ).map((key) => {
                           const itemLevel = levelForItem(key, data);
-                          const fecha = formatDate(ITEM_DATE[key](c));
                           return (
                             <div key={key} className="contents">
                               <span className="text-[var(--vl-text-muted)]">
                                 {ITEM_LABEL[key]}:
                               </span>
-                              <span className={ITEM_LINE[itemLevel]}>{fecha}</span>
+                              <span className={ITEM_LINE[itemLevel]}>
+                                {formatMantCambio(c, key)}
+                              </span>
                             </div>
                           );
                         })}
@@ -599,6 +620,11 @@ export function M6MantenimientoPage() {
                     onChange={(e) => setAceite(e.target.value)}
                     className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
                   />
+                  {selected.kmUltimoAceite != null && (
+                    <span className="mt-1 block text-[11px] font-normal">
+                      Km al cambio: {selected.kmUltimoAceite.toLocaleString("es-AR")}
+                    </span>
+                  )}
                 </label>
                 <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
                   Último cambio de distribución
@@ -608,6 +634,11 @@ export function M6MantenimientoPage() {
                     onChange={(e) => setCorrea(e.target.value)}
                     className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
                   />
+                  {selected.kmCambioCorrea != null && (
+                    <span className="mt-1 block text-[11px] font-normal">
+                      Km al cambio: {selected.kmCambioCorrea.toLocaleString("es-AR")}
+                    </span>
+                  )}
                 </label>
                 <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
                   Último cambio de neumáticos
@@ -617,6 +648,12 @@ export function M6MantenimientoPage() {
                     onChange={(e) => setNeumaticos(e.target.value)}
                     className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
                   />
+                  {selected.kmCambioNeumaticos != null && (
+                    <span className="mt-1 block text-[11px] font-normal">
+                      Km al cambio:{" "}
+                      {selected.kmCambioNeumaticos.toLocaleString("es-AR")}
+                    </span>
+                  )}
                 </label>
                 <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
                   Último cambio de batería
@@ -626,6 +663,11 @@ export function M6MantenimientoPage() {
                     onChange={(e) => setBateria(e.target.value)}
                     className="mt-1 min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
                   />
+                  {selected.kmCambioBateria != null && (
+                    <span className="mt-1 block text-[11px] font-normal">
+                      Km al cambio: {selected.kmCambioBateria.toLocaleString("es-AR")}
+                    </span>
+                  )}
                 </label>
                   </>
                 )}
