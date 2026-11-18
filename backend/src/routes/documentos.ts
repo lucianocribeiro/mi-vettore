@@ -581,6 +581,73 @@ router.post(
   }
 );
 
+/** Reemplaza el archivo (p. ej. tras rotar y guardar orientación). */
+router.post(
+  "/:id/reemplazar",
+  authenticate,
+  upload.single("archivo"),
+  async (req: AuthedRequest, res) => {
+    try {
+      if (
+        !MASTER_WRITE_ROLES.includes(
+          req.user!.rol as (typeof MASTER_WRITE_ROLES)[number]
+        )
+      ) {
+        res.status(403).json({ error: "Solo operaciones o administración" });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ error: "Falta el archivo" });
+        return;
+      }
+      if (!isSupabaseStorageConfigured()) {
+        res.status(503).json({ error: "Storage no configurado" });
+        return;
+      }
+      const doc = await prisma.documentoEntidad.findUnique({
+        where: { id: req.params.id },
+      });
+      if (!doc) {
+        res.status(404).json({ error: "Documento no encontrado" });
+        return;
+      }
+      const owner = doc.choferId ?? doc.camionetaId ?? "doc";
+      const prefix = doc.choferId ? "chofer" : "unidad";
+      const safeName = (req.file.originalname || "documento.jpg").replace(
+        /[^\w.\-]+/g,
+        "_"
+      );
+      const newPath = `${prefix}/${owner}/${doc.tipo}_rot_${Date.now()}_${safeName}`;
+      const up = await uploadDocumento({
+        path: newPath,
+        body: req.file.buffer,
+        contentType: req.file.mimetype || "image/jpeg",
+      });
+      if (!up.ok) {
+        res.status(502).json({ error: up.error });
+        return;
+      }
+      const updated = await prisma.documentoEntidad.update({
+        where: { id: doc.id },
+        data: {
+          storagePath: newPath,
+          mimeType: req.file.mimetype || "image/jpeg",
+          nombreOriginal:
+            req.file.originalname || doc.nombreOriginal || "documento.jpg",
+        },
+      });
+      const rm = await removeDocumento(doc.storagePath);
+      if (!rm.ok) {
+        console.error("No se pudo borrar archivo viejo:", doc.storagePath, rm.error);
+      }
+      res.json(updated);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al reemplazar documento" });
+    }
+  }
+);
+
 router.post("/:id/validar", authenticate, async (req: AuthedRequest, res) => {
   try {
     if (

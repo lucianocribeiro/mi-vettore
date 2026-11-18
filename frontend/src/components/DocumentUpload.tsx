@@ -35,7 +35,7 @@ const FOTO_HINT: Partial<Record<TipoDocumento, string>> = {
   FOTO_CARGA: "Caja / zona de carga por dentro.",
 };
 
-/** Comprime la imagen y, si `rotacion` (grados: 0/90/180/270) no es 0, la rota antes de subirla. */
+/** Comprime la imagen y la rota. Si `rotacion` es 0 y viene vertical, la pone horizontal. */
 export async function compressImageIfNeeded(file: File, rotacion = 0): Promise<File | Blob> {
   if (!file.type.startsWith("image/")) return file;
   const maxWidth = 1600;
@@ -45,13 +45,18 @@ export async function compressImageIfNeeded(file: File, rotacion = 0): Promise<F
   const scale = bitmap.width > maxWidth ? maxWidth / bitmap.width : 1;
   const w = Math.round(bitmap.width * scale);
   const h = Math.round(bitmap.height * scale);
-  const rot = ((rotacion % 360) + 360) % 360;
+  let rot = ((rotacion % 360) + 360) % 360;
+  // Documentos (cédula, DNI…): preferir horizontal al subir.
+  if (rot === 0 && bitmap.height > bitmap.width) rot = 90;
   const girada = rot === 90 || rot === 270;
   const canvas = document.createElement("canvas");
   canvas.width = girada ? h : w;
   canvas.height = girada ? w : h;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return file;
+  if (!ctx) {
+    bitmap.close();
+    return file;
+  }
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.rotate((rot * Math.PI) / 180);
   ctx.drawImage(bitmap, -w / 2, -h / 2, w, h);
@@ -160,7 +165,14 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
     // Documentos en imagen (cédula, DNI, licencia…): vista previa para rotar antes de guardar.
     if (file.type.startsWith("image/") && !TIPOS_FOTO_VEHICULO.includes(tipoDoc)) {
       setError(null);
-      setPrevia({ tipo: tipoDoc, file, url: URL.createObjectURL(file), rot: 0 });
+      const url = URL.createObjectURL(file);
+      void createImageBitmap(file)
+        .then((bmp) => {
+          const rot = bmp.height > bmp.width ? 90 : 0;
+          bmp.close();
+          setPrevia({ tipo: tipoDoc, file, url, rot });
+        })
+        .catch(() => setPrevia({ tipo: tipoDoc, file, url, rot: 0 }));
       return;
     }
     await subir(tipoDoc, file, 0);
@@ -240,7 +252,13 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
   }
 
   /** Documento abierto en el visor (ventana modal con rotar y descargar). */
-  const [visor, setVisor] = useState<{ url: string; nombre: string; mimeType: string; titulo: string } | null>(null);
+  const [visor, setVisor] = useState<{
+    id: string;
+    url: string;
+    nombre: string;
+    mimeType: string;
+    titulo: string;
+  } | null>(null);
 
   async function openDoc(id: string) {
     if (!token) return;
@@ -252,6 +270,7 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
       );
       const doc = docs.find((d) => d.id === id);
       setVisor({
+        id,
         url: data.url,
         nombre: doc?.nombreOriginal || "documento",
         mimeType: doc?.mimeType ?? "",
@@ -456,7 +475,14 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
           nombre={visor.nombre}
           mimeType={visor.mimeType}
           titulo={visor.titulo}
+          documentoId={visor.id}
+          token={token}
+          canSaveOrientacion={canValidate}
           onClose={() => setVisor(null)}
+          onSaved={() => {
+            // Refrescar URL firmada por si el cache del navegador retiene la vieja.
+            void openDoc(visor.id);
+          }}
         />
       )}
       {previa && (
