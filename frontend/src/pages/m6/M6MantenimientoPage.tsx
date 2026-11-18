@@ -608,7 +608,7 @@ export function M6MantenimientoPage() {
                     {formatDate(selected.kmActualizadoAt)}
                   </p>
                 )}
-                {!esChoferRol && (
+                {!esChoferRol && isInternalOps(user?.rol) && (
                   <>
                 <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
                   Último cambio de aceite
