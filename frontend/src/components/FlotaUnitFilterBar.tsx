@@ -44,6 +44,11 @@ export const TIPOS_TRANSPORTE: Array<{ value: TipoTransporte; label: string }> =
     { value: "SECO", label: "Seco" },
   ];
 
+/** Empresa dueña de la unidad (no la de la asignación del chofer). */
+function empresaPropietariaId(c: Camioneta): string | null {
+  return c.empresaId ?? c.empresa?.id ?? null;
+}
+
 export function filterCamionetas(
   items: Camioneta[],
   f: FlotaUnitFilters
@@ -76,8 +81,7 @@ export function filterCamionetas(
         .toLowerCase();
       if (!capLabel.includes(capacidadQ)) return false;
     }
-    const a = currentAsignacion(c);
-    if (f.empresaId && a?.empresaId !== f.empresaId && a?.empresa?.id !== f.empresaId) {
+    if (f.empresaId && empresaPropietariaId(c) !== f.empresaId) {
       return false;
     }
     if (f.patenteId && c.id !== f.patenteId) return false;
@@ -94,7 +98,8 @@ export function filterCamionetas(
       c.tipoTransporte,
       c.tipoServicio?.nombre,
       c.estado,
-      a?.empresa?.nombre,
+      unidadPropietario(c),
+      c.empresa?.nombre,
       String(c.km),
     ]
       .filter(Boolean)
@@ -149,8 +154,7 @@ export function FlotaUnitFilterBar({
 
   const patentes = unidades.filter((c) => {
     if (!value.empresaId) return true;
-    const a = currentAsignacion(c);
-    return a?.empresaId === value.empresaId || a?.empresa?.id === value.empresaId;
+    return empresaPropietariaId(c) === value.empresaId;
   });
 
   return (

@@ -454,7 +454,7 @@ export function M6MantenimientoPage() {
             empresas={[
               ...new Map(
                 camionetas
-                  .map((c) => currentAsignacion(c)?.empresa)
+                  .map((c) => c.empresa)
                   .filter((e): e is NonNullable<typeof e> => !!e)
                   .map((e) => [e.id, e])
               ).values(),
@@ -533,12 +533,10 @@ export function M6MantenimientoPage() {
                           a?.chofer?.nombre
                             ? `Chofer: ${a.chofer.nombre}`
                             : null,
-                          a?.empresa?.nombre
-                            ? `Empresa: ${a.empresa.nombre}`
-                            : null,
+                          `Empresa: ${unidadPropietario(c)}`,
                         ]
                           .filter(Boolean)
-                          .join(" · ") || "Sin asignación"}
+                          .join(" · ")}
                       </div>
                     </button>
                 );
