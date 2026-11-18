@@ -33,19 +33,32 @@ export async function syncMantenimientoDesdeOt(
   for (const catId of opts.itemCategoriaIds) {
     if (!catId) continue;
     const diag = diagnosticoPathFromId(cats, catId);
-    const path = (diag.path ?? "").toLowerCase();
-    if (path.includes("aceite")) flags.aceite = true;
+    // N1 es "Neumáticos / Batería / GNC": no mirar el path completo o
+    // cualquier OT de neumáticos/batería actualizaba las dos fechas.
+    const n2 = (diag.nivel2 ?? "").toLowerCase();
+    const n3 = (diag.nivel3 ?? "").toLowerCase();
+    const specific = `${n2} ${n3}`.trim();
+    if (!specific) continue;
+
+    if (specific.includes("aceite")) flags.aceite = true;
     if (
-      path.includes("distribuci") ||
-      path.includes("correa") ||
-      path.includes("poli v")
+      specific.includes("distribuci") ||
+      specific.includes("correa") ||
+      specific.includes("poli v")
     ) {
       flags.correa = true;
     }
-    if (path.includes("neum") || path.includes("cubierta")) {
+    if (
+      n2.includes("neum") ||
+      n2.includes("cubierta") ||
+      n3.includes("neum") ||
+      n3.includes("cubierta")
+    ) {
       flags.neumaticos = true;
     }
-    if (path.includes("bater")) flags.bateria = true;
+    if (n2.includes("bater") || n3.includes("bater")) {
+      flags.bateria = true;
+    }
   }
 
   if (!flags.aceite && !flags.correa && !flags.neumaticos && !flags.bateria) {
