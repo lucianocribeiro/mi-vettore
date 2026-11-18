@@ -7,6 +7,7 @@ import {
   camionetasParaUsuarioChofer,
   choferPuedeEditarCamioneta,
   empresaIdsDeDueno,
+  empresaPuedeEditarCamioneta,
 } from "../lib/flota.js";
 import { contextoAccesoFromReq } from "../lib/contexto-acceso.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
@@ -1334,6 +1335,12 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
         res.status(403).json({ error: "Solo podés actualizar unidades de tu flota" });
         return;
       }
+    } else if (rol === "EMPRESA") {
+      const ok = await empresaPuedeEditarCamioneta(req.user!.id, camionetaId);
+      if (!ok) {
+        res.status(403).json({ error: "Solo podés actualizar unidades de tu empresa" });
+        return;
+      }
     } else if (!isMaster && rol !== "OPERACIONES" && rol !== "ADMINISTRADOR") {
       res.status(403).json({ error: "Sin permiso" });
       return;
@@ -1388,7 +1395,8 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
         });
       }
     }
-    if (rol !== "CHOFER") {
+    // Fechas de aceite/correa/etc.: solo ops internas. Chofer/empresa cargan km.
+    if (isMaster || rol === "OPERACIONES" || rol === "ADMINISTRADOR") {
       if (req.body?.fechaUltimoAceite !== undefined) {
         data.fechaUltimoAceite = parseDate(req.body.fechaUltimoAceite);
       }
@@ -1405,7 +1413,7 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
     if (Object.keys(data).length === 0) {
       res.status(400).json({
         error:
-          rol === "CHOFER"
+          rol === "CHOFER" || rol === "EMPRESA"
             ? "Indicá el kilometraje actual"
             : "Indicá km y/o fechas de mantenimiento (aceite, correa, neumáticos, batería)",
       });
@@ -1422,7 +1430,7 @@ router.patch("/:id/mantenimiento", authenticate, async (req: AuthedRequest, res)
         include: includeAsignaciones,
       });
 
-      if (rol !== "CHOFER") {
+      if (isMaster || rol === "OPERACIONES" || rol === "ADMINISTRADOR") {
         const datePairs: { tipo: string; fecha: Date | null; prev: Date | null }[] = [
           {
             tipo: "ACEITE",

@@ -143,7 +143,8 @@ export async function resyncMantenimientoDeOt(tx: Tx, otId: string) {
     itemCategoriaIds: catOt
       ? [catOt]
       : ot.items.map((i) => i.categoriaDiagnosticoId),
-    fecha: ot.cerradaAt,
+    // Preferir fecha del trabajo/siniestro sobre el momento de cierre en sistema.
+    fecha: ot.fechaSiniestro ?? ot.cerradaAt,
   });
 }
 

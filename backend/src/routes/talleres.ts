@@ -3218,7 +3218,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         itemCategoriaIds: catOt
           ? [catOt]
           : ot.items.map((i) => i.categoriaDiagnosticoId),
-        fecha: new Date(),
+        fecha: ot.fechaSiniestro ?? new Date(),
       });
 
       return tx.ordenTrabajo.update({

@@ -27,8 +27,10 @@ export function M6KmRegistroPage() {
   const { token, user } = useAuth();
   const canWrite =
     user?.rol === "CHOFER" ||
+    user?.rol === "EMPRESA" ||
     user?.rol === "ADMINISTRADOR" ||
-    user?.rol === "OPERACIONES";
+    user?.rol === "OPERACIONES" ||
+    !!user?.esDuenoFlota;
   const canExport = isInternalOps(user?.rol);
 
   const [camionetas, setCamionetas] = useState<Camioneta[]>([]);
