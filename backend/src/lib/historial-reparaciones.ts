@@ -159,7 +159,13 @@ export async function queryHistorialReparaciones(opts: {
         null,
       falla: ot.solicitud.falla,
       descripcion: i.descripcion,
-      importe: i.importe,
+      // OTE: el monto puede estar solo en valorFinal si el ítem quedó en 0.
+      importe:
+        i.importe > 0
+          ? i.importe
+          : ot.externo && ot.valorFinal != null && ot.valorFinal > 0
+            ? ot.valorFinal
+            : i.importe,
       tipo: i.tipo,
       taller,
       fecha,

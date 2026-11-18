@@ -202,6 +202,11 @@ export function HistorialTalleresPage() {
     });
   }, [conceptosVisibles, sortKey, sortDir]);
 
+  const totalFiltrado = useMemo(
+    () => conceptosOrdenados.reduce((s, r) => s + (r.importe || 0), 0),
+    [conceptosOrdenados]
+  );
+
   function SortTh({
     col,
     label,
@@ -727,7 +732,7 @@ export function HistorialTalleresPage() {
                         {r.fecha ? formatDate(r.fecha) : "—"}
                       </td>
                       <td className="whitespace-nowrap px-2 py-2 text-right font-medium text-[var(--vl-heading)]">
-                        {r.externo ? "—" : money(r.importe)}
+                        {money(r.importe)}
                       </td>
                       <td className="px-2 py-2 text-[var(--vl-text)]">
                         {r.reparacionNivel1 || "—"}
@@ -742,13 +747,18 @@ export function HistorialTalleresPage() {
                   ))}
                 </tbody>
               </table>
-              <p className="border-t border-[var(--vl-card-border)] px-3 py-2 text-[11px] text-[var(--vl-text-muted)]">
-                {conceptosOrdenados.length} fila
-                {conceptosOrdenados.length === 1 ? "" : "s"}
-                {vista === "unidad" ? " · vista por unidad" : " · vista por concepto"}
-                {" · "}
-                tocá el encabezado para ordenar
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--vl-card-border)] px-3 py-2 text-[11px] text-[var(--vl-text-muted)]">
+                <span>
+                  {conceptosOrdenados.length} fila
+                  {conceptosOrdenados.length === 1 ? "" : "s"}
+                  {vista === "unidad" ? " · vista por unidad" : " · vista por concepto"}
+                  {" · "}
+                  tocá el encabezado para ordenar
+                </span>
+                <span className="text-sm font-semibold text-[var(--vl-heading)]">
+                  Total{hayFiltros ? " filtrado" : ""}: {money(totalFiltrado)}
+                </span>
+              </div>
             </div>
           )}
         </div>
