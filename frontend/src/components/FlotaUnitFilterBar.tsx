@@ -1,4 +1,4 @@
-import { currentAsignacion, type Camioneta, type EstadoCamioneta, type TipoTransporte, unidadPropietario, unidadTitulo } from "../types";
+import { type Camioneta, type EstadoCamioneta, type TipoTransporte, unidadPropietario, unidadTitulo } from "../types";
 
 export type TipoFiltroTransporte = TipoTransporte | "SIN_TIPO";
 
