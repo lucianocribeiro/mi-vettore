@@ -125,25 +125,61 @@ export async function queryHistorialReparaciones(opts: {
     if (t && !tallerPorOt.has(i.otId)) tallerPorOt.set(i.otId, t);
   }
 
-  const rows: HistorialReparacionRow[] = itemsFuente.map((i) => {
+  // 1 renglón por OT (varias facturas/líneas del mismo OT no deben repetirse en el historial).
+  const porOt = new Map<string, typeof itemsFuente>();
+  for (const i of itemsFuente) {
+    const list = porOt.get(i.otId);
+    if (list) list.push(i);
+    else porOt.set(i.otId, [i]);
+  }
+
+  const rows: HistorialReparacionRow[] = [...porOt.values()].map((grupo) => {
+    const i = grupo[0]!;
+    const ot = i.ot;
     const catId =
-      i.ot.diagnosticos?.[0]?.categoriaId ??
+      ot.diagnosticos?.[0]?.categoriaId ??
       i.categoriaDiagnosticoId ??
       i.categoriaDiagnostico?.id ??
       catPorOt.get(i.otId);
     const diag = diagnosticoPathFromId(cats, catId);
-    const ot = i.ot;
-    const fecha = ot.fechaSiniestro ?? i.fecha ?? ot.cerradaAt ?? ot.createdAt;
+    const fecha =
+      ot.fechaSiniestro ??
+      grupo.map((g) => g.fecha).find((f) => !!f) ??
+      ot.cerradaAt ??
+      ot.createdAt;
     const taller =
-      i.tallerNombre ||
-      i.tallerProveedor?.razonSocial ||
+      grupo
+        .map(
+          (g) =>
+            g.tallerNombre ||
+            g.tallerProveedor?.razonSocial ||
+            ""
+        )
+        .find((t) => t.trim().length > 0) ||
       ot.tallerProveedor?.razonSocial ||
       ot.tallerAsignado ||
       tallerPorOt.get(i.otId) ||
       "";
 
+    const sumaItems = grupo.reduce((acc, g) => acc + (g.importe || 0), 0);
+    // OTE: el monto puede estar solo en valorFinal si los ítems quedaron en 0.
+    const importe =
+      sumaItems > 0
+        ? sumaItems
+        : ot.externo && ot.valorFinal != null && ot.valorFinal > 0
+          ? ot.valorFinal
+          : sumaItems;
+
+    const descripciones = [
+      ...new Set(
+        grupo
+          .map((g) => (g.descripcion || "").trim())
+          .filter((d) => d.length > 0)
+      ),
+    ];
+
     return {
-      id: i.id,
+      id: ot.id,
       otId: ot.id,
       numeroOT: ot.numeroOT,
       externo: ot.externo,
@@ -158,14 +194,8 @@ export async function queryHistorialReparaciones(opts: {
         ot.solicitud.camioneta.asignaciones[0]?.chofer.nombre ??
         null,
       falla: ot.solicitud.falla,
-      descripcion: i.descripcion,
-      // OTE: el monto puede estar solo en valorFinal si el ítem quedó en 0.
-      importe:
-        i.importe > 0
-          ? i.importe
-          : ot.externo && ot.valorFinal != null && ot.valorFinal > 0
-            ? ot.valorFinal
-            : i.importe,
+      descripcion: descripciones.join(" · "),
+      importe,
       tipo: i.tipo,
       taller,
       fecha,
