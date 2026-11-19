@@ -258,6 +258,7 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
     nombre: string;
     mimeType: string;
     titulo: string;
+    tipo: TipoDocumento | null;
   } | null>(null);
 
   async function openDoc(id: string) {
@@ -275,6 +276,7 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
         nombre: doc?.nombreOriginal || "documento",
         mimeType: doc?.mimeType ?? "",
         titulo: doc ? TIPO_DOCUMENTO_LABEL[doc.tipo] ?? doc.tipo : "Documento",
+        tipo: doc?.tipo ?? null,
       });
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "No se pudo abrir");
@@ -478,10 +480,14 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
           documentoId={visor.id}
           token={token}
           canSaveOrientacion={canValidate}
+          // Fotos de vehículo: no auto-girar (deja al usuario rotar y guardar).
+          autoHorizontal={
+            !visor.tipo || !TIPOS_FOTO_VEHICULO.includes(visor.tipo)
+          }
           onClose={() => setVisor(null)}
           onSaved={() => {
-            // Refrescar URL firmada por si el cache del navegador retiene la vieja.
-            void openDoc(visor.id);
+            // No reabrir: eso volvía a aplicar el auto-giro y “deshacía” el guardado.
+            void load();
           }}
         />
       )}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch, ApiError } from "../lib/api";
 
 type Props = {
@@ -14,6 +14,8 @@ type Props = {
   documentoId?: string;
   token?: string | null;
   canSaveOrientacion?: boolean;
+  /** Sugerir giro a horizontal si viene vertical (cédula/DNI). No usar en fotos de vehículo. */
+  autoHorizontal?: boolean;
   onSaved?: () => void;
 };
 
@@ -25,9 +27,9 @@ function esPdf(mime: string | null | undefined, nombre: string) {
   return (mime ?? "") === "application/pdf" || /\.pdf$/i.test(nombre);
 }
 
-/** Imagen rotada (0/90/180/270) como Blob JPEG. */
+/** Imagen rotada (0/90/180/270) como Blob JPEG (sin EXIF; queda como se ve). */
 export async function rotarImagen(blob: Blob, rot: number): Promise<Blob> {
-  const bitmap = await createImageBitmap(blob);
+  const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
   const girada = rot === 90 || rot === 270;
   const canvas = document.createElement("canvas");
   canvas.width = girada ? bitmap.height : bitmap.width;
@@ -47,10 +49,10 @@ export async function rotarImagen(blob: Blob, rot: number): Promise<Blob> {
   return out ?? blob;
 }
 
-/** Si está en vertical, sugiere 90° para verla horizontal. */
+/** Si el bitmap (con EXIF aplicado) está vertical, sugiere 90°. */
 export async function rotacionParaHorizontal(blob: Blob): Promise<number> {
   try {
-    const bitmap = await createImageBitmap(blob);
+    const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
     const rot = bitmap.height > bitmap.width ? 90 : 0;
     bitmap.close();
     return rot;
@@ -60,7 +62,7 @@ export async function rotacionParaHorizontal(blob: Blob): Promise<number> {
 }
 
 /**
- * Visor de documentos: rota, fuerza vista horizontal en verticales y permite guardar.
+ * Visor de documentos: rota y permite guardar la orientación en el archivo.
  */
 export function DocViewer({
   url,
@@ -71,6 +73,7 @@ export function DocViewer({
   documentoId,
   token,
   canSaveOrientacion,
+  autoHorizontal = true,
   onSaved,
 }: Props) {
   const [rot, setRot] = useState(0);
@@ -79,12 +82,16 @@ export function DocViewer({
   const [cargando, setCargando] = useState(true);
   const [descargando, setDescargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  /** Evita que un reload vuelva a auto-girar después de guardar. */
+  const saltarAutoRef = useRef(false);
+  const rotInicialRef = useRef(0);
 
   useEffect(() => {
     let vivo = true;
     let creado: string | null = null;
     setCargando(true);
     setRot(0);
+    rotInicialRef.current = 0;
     fetch(url)
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
@@ -97,10 +104,18 @@ export function DocViewer({
         creado = URL.createObjectURL(bb);
         setBlob(bb);
         setBlobUrl(creado);
-        if (esImagen(tipo || bb.type, nombre)) {
+        if (
+          !saltarAutoRef.current &&
+          autoHorizontal &&
+          esImagen(tipo || bb.type, nombre)
+        ) {
           const auto = await rotacionParaHorizontal(bb);
-          if (vivo && auto) setRot(auto);
+          if (vivo && auto) {
+            setRot(auto);
+            rotInicialRef.current = auto;
+          }
         }
+        saltarAutoRef.current = false;
       })
       .catch(() => {
         /* sin CORS u otro error: se muestra con la URL directa */
@@ -110,7 +125,7 @@ export function DocViewer({
       vivo = false;
       if (creado) URL.revokeObjectURL(creado);
     };
-  }, [url, mimeType, nombre]);
+  }, [url, mimeType, nombre, autoHorizontal]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -123,8 +138,13 @@ export function DocViewer({
   const src = blobUrl ?? url;
   const imagen = esImagen(mimeType ?? blob?.type, nombre);
   const pdf = !imagen && esPdf(mimeType ?? blob?.type, nombre);
+  const hayCambio = rot !== rotInicialRef.current;
   const puedeGuardar =
-    !!canSaveOrientacion && !!documentoId && !!token && imagen && rot !== 0;
+    !!canSaveOrientacion && !!documentoId && !!token && imagen && hayCambio;
+
+  function girar(delta: number) {
+    setRot((r) => (r + delta) % 360);
+  }
 
   async function descargar() {
     setDescargando(true);
@@ -158,23 +178,32 @@ export function DocViewer({
     if (!puedeGuardar || !blob || !token || !documentoId) return;
     setGuardando(true);
     try {
+      // Siempre re-encodear con la rotación actual (incluye 0 si volvieron del auto-giro).
       const rotated = await rotarImagen(blob, rot);
       const fd = new FormData();
       const fileName = (nombre.replace(/\.\w+$/, "") || "documento") + ".jpg";
       fd.append("archivo", new File([rotated], fileName, { type: "image/jpeg" }));
-      await apiFetch(`/api/documentos/${documentoId}/reemplazar`, {
-        method: "POST",
-        body: fd,
-      }, token);
+      await apiFetch(
+        `/api/documentos/${documentoId}/reemplazar`,
+        { method: "POST", body: fd },
+        token
+      );
       const nuevoUrl = URL.createObjectURL(rotated);
       if (blobUrl) URL.revokeObjectURL(blobUrl);
+      // Quedarse con el archivo ya girado; no reabrir (evita auto-giro otra vez).
+      saltarAutoRef.current = true;
       setBlob(rotated);
       setBlobUrl(nuevoUrl);
       setRot(0);
+      rotInicialRef.current = 0;
       onSaved?.();
-      alert("Orientación guardada. La próxima vez se verá así.");
+      alert("Orientación guardada. Ya queda así al volver a abrir.");
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "No se pudo guardar la orientación");
+      alert(
+        err instanceof ApiError
+          ? err.message
+          : "No se pudo guardar la orientación"
+      );
     } finally {
       setGuardando(false);
     }
@@ -184,23 +213,44 @@ export function DocViewer({
     "rounded-md border border-[var(--vl-card-border)] px-3 py-1.5 text-xs font-semibold text-[var(--vl-text)] hover:border-slate-400 disabled:opacity-50";
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-3" role="dialog" aria-modal="true" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-3"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
       <div
         className="flex h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-[var(--vl-card)] shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--vl-card-border)] px-4 py-3">
           <div className="min-w-0">
-            {titulo && <div className="text-sm font-semibold text-[var(--vl-heading)]">{titulo}</div>}
-            <div className="truncate text-xs text-[var(--vl-text-muted)]">{nombre}</div>
+            {titulo && (
+              <div className="text-sm font-semibold text-[var(--vl-heading)]">
+                {titulo}
+              </div>
+            )}
+            <div className="truncate text-xs text-[var(--vl-text-muted)]">
+              {nombre}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {imagen && (
               <>
-                <button type="button" className={btn} onClick={() => setRot((r) => (r + 270) % 360)} title="Rotar a la izquierda">
+                <button
+                  type="button"
+                  className={btn}
+                  onClick={() => girar(270)}
+                  title="Rotar a la izquierda"
+                >
                   ↺ Rotar
                 </button>
-                <button type="button" className={btn} onClick={() => setRot((r) => (r + 90) % 360)} title="Rotar a la derecha">
+                <button
+                  type="button"
+                  className={btn}
+                  onClick={() => girar(90)}
+                  title="Rotar a la derecha"
+                >
                   Rotar ↻
                 </button>
                 {canSaveOrientacion && (
@@ -209,14 +259,19 @@ export function DocViewer({
                     className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                     disabled={!puedeGuardar || guardando}
                     onClick={() => void guardarOrientacion()}
-                    title="Guarda la rotación en el archivo para que quede así al volver a abrir"
+                    title="Guarda la rotación en el archivo"
                   >
                     {guardando ? "Guardando…" : "Guardar orientación"}
                   </button>
                 )}
               </>
             )}
-            <button type="button" className={btn} disabled={descargando} onClick={() => void descargar()}>
+            <button
+              type="button"
+              className={btn}
+              disabled={descargando}
+              onClick={() => void descargar()}
+            >
               {descargando ? "Descargando…" : "Descargar"}
             </button>
             <button
@@ -243,11 +298,20 @@ export function DocViewer({
               className="h-full w-full transition-transform duration-200"
               style={
                 rot % 180
-                  ? { transform: `rotate(${rot}deg)`, width: "92vh", height: "min(56rem, 100vw)", maxWidth: "none" }
+                  ? {
+                      transform: `rotate(${rot}deg)`,
+                      width: "92vh",
+                      height: "min(56rem, 100vw)",
+                      maxWidth: "none",
+                    }
                   : { transform: `rotate(${rot}deg)` }
               }
             >
-              <iframe src={src} title={nombre} className="h-full w-full border-0 bg-white" />
+              <iframe
+                src={src}
+                title={nombre}
+                className="h-full w-full border-0 bg-white"
+              />
             </div>
           ) : (
             <div className="space-y-2 p-6 text-center text-sm text-[var(--vl-text-muted)]">
@@ -258,9 +322,10 @@ export function DocViewer({
             </div>
           )}
         </div>
-        {imagen && rot !== 0 && canSaveOrientacion && (
+        {imagen && hayCambio && canSaveOrientacion && (
           <p className="border-t border-[var(--vl-card-border)] px-4 py-2 text-[11px] text-[var(--vl-text-muted)]">
-            Está rotada solo en pantalla. Tocá <strong>Guardar orientación</strong> para que quede así al volver a abrirla.
+            Rotación solo en pantalla. Tocá <strong>Guardar orientación</strong>{" "}
+            para que quede fija al volver a abrir.
           </p>
         )}
       </div>
