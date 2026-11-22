@@ -121,7 +121,10 @@ router.get("/me", authenticate, async (req: AuthedRequest, res) => {
   });
 });
 
-/** Empresas de transporte activas del ABM (para liquidar también las de saldo $0). */
+/**
+ * Empresas del ABM para liquidaciones / adelantos:
+ * habilitadas + inhabilitadas (activo=true). NO inactivas (activo=false).
+ */
 router.get("/empresas", authenticate, async (req: AuthedRequest, res) => {
   try {
     if (!requireOps(req, res)) return;
@@ -141,6 +144,7 @@ router.get("/empresas", authenticate, async (req: AuthedRequest, res) => {
         id: e.id,
         nombre: e.nombre,
         banco: e.cbuAlias || "",
+        /** true = inhabilitada (sigue listable); false = habilitada */
         inhabilitada: e.inhabilitada,
       })),
     });

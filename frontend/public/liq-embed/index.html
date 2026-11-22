@@ -397,7 +397,7 @@ const saveLiq=r=>persist(`liq/${r.periodo}__${slug(r.k)}`,r);
 const delLiq=r=>persist(`liq/${r.periodo}__${slug(r.k)}`,null);
 function saveNup(id){const U=S.nup[id];if(!U){const n=(saveNup.ch||{})[id]||20;persist('nmeta/'+id,null);for(let i=0;i<n;i++)persist(`nafta/${id}_${i}`,null);return}
   const n=Math.ceil(U.rows.length/450);(saveNup.ch=saveNup.ch||{})[id]=n;persist('nmeta/'+id,{periodo:U.periodo,archivo:U.archivo,fecha:U.fecha,usuario:U.usuario,dup:U.dup||0,chunks:n});for(let i=0;i<n;i++)persist(`nafta/${id}_${i}`,{id,i,rows:U.rows.slice(i*450,(i+1)*450)})}
-/** Trae todas las empresas activas del ABM Mi Vettore (incluye las sin facturación/descuentos). */
+/** ABM: solo habilitadas + inhabilitadas (activo). NO inactivas. */
 async function syncEmpresasAbm(){
   try{
     const token=(function(){try{return localStorage.getItem('mi-vettore-token')||''}catch(e){return ''}})();
@@ -414,10 +414,16 @@ async function syncEmpresasAbm(){
       const nombre=String(x.nombre||'').trim();if(!nombre)return;
       const k=norm(nombre);if(seen.has(k))return;seen.add(k);
       const p=prev[k];
-      merged.push({nombre:p?.nombre||nombre,division:p?.division||'',banco:p?.banco||x.banco||'',id:x.id||p?.id});
+      merged.push({
+        nombre:p?.nombre||nombre,
+        division:p?.division||'',
+        banco:p?.banco||x.banco||'',
+        id:x.id||p?.id,
+        inhabilitada:!!x.inhabilitada,
+        abm:true
+      });
     });
-    // Conservar las del seed/históricas que no estén en el ABM (movimientos viejos).
-    S.empresas.forEach(e=>{const k=norm(e.nombre);if(!seen.has(k)){seen.add(k);merged.push(e)}});
+    // No mezclar seed/históricas inactivas: el desplegable (Adelantos, etc.) es solo ABM activo.
     merged.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es',{sensitivity:'base'}));
     S.empresas=merged;EI.c=null;
   }catch(e){}
@@ -608,7 +614,7 @@ function adelForm(a){
    fld('Monto $',`<input type="number" name="importe" step="0.01" min="0.01" required value="${d.importe}" ${locked.length?'disabled':''}>`)+
    fld(locked.length?'Cuotas pendientes (sobre el saldo)':'Cantidad de cuotas',`<input type="number" name="ncuotas" min="1" max="36" step="1" value="${plan.length}">`)+
    `<div class="full"><label class="f">Plan de cuotas</label><div id="plan"></div><div class="hint" id="planMsg"></div><div class="hint">Si cambiás el período de una cuota, las siguientes se corren automáticamente un período cada una. Una cuota no puede debitarse antes que la anterior.</div></div>`,
-   fd=>{const e=EI()[norm(a?a.empresa:fd.empresa)];if(!e)return 'La empresa no está en el ABM de empresas de transporte.';
+   fd=>{const e=EI()[norm(a?a.empresa:fd.empresa)];if(!e)return 'Solo se permiten empresas habilitadas o inhabilitadas del ABM (no inactivas).';
      if(fd.tipo==='__new'){const nt=(fd.tipoNuevo||'').trim();if(!nt)return 'Escribí el nombre del nuevo tipo.';if(!S.tipos.some(t=>norm(t.nombre)===norm(nt))){S.tipos.push({nombre:nt,activo:true});saveCfg('tipos')}fd.tipo=S.tipos.find(t=>norm(t.nombre)===norm(nt)).nombre}
      const pat=fd.patente||'';if(pat&&!patsOf(e.nombre,a&&locked.length?a.fecha:fd.fecha).includes(pat)&&pat!==(a&&a.patente))return 'La patente no está habilitada para esa empresa.';
      const rs=rest();
@@ -643,7 +649,8 @@ function tiposForm(){const L=S.tipos.map(t=>({...t,n:Object.values(S.adel).filte
   fd=>{const names=L.map((t,i)=>(fd['t'+i]||'').trim());if(names.some(n=>!n))return 'Ningún tipo puede quedar sin nombre.';if(new Set(names.map(norm)).size!==names.length)return 'Hay tipos repetidos.';
     L.forEach((t,i)=>{const nn=names[i];if(nn!==t.nombre)Object.values(S.adel).forEach(a=>{if(a.tipo===t.nombre){a.tipo=nn;saveAdel(a)}});S.tipos[i]={nombre:nn,activo:!!fd['a'+i]}});
     const nt=(fd.tnew||'').trim();if(nt){if(names.map(norm).includes(norm(nt)))return 'Ese tipo ya existe.';S.tipos.push({nombre:nt,activo:true})}saveCfg('tipos');toast('Tipos actualizados')},'Guardar',true)}
-const dlE=()=>`<datalist id="dlE">${S.empresas.map(e=>`<option value="${esc(e.nombre)}">`).join('')}</datalist>`;
+/** Desplegable: habilitadas + inhabilitadas del ABM (nunca inactivas). */
+const dlE=()=>`<datalist id="dlE">${S.empresas.map(e=>`<option value="${esc(e.nombre)}">${e.inhabilitada?' (inhabilitada)':''}</option>`).join('')}</datalist>`;
 
 /* ================= 2 · PRESTAMOS ================= */
 function vPrest(){
