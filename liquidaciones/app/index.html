@@ -517,11 +517,26 @@ async function resetAll(){
 const HK=new Set(B.naftaKeys);
 const nKey=r=>`${r[0]}|${timeStr(r[1])}|${String(r[3]).toUpperCase().trim()}|${(+r[10]||0).toFixed(2)}`;
 function allNKeys(){const s=new Set(HK);Object.values(S.nup).forEach(U=>U.rows.forEach(r=>s.add(nKey(r))));return s}
-/* nafta groups (empresa|patente|tipo) from uploads; mode 'pend' = pending imputable to p (periodo<=p, not liquidated); 'per' = all imputed to p */
+/** Período de una carga = quincena de la fecha de operación (no el período elegido al subir). */
+const rowPer=r=>{const f=String(r&&r[0]||'').slice(0,10);return f?perOf(f):''};
+function naftaPeriodos(){
+  const s=new Set(Object.keys(S.nhist||{}));
+  Object.values(S.nup).forEach(U=>(U.rows||[]).forEach(r=>{const p=rowPer(r);if(p)s.add(p)}));
+  return [...s].sort().reverse();
+}
+/* nafta groups: período por fecha de carga.
+   pend = cargas con fecha en quincena <= p y NO liquidadas (nunca se re-sugieren).
+   per  = cargas cuya fecha cae en p (para consulta del módulo Nafta). */
 function naftaGroups(p,mode){const m={};
-  Object.values(S.nup).forEach(U=>{if(mode==='pend'?U.periodo>p:U.periodo!==p)return;U.rows.forEach((r,i)=>{const ref=U.id+':'+i;if(mode==='pend'&&D.nLiq[ref])return;
+  Object.values(S.nup).forEach(U=>{(U.rows||[]).forEach((r,i)=>{
+    const ref=U.id+':'+i,rp=rowPer(r);if(!rp)return;
+    if(mode==='pend'){if(rp>p)return;if(D.nLiq[ref])return}
+    else{if(rp!==p)return}
     const pat=String(r[3]).toUpperCase().trim(),o=ownerOf(pat,r[0]),t=tipoComb(r[6]),k=norm(o)+'|'+pat+'|'+t;
-    const x=m[k]||(m[k]={empresa:o,patente:pat,tipo:t,cargas:0,litros:0,importe:0,refs:[],periodos:new Set(),liq:new Set()});x.cargas++;x.litros+=+r[9]||0;x.importe+=+r[10]||0;x.refs.push(ref);x.periodos.add(U.periodo);if(D.nLiq[ref])x.liq.add(D.nLiq[ref])})});
+    const x=m[k]||(m[k]={empresa:o,patente:pat,tipo:t,cargas:0,litros:0,importe:0,refs:[],periodos:new Set(),liq:new Set()});
+    x.cargas++;x.litros+=+r[9]||0;x.importe+=+r[10]||0;x.refs.push(ref);x.periodos.add(rp);
+    if(D.nLiq[ref])x.liq.add(D.nLiq[ref]);
+  })});
   return Object.values(m).map(x=>({...x,key:x.patente+'|'+x.tipo,periodos:[...x.periodos].sort(),liq:[...x.liq].sort()}))}
 /* pending calc for one empresa in period p; ov = {exA:[], exT:[], exL:[], hs:{}} */
 function calcEmp(p,k,ov,cache){
@@ -767,8 +782,8 @@ function loanHist(l){const rs=Object.values(D.rec).filter(r=>r.prest.some(x=>x.i
 
 /* ================= 3 · FACTURACION ================= */
 const upBox=(kind,title,body)=>{const cur=kind==='fact'?UI.upFact:UI.upNafta;return `<div class="card" style="margin:0"><div class="cb">
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><b>${title}</b><div class="sp"></div><label class="small mut">Período que se carga</label><select data-a="upP" data-k="${kind}" data-ch="1" style="font-weight:600">${PERIODS.filter(p=>p>=B.PEND).map(p=>`<option value="${p}" ${p===cur?'selected':''}>${pLabel(p)}</option>`).join('')}</select></div>
-  <div class="drop" data-a="pick" data-kind="${kind}">Arrastrá o hacé clic para subir el archivo de <b>${pLabel(cur)}</b><br><span class="small">${body}</span></div></div></div>`};
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><b>${title}</b><div class="sp"></div>${kind==='nafta'?`<span class="mut small">El período lo define la <b>fecha de cada carga</b> (no se elige quincena al subir).</span>`:`<label class="small mut">Período que se carga</label><select data-a="upP" data-k="${kind}" data-ch="1" style="font-weight:600">${PERIODS.filter(p=>p>=B.PEND).map(p=>`<option value="${p}" ${p===cur?'selected':''}>${pLabel(p)}</option>`).join('')}</select>`}</div>
+  <div class="drop" data-a="pick" data-kind="${kind}">Arrastrá o hacé clic para subir${kind==='nafta'?' el archivo de consumos':` el archivo de <b>${pLabel(cur)}</b>`}<br><span class="small">${body}</span></div></div></div>`};
 
 function vFact(){
   const p=UI.factP,rows=(S.fact[p]||[]).map(f=>{const k=norm(f.empresa),vh=vhEmp(k,pStart(p));return {...f,k,vh,horas:!f.manual&&vh?f.importe/vh:0,liq:!!closedRec(p,k),abm:!!EI()[k]}}).sort((a,b)=>a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'})||(!!a.manual)-(!!b.manual));
@@ -807,26 +822,28 @@ function factAjusteForm(row){
 }
 /* ================= 4 · NAFTA ================= */
 function vNafta(){
-  const adm=UI.role==='admin',ups=Object.values(S.nup).sort((a,b)=>(b.ts||0)-(a.ts||0)||b.periodo.localeCompare(a.periodo));
-  const pers=[...new Set(Object.values(S.nup).map(u=>u.periodo).concat(Object.keys(S.nhist)))].sort().reverse();
+  const adm=UI.role==='admin',ups=Object.values(S.nup).sort((a,b)=>(b.ts||0)-(a.ts||0)||String(b.archivo||'').localeCompare(String(a.archivo||'')));
+  const pers=naftaPeriodos();
   const v=UI.naftaP&&pers.includes(UI.naftaP)?UI.naftaP:pers[0];
-  return `<div class="grid2" style="margin-bottom:16px">${upBox('nafta','Subir sábana de consumos (Edenred)','.xlsx / .csv · columnas A:N (<code>FECHA</code>, <code>HORA</code>, <code>PLACA</code>, <code>PRODUCTO/SERVICIO</code>, <code>M.N.</code>…). Varias subidas permitidas; una carga con la misma fecha + hora + patente + importe nunca se repite, aunque esté en otro período.')}
-   <div class="card" style="margin:0"><div class="cb small mut">Rol actual: <b style="color:#fff">${adm?'Administrador':'Operador'}</b>. ${adm?'Podés borrar subidas que no tengan cargas ya liquidadas.':'Solo un administrador puede borrar una subida.'}<br><br>Las cargas imputadas a un período que no se descuentan (porque la liquidación se cerró sin ellas o se destildaron) quedan pendientes y se ofrecen en el período siguiente.<br><br>Tipo según columna G: "GAS NATURAL COMPRIMIDO" → <b>GNC</b>; el resto → <b>Nafta</b>.</div></div></div>
-  <div class="card"><div class="ch"><h3>Subidas</h3><span class="mut small">${ups.length}</span></div><div class="tw" style="border:0;border-radius:0;max-height:260px"><table><thead><tr><th>Imputado a</th><th>Archivo</th><th>Subido</th><th class="n">Cargas</th><th class="n">Duplicadas descartadas</th><th class="n">Total</th><th>Estado</th><th></th></tr></thead><tbody>
-   ${ups.map(U=>{const lq=U.rows.filter((r,i)=>D.nLiq[U.id+':'+i]).length;return `<tr><td class="name">${pLabel(U.periodo)}</td><td class="small">${esc(U.archivo)}</td><td class="small">${esc(U.fecha)}<div class="subt">${esc(U.usuario)}</div></td><td class="n">${U.rows.length}</td><td class="n">${fn(U.dup||0)}</td><td class="n">${fm(sum(U.rows,r=>+r[10]||0))}</td><td>${lq?`<span class="chip g">${lq} liquidadas</span>`:'<span class="chip w">Sin liquidar</span>'}</td><td><button class="lnk r" data-a="delNup" data-k="${U.id}" ${adm&&!lq?'':'disabled style="opacity:.35;cursor:not-allowed"'} title="${!adm?'Solo administrador':lq?'Tiene cargas liquidadas':''}">Borrar</button></td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Sin subidas desde el módulo (la historia ene–1ra oct viene del Excel).</td></tr>'}
+  return `<div class="grid2" style="margin-bottom:16px">${upBox('nafta','Subir sábana de consumos (Edenred)','.xlsx / .csv · columnas A:N (<code>FECHA</code>, <code>HORA</code>, <code>PLACA</code>, <code>PRODUCTO/SERVICIO</code>, <code>M.N.</code>…). La quincena la define la <b>fecha de cada carga</b>. Misma fecha+hora+patente+importe no se repite. Al liquidar solo se sugieren pendientes.')}
+   <div class="card" style="margin:0"><div class="cb small mut">Rol actual: <b style="color:#fff">${adm?'Administrador':'Operador'}</b>. ${adm?'Podés borrar subidas que no tengan cargas ya liquidadas.':'Solo un administrador puede borrar una subida.'}<br><br>Al liquidar, el sistema sugiere las cargas de esa quincena (y anteriores aún pendientes). Destildar = quedan para la siguiente. <b>Nunca</b> se vuelve a sugerir una carga ya liquidada.<br><br>Tipo según columna G: "GAS NATURAL COMPRIMIDO" → <b>GNC</b>; el resto → <b>Nafta</b>.</div></div></div>
+  <div class="card"><div class="ch"><h3>Subidas</h3><span class="mut small">${ups.length}</span></div><div class="tw" style="border:0;border-radius:0;max-height:260px"><table><thead><tr><th>Quincenas (por fecha)</th><th>Archivo</th><th>Subido</th><th class="n">Cargas</th><th class="n">Duplicadas descartadas</th><th class="n">Total</th><th>Estado</th><th></th></tr></thead><tbody>
+   ${ups.map(U=>{const lq=U.rows.filter((r,i)=>D.nLiq[U.id+':'+i]).length;const persU=[...new Set((U.rows||[]).map(rowPer).filter(Boolean))].sort();
+     return `<tr><td class="name">${persU.length?persU.map(pLabel).join(', '):'—'}</td><td class="small">${esc(U.archivo)}</td><td class="small">${esc(U.fecha)}<div class="subt">${esc(U.usuario)}</div></td><td class="n">${U.rows.length}</td><td class="n">${fn(U.dup||0)}</td><td class="n">${fm(sum(U.rows,r=>+r[10]||0))}</td><td>${lq===U.rows.length&&U.rows.length?'<span class="chip g">Liquidado</span>':lq?`<span class="chip g">${lq} liquidadas</span> <span class="chip w">${U.rows.length-lq} pend.</span>`:'<span class="chip w">Pendiente</span>'}</td><td><button class="lnk r" data-a="delNup" data-k="${U.id}" ${adm&&!lq?'':'disabled style="opacity:.35;cursor:not-allowed"'} title="${!adm?'Solo administrador':lq?'Tiene cargas liquidadas':''}">Borrar</button></td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Sin subidas desde el módulo (la historia ene–1ra oct viene del Excel).</td></tr>'}
   </tbody></table></div></div>
   ${v?naftaPer(v,pers):''}`;
 }
 function naftaPer(p,pers){
-  const hist=!!S.nhist[p]&&!Object.values(S.nup).some(u=>u.periodo===p);
-  const G=hist?S.nhist[p].map(([e,pat,t,c,l,i])=>({empresa:e,patente:pat,tipo:t,cargas:c,litros:l,importe:i,liq:[p]})):naftaGroups(p,'per').map(g=>({...g,liq:g.liq}));
+  const hist=!!S.nhist[p]&&!Object.values(S.nup).some(u=>(u.rows||[]).some(r=>rowPer(r)===p));
+  const G=hist?S.nhist[p].map(([e,pat,t,c,l,i])=>({empresa:e,patente:pat,tipo:t,cargas:c,litros:l,importe:i,liq:[p],refs:[]})):naftaGroups(p,'per').map(g=>({...g,liq:g.liq}));
   const by={};G.forEach(g=>{const k=g.empresa||'(sin empresa asignada)';(by[k]=by[k]||[]).push(g)});
   const ks=Object.keys(by).sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));const tg=sum(G.filter(g=>g.tipo==='GNC'),'importe'),tt=sum(G,'importe');
-  return `<div class="card"><div class="ch"><h3>Detalle por empresa · imputado a</h3><select data-a="naftaP" data-ch="1">${pers.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${S.nhist[x]?' (histórico)':''}</option>`).join('')}</select><div class="sp"></div><span class="mut small">${fn(sum(G,'cargas'))} cargas · GNC ${fm(tg)} · Nafta ${fm(tt-tg)} · Total <b style="color:#fff">${fm(tt)}</b></span></div>
+  return `<div class="card"><div class="ch"><h3>Detalle por empresa · quincena de la carga</h3><select data-a="naftaP" data-ch="1">${pers.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${S.nhist[x]?' (histórico)':''}</option>`).join('')}</select><div class="sp"></div><span class="mut small">${fn(sum(G,'cargas'))} cargas · GNC ${fm(tg)} · Nafta ${fm(tt-tg)} · Total <b style="color:#fff">${fm(tt)}</b></span></div>
   <div class="tw" style="border:0;border-radius:0;max-height:600px"><table><thead><tr><th>Empresa de transporte</th><th>Patente</th><th>Tipo</th><th class="n">Cargas</th><th class="n">Litros</th><th class="n">GNC</th><th class="n">Nafta</th><th>Estado</th></tr></thead><tbody>
   ${ks.map(k=>{const gs=by[k].sort((a,b)=>a.patente.localeCompare(b.patente)||a.tipo.localeCompare(b.tipo));const g1=sum(gs.filter(g=>g.tipo==='GNC'),'importe'),n1=sum(gs.filter(g=>g.tipo!=='GNC'),'importe');
     return `<tr class="grp"><td class="${k[0]==='('?'neg':''}">${esc(k)}</td><td></td><td></td><td class="n">${sum(gs,'cargas')}</td><td class="n">${fn(sum(gs,'litros'),1)}</td><td class="n">${fmz(g1)}</td><td class="n">${fmz(n1)}</td><td></td></tr>`+
-    gs.map(g=>`<tr><td></td><td>${esc(g.patente)}</td><td><span class="chip ${g.tipo==='GNC'?'b':''}">${g.tipo}</span></td><td class="n">${g.cargas}</td><td class="n">${fn(g.litros,1)}</td><td class="n">${g.tipo==='GNC'?fm(g.importe):''}</td><td class="n">${g.tipo!=='GNC'?fm(g.importe):''}</td><td>${hist?'<span class="chip g">Liquidado (histórico)</span>':g.liq.length?`<span class="chip g">Liquidado ${g.liq.map(pLabel).join(', ')}</span>${g.liq.length&&g.refs.some(r=>!D.nLiq[r])?' <span class="chip w">parcial</span>':''}`:'<span class="chip w">Pendiente</span>'}</td></tr>`).join('')}).join('')||'<tr><td colspan="8" class="empty">Sin cargas imputadas.</td></tr>'}
+    gs.map(g=>{const refs=g.refs||[];const allLiq=refs.length&&refs.every(r=>D.nLiq[r]);const someLiq=refs.some(r=>D.nLiq[r]);
+      return `<tr><td></td><td>${esc(g.patente)}</td><td><span class="chip ${g.tipo==='GNC'?'b':''}">${g.tipo}</span></td><td class="n">${g.cargas}</td><td class="n">${fn(g.litros,1)}</td><td class="n">${g.tipo==='GNC'?fm(g.importe):''}</td><td class="n">${g.tipo!=='GNC'?fm(g.importe):''}</td><td>${hist?'<span class="chip g">Liquidado (histórico)</span>':allLiq?'<span class="chip g">Liquidado</span>':someLiq||(g.liq&&g.liq.length)?`<span class="chip g">Liquidado</span>${someLiq&&!allLiq?' <span class="chip w">parcial</span>':''}`:'<span class="chip w">Pendiente</span>'}</td></tr>`}).join('')}).join('')||'<tr><td colspan="8" class="empty">Sin cargas en esta quincena.</td></tr>'}
   </tbody></table></div></div>`;
 }
 /* ================= 5 · LIQUIDACION ================= */
@@ -847,7 +864,7 @@ function vLiq(){
     <b style="margin-left:6px">${pLabel(p)}</b><span class="mut small" style="margin-left:8px">Solo meses anteriores (no el mes en curso)</span></div>
    <div class="cb"><div class="status">
     <div class="it">${fc?'<span class="chip g">✓</span>':'<span class="chip r">✗</span>'} Facturación: ${fc?`${fc} empresas`:'sin cargar'} ${fc||hist?'':'<a class="lnk" data-a="mod" data-k="fact">cargar</a>'}</div>
-    <div class="it">${hist||nfC?'<span class="chip g">✓</span>':'<span class="chip w">!</span>'} Nafta: ${hist?'histórico':nfC?`${fn(nfC)} cargas pendientes imputadas hasta este período${nfAnt?` (incluye ${nfAnt} grupos de períodos anteriores)`:''}`:'sin cargas imputadas (se puede liquidar igual)'} ${hist?'':'<a class="lnk" data-a="mod" data-k="nafta">subir</a>'}</div>
+    <div class="it">${hist||nfC?'<span class="chip g">✓</span>':'<span class="chip w">!</span>'} Nafta: ${hist?'histórico':nfC?`${fn(nfC)} cargas pendientes (fecha de carga ≤ este período)${nfAnt?` · ${nfAnt} de quincenas anteriores`:''}`:'sin cargas pendientes (se puede liquidar igual)'} ${hist?'':'<a class="lnk" data-a="mod" data-k="nafta">subir</a>'}</div>
     <div class="it"><span class="chip b">i</span> Adelantos (incluye talleres) y préstamos: se traen los pendientes al ${fD(pEnd(p))}</div>
     <div class="it"><span class="chip ${cl.length===list.length&&list.length?'g':'w'}">${cl.length}/${list.length}</span> empresas liquidadas</div></div>
     ${hist?'<div class="alert info" style="margin:0">Período histórico importado del Excel: solo consulta.</div>':fc?'':`<div class="alert" style="margin:0">Este período <b>no tiene facturación cargada</b>. Las empresas <b>sin movimiento</b> aparecen igual y se pueden cerrar en <b>$0</b>. Las que solo tienen descuentos quedan en saldo negativo y se cierran desde el detalle. Cargá la sábana en <a class="lnk" data-a="mod" data-k="fact">Facturación</a> si corresponde.</div>`}
@@ -884,7 +901,7 @@ function vDet(){
   ${ro?'':'<div class="alert info">Destildá los conceptos que no quieras descontar en esta liquidación: <b>quedan pendientes y pasan al período siguiente</b>.</div>'}
   <div class="grid2"><div>
    ${sec('Facturación',r.fact,tb([['Tipo'],['Concepto / archivo'],['Viajes','n'],['Horas','n'],['Importe','n']],r.factRows.map(f=>`<tr><td>${f.manual?'<span class="chip b">Adicional</span>':'Rukas'}</td><td>${f.manual?esc(f.concepto||'—'):esc(f.archivo||f.origen||'')}</td><td class="n">${f.manual?'—':fn(f.viajes)}</td><td class="n">${f.manual?'—':(r.vh?fn(f.importe/r.vh,1):'—')}</td><td class="n">${fm(f.importe)}</td></tr>`),'Sin facturación en el período.'),'')}
-   ${sec('Nafta',r.naftaT,tb([['',''],['Patente'],['Tipo'],['Imputado a'],['Cargas','n'],['Litros','n'],['Importe','n']],r.nafta.map(n=>`<tr class="${ro||n.inc?'':'off'}"><td>${cb('exN',n.key||'',n.inc)}</td><td>${esc(n.patente)}</td><td><span class="chip ${n.tipo==='GNC'?'b':''}">${n.tipo}</span></td><td class="small">${(n.periodos||[]).map(x=>pLabel(x)+(x<p?' <span class="chip r">anterior</span>':'')).join(', ')||'—'}</td><td class="n">${n.cargas}</td><td class="n">${fn(n.litros,1)}</td><td class="n">${fm(n.importe)}</td></tr>`),'Sin consumos pendientes.'))}
+   ${sec('Nafta',r.naftaT,tb([['',''],['Patente'],['Tipo'],['Quincena carga'],['Cargas','n'],['Litros','n'],['Importe','n']],r.nafta.map(n=>`<tr class="${ro||n.inc?'':'off'}"><td>${cb('exN',n.key||'',n.inc)}</td><td>${esc(n.patente)}</td><td><span class="chip ${n.tipo==='GNC'?'b':''}">${n.tipo}</span></td><td class="small">${(n.periodos||[]).map(x=>pLabel(x)+(x<p?' <span class="chip r">anterior</span>':'')).join(', ')||'—'}</td><td class="n">${n.cargas}</td><td class="n">${fn(n.litros,1)}</td><td class="n">${fm(n.importe)}</td></tr>`),'Sin consumos pendientes.'))}
    ${sec('Préstamos',r.prestT,tb([['',''],['Concepto'],['Horas','n'],['Valor hora','n'],['Importe','n'],['Avance','n']],r.prest.map(x=>`<tr class="${ro||x.inc?'':'off'}"><td>${cb('exL',x.id,x.inc)}</td><td>${esc(x.concepto)}</td><td class="n">${ro?fn(x.horas,2):`<input class="sm" type="number" step="0.5" min="0" value="${x.horas}" data-a="hsL" data-id="${x.id}" data-ch="1">`}</td><td class="n">${fm(x.vh)}</td><td class="n">${fm(x.importe)}</td><td class="n">${fn(ro?x.acumDespues||0:x.acum+(x.inc?x.horas:0),1)} / ${fn(x.total,1)}</td></tr>`),'Sin préstamos vigentes.'))}
   </div><div>
    ${sec('Adelantos',r.adelT,tb([['',''],['Fecha'],['Tipo'],['Descripción'],['Cuota'],['Importe','n']],r.adel.map(a=>`<tr class="${ro||a.inc?'':'off'}"><td>${cb('exA',a.key||'',a.inc)}</td><td>${fD(a.fecha)}</td><td><span class="chip">${esc(a.tipo)}</span></td><td>${esc(a.desc)}</td><td class="small">${a.n}/${a.de} · ${pLabel(a.periodo)}${a.periodo<p?' <span class="chip r">vencida</span>':''}</td><td class="n">${fm(a.importe)}</td></tr>`),'Sin cuotas pendientes.'))}
@@ -1096,14 +1113,17 @@ async function importNafta(file){
   const prev=allNKeys(),rows=[];let dupIn=0,dupPrev=0,inv=0;const seen=new Set(),pc={};
   sh.rows.slice(h+1).forEach(r=>{const f=serialToISO(r[iF]);if(!f||!r[iP]){inv++;return}const c=r.slice(0,14);while(c.length<14)c.push(null);c[0]=f;if(iH>=0)c[1]=timeStr(r[iH]);c[3]=String(r[iP]).toUpperCase().trim();c[10]=num(r[iM]);c[9]=num(c[9]);
     const k=nKey(c);if(seen.has(k)){dupIn++;return}seen.add(k);if(prev.has(k)){dupPrev++;return}rows.push(c);pc[perOf(f)]=(pc[perOf(f)]||0)+1});
-  const sug=UI.upNafta;
-  const fuera=p=>rows.filter(r=>perOf(r[0])!==p).length;
+  const byPerTxt=Object.entries(pc).sort((a,b)=>a[0].localeCompare(b[0])).map(([p,n])=>`${pLabel(p)}: ${n}`).join(' · ');
+  const top=Object.entries(pc).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
   modal('Importar '+esc(file.name),`<div class="full">${rows.length?`<b>${rows.length}</b> cargas nuevas por <b>${fm(sum(rows,r=>r[10]))}</b> (GNC ${fm(sum(rows.filter(r=>tipoComb(r[6])==='GNC'),r=>r[10]))} · Nafta ${fm(sum(rows.filter(r=>tipoComb(r[6])!=='GNC'),r=>r[10]))}).`:'<b>No hay cargas nuevas en el archivo.</b>'}
-   ${dupPrev?`<div class="alert" style="margin-top:10px"><b>${dupPrev}</b> cargas ya estaban cargadas (misma fecha + hora + patente + importe, en este u otro período) y se descartan: no se debitan dos veces.</div>`:''}
+   ${dupPrev?`<div class="alert" style="margin-top:10px"><b>${dupPrev}</b> cargas ya estaban cargadas (misma fecha + hora + patente + importe) y se descartan: <b>nunca se liquidan dos veces</b>.</div>`:''}
    <div class="mut small" style="margin-top:6px">${dupIn?dupIn+' filas repetidas dentro del archivo · ':''}${inv?inv+' filas vacías':''}</div>
-   ${rows.length?`<div style="margin-top:12px"><label class="f">Período que se está cargando (podés corregirlo)</label>${perPick('per',sug>=B.PEND?sug:B.PEND)}<div class="hint" id="npv">${(()=>{const f=fuera(sug>=B.PEND?sug:B.PEND);return f?`${f} cargas tienen fecha de otro período; se imputan igual al elegido.`:'Todas las cargas tienen fecha dentro del período elegido.'})()}</div></div>`:''}</div>`,
-   fd=>{if(!rows.length)return;const p=fd.per;if(p<B.PEND)return 'No se puede imputar a un período histórico.';const id=uid('u');S.nup[id]={id,periodo:p,archivo:file.name,fecha:stamp(),ts:Date.now(),usuario:who(),dup:dupPrev,rows};saveNup(id);UI.naftaP=p;UI.upNafta=p;toast(`${rows.length} cargas imputadas a ${pLabel(p)}`)},rows.length?'Importar':'Cerrar');
-  const sel=document.querySelector('#mform [name=per]');if(sel)sel.addEventListener('change',e=>{const f=fuera(e.target.value);document.getElementById('npv').textContent=f?`${f} cargas tienen fecha de otro período; se imputan igual al elegido.`:'Todas las cargas tienen fecha dentro del período elegido.'});
+   ${rows.length?`<div class="alert info" style="margin-top:12px">La quincena la define la <b>fecha de cada carga</b> (no se elige período al subir).<div class="subt" style="margin-top:6px">${esc(byPerTxt)}</div></div>`:''}</div>`,
+   fd=>{if(!rows.length)return;
+     const id=uid('u');
+     S.nup[id]={id,periodo:top||B.PEND,byFecha:true,archivo:file.name,fecha:stamp(),ts:Date.now(),usuario:who(),dup:dupPrev,rows};
+     saveNup(id);UI.naftaP=top||UI.naftaP;toast(`${rows.length} cargas · período según fecha de operación`);
+   },rows.length?'Importar':'Cerrar');
   await waitModal();
 }
 
