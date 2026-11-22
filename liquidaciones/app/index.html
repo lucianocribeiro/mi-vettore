@@ -527,7 +527,15 @@ function naftaGroups(p,mode){const m={};
 function calcEmp(p,k,ov,cache){
   ov=ov||{};const exA=new Set(ov.exA||[]),exT=new Set(ov.exT||[]),exL=new Set(ov.exL||[]),exN=new Set(ov.exN||[]);
   const r={periodo:p,k,empresa:(EI()[k]||{}).nombre||NM[k]||k,fact:0,viajes:0,factRows:[],nafta:[],adel:[],tal:[],prest:[]};
-  (S.fact[p]||[]).forEach(f=>{if(norm(f.empresa)===k){r.fact+=+f.importe||0;r.viajes+=+f.viajes||0;r.factRows.push(f)}});
+  let factRukas=0;
+  (S.fact[p]||[]).forEach(f=>{
+    if(norm(f.empresa)!==k)return;
+    r.fact+=+f.importe||0;
+    r.factRows.push(f);
+    if(f.manual)return;
+    r.viajes+=+f.viajes||0;
+    factRukas+=+f.importe||0;
+  });
   (cache?cache.nafta:naftaGroups(p,'pend')).forEach(n=>{if(norm(n.empresa)===k)r.nafta.push({...n,inc:!exN.has(n.key)})});
   Object.values(S.adel).forEach(a=>{if(a.deleted||norm(a.empresa)!==k)return;a.cuotas.forEach(c=>{if(c.periodo<=p&&!D.cuotaLiq[a.id+'#'+c.n]){const key=a.id+'#'+c.n;r.adel.push({id:a.id,n:c.n,de:a.cuotas.length,fecha:a.fecha,tipo:a.tipo,desc:a.desc,periodo:c.periodo,importe:+c.importe,key,inc:!exA.has(key)})}})});
   Object.values(S.tal).forEach(t=>{if(norm(t.empresa)===k&&t.fecha<=pEnd(p)&&!D.talLiq[t.id])r.tal.push({...t,inc:!exT.has(t.id)})});
@@ -536,7 +544,7 @@ function calcEmp(p,k,ov,cache){
     const h=ov.hs&&ov.hs[l.id]!=null?+ov.hs[l.id]:Math.min(l.cuotaHs,saldo);r.prest.push({id:l.id,concepto:l.concepto,horas:h,vh,importe:h*vh,acum:ac,total:l.totalHs,inc:!exL.has(l.id)})});
   const inc=x=>x.filter(i=>i.inc);
   const nI=inc(r.nafta);r.naftaT=sum(nI,'importe');r.gnc=sum(nI.filter(n=>n.tipo==='GNC'),'importe');r.naf=r.naftaT-r.gnc;
-  r.adelT=sum(inc(r.adel),'importe');r.talT=sum(inc(r.tal),'importe');r.prestT=sum(inc(r.prest),'importe');r.desc=r.naftaT+r.adelT+r.talT+r.prestT;r.saldo=r.fact-r.desc;r.vh=vh;r.horas=vh?r.fact/vh:0;
+  r.adelT=sum(inc(r.adel),'importe');r.talT=sum(inc(r.tal),'importe');r.prestT=sum(inc(r.prest),'importe');r.desc=r.naftaT+r.adelT+r.talT+r.prestT;r.saldo=r.fact-r.desc;r.vh=vh;r.horas=vh?factRukas/vh:0;
   return r;
 }
 function preview(p){
@@ -761,14 +769,39 @@ const upBox=(kind,title,body)=>{const cur=kind==='fact'?UI.upFact:UI.upNafta;ret
   <div class="drop" data-a="pick" data-kind="${kind}">Arrastrá o hacé clic para subir el archivo de <b>${pLabel(cur)}</b><br><span class="small">${body}</span></div></div></div>`};
 
 function vFact(){
-  const p=UI.factP,rows=(S.fact[p]||[]).map(f=>{const k=norm(f.empresa),vh=vhEmp(k,pStart(p));return {...f,k,vh,horas:vh?f.importe/vh:0,liq:!!closedRec(p,k),abm:!!EI()[k]}}).sort((a,b)=>a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'}));
+  const p=UI.factP,rows=(S.fact[p]||[]).map(f=>{const k=norm(f.empresa),vh=vhEmp(k,pStart(p));return {...f,k,vh,horas:!f.manual&&vh?f.importe/vh:0,liq:!!closedRec(p,k),abm:!!EI()[k]}}).sort((a,b)=>a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'})||(!!a.manual)-(!!b.manual));
   const hist=[];Object.entries(S.factLog).forEach(([pp,l])=>l.forEach(x=>hist.push({p:pp,...x})));hist.sort((a,b)=>(b.ts||0)-(a.ts||0));
-  return `<div class="grid2" style="margin-bottom:16px">${upBox('fact','Subir sábana de facturación','.xlsx / .csv · columnas <code>Empresa</code> <code># Transporte</code> <code>Importe</code> (sin fecha). Acumulable: si una empresa ya tiene facturación en el período, se avisa que se sobrescribe.')}
+  const rukas=rows.filter(r=>!r.manual),ajustes=rows.filter(r=>r.manual);
+  return `<div class="grid2" style="margin-bottom:16px">${upBox('fact','Subir sábana de facturación','.xlsx / .csv · columnas <code>Empresa</code> <code># Transporte</code> <code>Importe</code> (sin fecha). Acumulable: si una empresa ya tiene facturación en el período, se avisa que se sobrescribe. Los <b>adicionales y ajustes</b> manuales se conservan.')}
    <div class="card" style="margin:0"><div class="ch"><h3>Historial de subidas</h3><span class="mut small">${hist.length}</span></div><div style="max-height:150px;overflow:auto" class="cb">${hist.length?hist.map(x=>`<div class="small" style="margin-bottom:6px">• <b>${pLabel(x.p)}</b> · ${esc(x.archivo)} · ${x.fecha} · ${esc(x.usuario||'')} · ${esc(x.res)}</div>`).join(''):'<div class="small mut">Todavía no hay subidas desde el módulo (la historia ene–1ra oct viene del Excel).</div>'}</div></div></div>
-  <div class="toolbar"><span class="mut small">Período</span><select data-a="factP" data-ch="1">${PERIODS.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${(S.fact[x]||[]).length?' • '+(S.fact[x]||[]).length+' empresas':''}</option>`).join('')}</select></div>
-  <div class="tw"><table><thead><tr><th>Empresa de transporte</th><th>División</th><th class="n">Valor hora</th><th class="n">Cant. de viajes (# Transporte)</th><th class="n">Cant. de horas</th><th class="n">Importe</th><th>Subida</th><th>Estado</th></tr></thead><tbody>
-  ${rows.map(r=>`<tr><td class="name">${esc(r.empresa)}${r.abm?'':' <span class="chip w">no está en ABM</span>'}</td><td>${esc((EI()[r.k]||{}).division||'—')}</td><td class="n">${r.vh?fm(r.vh):'<span class="chip r">sin valor</span>'}</td><td class="n">${fn(r.viajes)}</td><td class="n">${r.vh?fn(r.horas,1):'—'}</td><td class="n"><b>${fm(r.importe)}</b></td><td class="mut small">${esc(r.archivo)}<div class="subt">${esc(r.cargado||'')}</div></td><td>${r.liq?'<span class="chip g">Liquidada</span>':'<span class="chip w">Pendiente</span>'}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">Sin facturación cargada para este período.</td></tr>'}
-  </tbody><tfoot><tr><td>Total (${rows.length})</td><td></td><td></td><td class="n">${fn(sum(rows,'viajes'))}</td><td class="n">${fn(sum(rows,'horas'),1)}</td><td class="n">${fm(sum(rows,'importe'))}</td><td></td><td></td></tr></tfoot></table></div>`;
+  <div class="toolbar"><span class="mut small">Período</span><select data-a="factP" data-ch="1">${PERIODS.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${(S.fact[x]||[]).length?' • '+(S.fact[x]||[]).length+' líneas':''}</option>`).join('')}</select><div class="sp"></div><button class="btn primary" data-a="newFactAjuste" ${p<B.PEND?'disabled':''}>+ Adicional / ajuste</button></div>
+  <div class="tw"><table><thead><tr><th>Empresa de transporte</th><th>Tipo</th><th>Concepto / archivo</th><th class="n">Viajes</th><th class="n">Horas</th><th class="n">Importe</th><th>Estado</th><th></th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td class="name">${esc(r.empresa)}${r.abm?'':' <span class="chip w">no está en ABM</span>'}</td><td>${r.manual?'<span class="chip b">Adicional / ajuste</span>':'<span class="chip">Rukas</span>'}</td><td>${r.manual?esc(r.concepto||'—'):`<span class="mut small">${esc(r.archivo||'')}<div class="subt">${esc(r.cargado||'')}</div></span>`}</td><td class="n">${r.manual?'—':fn(r.viajes)}</td><td class="n">${r.manual?'—':(r.vh?fn(r.horas,1):'—')}</td><td class="n"><b>${fm(r.importe)}</b></td><td>${r.liq?'<span class="chip g">Liquidada</span>':'<span class="chip w">Pendiente</span>'}</td><td>${r.manual&&!r.liq?`<button class="lnk" data-a="editFactAjuste" data-id="${esc(r.id)}">Editar</button> · <button class="lnk r" data-a="delFactAjuste" data-id="${esc(r.id)}">Eliminar</button>`:''}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">Sin facturación ni adicionales para este período.</td></tr>'}
+  </tbody><tfoot><tr><td>Total (${rows.length} · Rukas ${rukas.length} · ajustes ${ajustes.length})</td><td></td><td></td><td class="n">${fn(sum(rukas,'viajes'))}</td><td class="n">${fn(sum(rukas,'horas'),1)}</td><td class="n">${fm(sum(rows,'importe'))}</td><td></td><td></td></tr></tfoot></table></div>
+  <p class="legend">Los <b>adicionales y ajustes</b> son líneas aparte (solo monto y concepto). No piden viajes/horas y <b>se conservan</b> si volvés a subir la sábana de Rukas.</p>`;
+}
+function factAjusteForm(row){
+  const p=UI.factP;if(p<B.PEND){toast('Período histórico: no se edita');return}
+  if(row&&closedRec(p,norm(row.empresa))){toast('Empresa ya liquidada en este período');return}
+  const d=row||{empresa:'',concepto:'',importe:''};
+  modal(row?'Editar adicional / ajuste':'Adicional / ajuste',
+    fld('Empresa de transporte',`<input type="text" name="empresa" list="dlE" required value="${esc(d.empresa)}" ${row?'disabled':''}>${dlE()}`,1)+
+    fld('Concepto',`<input type="text" name="concepto" required value="${esc(d.concepto||'')}" placeholder="Ej.: ajuste por diferencia de liquidación">`,1)+
+    fld('Monto $',`<input type="number" name="importe" step="0.01" required value="${d.importe!==''&&d.importe!=null?d.importe:''}">`),
+    fd=>{
+      const emp=canon(row?d.empresa:fd.empresa),concepto=String(fd.concepto||'').trim(),importe=+fd.importe;
+      if(!emp)return 'Indicá la empresa.';
+      if(!concepto)return 'Indicá el concepto.';
+      if(!(importe>0||importe<0))return 'Indicá un monto distinto de 0.';
+      if(closedRec(p,norm(emp)))return 'Esa empresa ya está liquidada en este período.';
+      if(row){
+        const x=(S.fact[p]||[]).find(f=>f.id===row.id&&f.manual);if(!x)return 'No se encontró el ajuste.';
+        Object.assign(x,{concepto,importe,cargado:stamp()});
+      }else{
+        (S.fact[p]=S.fact[p]||[]).push({id:uid('fa'),manual:true,empresa:emp,concepto,importe,viajes:0,archivo:'Adicionales y ajustes',cargado:stamp()});
+      }
+      saveFact(p);toast(row?'Ajuste actualizado':'Adicional / ajuste cargado');
+    },'Guardar');
 }
 /* ================= 4 · NAFTA ================= */
 function vNafta(){
@@ -848,7 +881,7 @@ function vDet(){
   return `<div class="toolbar"><button class="btn sm" data-a="backPrev">← Previsualización ${pLabel(p)}</button><h2>${esc(r.empresa)}</h2><span class="mut small">${esc(e.division||'—')} · ${esc(e.tipoTransferencia||'—')} · Valor hora ${r.vh?fm(r.vh):'—'}</span><div class="sp"></div>${ro?estadoPago(r):''}</div>
   ${ro?'':'<div class="alert info">Destildá los conceptos que no quieras descontar en esta liquidación: <b>quedan pendientes y pasan al período siguiente</b>.</div>'}
   <div class="grid2"><div>
-   ${sec('Facturación',r.fact,tb([['Archivo'],['Viajes','n'],['Horas','n'],['Importe','n']],r.factRows.map(f=>`<tr><td>${esc(f.archivo||f.origen||'')}</td><td class="n">${fn(f.viajes)}</td><td class="n">${r.vh?fn(f.importe/r.vh,1):'—'}</td><td class="n">${fm(f.importe)}</td></tr>`),'Sin facturación en el período.'),'')}
+   ${sec('Facturación',r.fact,tb([['Tipo'],['Concepto / archivo'],['Viajes','n'],['Horas','n'],['Importe','n']],r.factRows.map(f=>`<tr><td>${f.manual?'<span class="chip b">Adicional</span>':'Rukas'}</td><td>${f.manual?esc(f.concepto||'—'):esc(f.archivo||f.origen||'')}</td><td class="n">${f.manual?'—':fn(f.viajes)}</td><td class="n">${f.manual?'—':(r.vh?fn(f.importe/r.vh,1):'—')}</td><td class="n">${fm(f.importe)}</td></tr>`),'Sin facturación en el período.'),'')}
    ${sec('Nafta',r.naftaT,tb([['',''],['Patente'],['Tipo'],['Imputado a'],['Cargas','n'],['Litros','n'],['Importe','n']],r.nafta.map(n=>`<tr class="${ro||n.inc?'':'off'}"><td>${cb('exN',n.key||'',n.inc)}</td><td>${esc(n.patente)}</td><td><span class="chip ${n.tipo==='GNC'?'b':''}">${n.tipo}</span></td><td class="small">${(n.periodos||[]).map(x=>pLabel(x)+(x<p?' <span class="chip r">anterior</span>':'')).join(', ')||'—'}</td><td class="n">${n.cargas}</td><td class="n">${fn(n.litros,1)}</td><td class="n">${fm(n.importe)}</td></tr>`),'Sin consumos pendientes.'))}
    ${sec('Préstamos',r.prestT,tb([['',''],['Concepto'],['Horas','n'],['Valor hora','n'],['Importe','n'],['Avance','n']],r.prest.map(x=>`<tr class="${ro||x.inc?'':'off'}"><td>${cb('exL',x.id,x.inc)}</td><td>${esc(x.concepto)}</td><td class="n">${ro?fn(x.horas,2):`<input class="sm" type="number" step="0.5" min="0" value="${x.horas}" data-a="hsL" data-id="${x.id}" data-ch="1">`}</td><td class="n">${fm(x.vh)}</td><td class="n">${fm(x.importe)}</td><td class="n">${fn(ro?x.acumDespues||0:x.acum+(x.inc?x.horas:0),1)} / ${fn(x.total,1)}</td></tr>`),'Sin préstamos vigentes.'))}
   </div><div>
@@ -920,7 +953,7 @@ function renderDrawer(){
   const [p,k]=UI.drawer,r=closedRec(p,k),Dw=document.getElementById('drawer');if(!r){closeDrawer();return}
   const tb=(cols,rows)=>rows.length?`<table><thead><tr>${cols.map(c=>`<th class="${c[1]||''}">${c[0]}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`:'<div class="empty">Sin registros.</div>';
   Dw.innerHTML=`<div class="dh"><div><h2>${esc(r.empresa)}</h2><div class="subt">${pLabel(p)} · Valor hora ${r.vh?fm(r.vh):'—'} · ${estadoPago(r)}</div></div><button class="x" data-a="closeDrawer">×</button></div><div class="db">
-   <div class="sec"><div class="sh">Facturación <span>${fm(r.fact)}</span></div>${tb([['Archivo'],['Viajes','n'],['Importe','n']],r.factRows.map(f=>`<tr><td>${esc(f.archivo||'')}</td><td class="n">${fn(f.viajes)}</td><td class="n">${fm(f.importe)}</td></tr>`))}</div>
+   <div class="sec"><div class="sh">Facturación <span>${fm(r.fact)}</span></div>${tb([['Tipo'],['Concepto / archivo'],['Viajes','n'],['Importe','n']],r.factRows.map(f=>`<tr><td>${f.manual?'Adicional':'Rukas'}</td><td>${f.manual?esc(f.concepto||'—'):esc(f.archivo||'')}</td><td class="n">${f.manual?'—':fn(f.viajes)}</td><td class="n">${fm(f.importe)}</td></tr>`))}</div>
    <div class="sec"><div class="sh">Nafta <span class="ded">− ${fm(r.naftaT)}</span></div>${tb([['Patente'],['Tipo'],['Cargas','n'],['Importe','n']],r.nafta.map(n=>`<tr><td>${esc(n.patente)}</td><td>${n.tipo}</td><td class="n">${n.cargas}</td><td class="n">${fm(n.importe)}</td></tr>`))}</div>
    <div class="sec"><div class="sh">Adelantos <span class="ded">− ${fm(r.adelT)}</span></div>${tb([['Fecha'],['Tipo'],['Descripción'],['Cuota'],['Importe','n']],r.adel.map(a=>`<tr><td>${fD(a.fecha)}</td><td>${esc(a.tipo)}</td><td>${esc(a.desc)}</td><td>${a.n}/${a.de}</td><td class="n">${fm(a.importe)}</td></tr>`))}</div>
    <div class="sec"><div class="sh">Préstamos <span class="ded">− ${fm(r.prestT)}</span></div>${tb([['Concepto'],['Horas','n'],['Valor hora','n'],['Importe','n']],r.prest.map(x=>`<tr><td>${esc(x.concepto)}</td><td class="n">${fn(x.horas,2)}</td><td class="n">${fm(x.vh)}</td><td class="n">${fm(x.importe)}</td></tr>`))}</div>
@@ -1031,16 +1064,19 @@ async function importFact(file){
   const g={};let vac=0,rep=0;
   sh.rows.slice(h+1).forEach(r=>{const e=r[iE],imp=num(r[iI]);if(!e||!imp){vac++;return}const n=canon(e),k=norm(n);if(g[k]){rep++;g[k].viajes+=iV>=0?num(r[iV]):0;g[k].importe+=imp}else g[k]={empresa:n,viajes:iV>=0?num(r[iV]):0,importe:imp}});
   const recs=Object.values(g);if(!recs.length){toast(`${esc(file.name)}: sin filas válidas.`);return}
-  const info=p=>{const bloq=recs.filter(r=>closedRec(p,norm(r.empresa))),ok=recs.filter(r=>!closedRec(p,norm(r.empresa))),ow=ok.filter(r=>(S.fact[p]||[]).some(f=>norm(f.empresa)===norm(r.empresa)));
+  const rukasOf=(p,emp)=>(S.fact[p]||[]).find(f=>!f.manual&&norm(f.empresa)===norm(emp));
+  const info=p=>{const bloq=recs.filter(r=>closedRec(p,norm(r.empresa))),ok=recs.filter(r=>!closedRec(p,norm(r.empresa))),ow=ok.filter(r=>!!rukasOf(p,r.empresa));
     return {bloq,ok,ow,html:`${p<B.PEND?'<div class="alert err" style="margin-top:10px">Período histórico (Excel): no se puede cargar facturación.</div>':''}
-     <div style="margin-top:10px">Se imputarán <b>${ok.length}</b> empresas por <b>${fm(sum(ok,'importe'))}</b> a la <b>${pLabel(p)}</b>.</div>
-     ${ow.length?`<div class="alert" style="margin-top:10px"><b>Atención: este registro ya fue procesado.</b> ${ow.length} empresa(s) ya tienen facturación cargada en ${pLabel(p)}. Si confirmás, se <b>sobrescriben</b> los datos (se borra el registro anterior de esa empresa y período):</div><div class="tw" style="max-height:220px"><table><thead><tr><th>Empresa</th><th class="n">Registro anterior</th><th class="n">Nuevo</th></tr></thead><tbody>${ow.map(r=>{const o=S.fact[p].find(f=>norm(f.empresa)===norm(r.empresa));return `<tr><td>${esc(r.empresa)}</td><td class="n">${fn(o.viajes)} viajes · ${fm(o.importe)}<div class="subt">${esc(o.archivo)} · ${esc(o.cargado||'')}</div></td><td class="n">${fn(r.viajes)} viajes · ${fm(r.importe)}</td></tr>`}).join('')}</tbody></table></div><label style="display:flex;gap:8px;align-items:center;margin-top:10px;color:#fcd68a"><input type="checkbox" name="confOw"> Sí, confirmo que quiero sobrescribir los ${ow.length} registro(s) ya procesado(s)</label>`:''}
+     <div style="margin-top:10px">Se imputarán <b>${ok.length}</b> empresas por <b>${fm(sum(ok,'importe'))}</b> a la <b>${pLabel(p)}</b>. Los adicionales/ajustes manuales se conservan.</div>
+     ${ow.length?`<div class="alert" style="margin-top:10px"><b>Atención: este registro ya fue procesado.</b> ${ow.length} empresa(s) ya tienen facturación Rukas en ${pLabel(p)}. Si confirmás, se <b>sobrescribe solo Rukas</b> (los adicionales/ajustes se mantienen):</div><div class="tw" style="max-height:220px"><table><thead><tr><th>Empresa</th><th class="n">Registro anterior</th><th class="n">Nuevo</th></tr></thead><tbody>${ow.map(r=>{const o=rukasOf(p,r.empresa);return `<tr><td>${esc(r.empresa)}</td><td class="n">${fn(o.viajes)} viajes · ${fm(o.importe)}<div class="subt">${esc(o.archivo)} · ${esc(o.cargado||'')}</div></td><td class="n">${fn(r.viajes)} viajes · ${fm(r.importe)}</td></tr>`}).join('')}</tbody></table></div><label style="display:flex;gap:8px;align-items:center;margin-top:10px;color:#fcd68a"><input type="checkbox" name="confOw"> Sí, confirmo que quiero sobrescribir los ${ow.length} registro(s) Rukas</label>`:''}
      ${bloq.length?`<div class="alert err" style="margin-top:10px">${bloq.length} empresa(s) ya están liquidadas en ${pLabel(p)} y <b>no se importan</b>: ${bloq.slice(0,8).map(r=>esc(r.empresa)).join(', ')}${bloq.length>8?'…':''}</div>`:''}`}};
   const p0=UI.upFact;
   modal('Importar '+esc(file.name),`<div class="full"><div>Se leyeron <b>${recs.length}</b> empresas (${fn(sum(recs,'viajes'))} viajes · ${fm(sum(recs,'importe'))})${rep?` · ${rep} filas repetidas sumadas`:''}${vac?` · ${vac} filas vacías`:''}.</div>
    <div style="margin-top:12px"><label class="f">Período que se está cargando (podés corregirlo)</label>${perPick('per',p0)}</div><div id="ipv">${info(p0).html}</div></div>`,
    fd=>{const p=fd.per;if(p<B.PEND)return 'No se puede cargar en un período histórico.';const {ok,ow}=info(p);if(!ok.length)return 'No hay empresas para importar en ese período.';if(ow.length&&!fd.confOw)return `Hay ${ow.length} registro(s) ya procesado(s) en ${pLabel(p)}: tildá la confirmación para sobrescribirlos.`;
-     const keys=new Set(ok.map(r=>norm(r.empresa))),st=stamp();S.fact[p]=(S.fact[p]||[]).filter(f=>!keys.has(norm(f.empresa))).concat(ok.map(r=>({...r,archivo:file.name,cargado:st})));
+     const keys=new Set(ok.map(r=>norm(r.empresa))),st=stamp();
+     // Conservar adicionales/ajustes manuales al sobrescribir Rukas.
+     S.fact[p]=(S.fact[p]||[]).filter(f=>f.manual||!keys.has(norm(f.empresa))).concat(ok.map(r=>({...r,archivo:file.name,cargado:st,manual:false})));
      (S.factLog[p]=S.factLog[p]||[]).push({archivo:file.name,fecha:st,ts:Date.now(),usuario:who(),res:`${ok.length-ow.length} nuevas · ${ow.length} sobrescritas`});saveFact(p);UI.factP=p;UI.upFact=p;toast(`Facturación imputada a ${pLabel(p)}`)},'Importar',true);
   document.querySelector('#mform [name=per]').addEventListener('change',e=>{const i=info(e.target.value);document.getElementById('ipv').innerHTML=i.html;document.querySelector('#mform button[type=submit]').textContent=i.ow.length?'Sobrescribir e importar':'Importar'});
   await waitModal();
@@ -1097,6 +1133,10 @@ document.addEventListener('click',e=>{
     case 'tipos':tiposForm();break;
     case 'catDivForm':catDivForm();break;
     case 'catTipoForm':catTipoForm();break;
+    case 'newFactAjuste':factAjusteForm();break;
+    case 'editFactAjuste':{const x=(S.fact[UI.factP]||[]).find(f=>f.id===id&&f.manual);if(x)factAjusteForm(x);break}
+    case 'delFactAjuste':{const x=(S.fact[UI.factP]||[]).find(f=>f.id===id&&f.manual);if(!x)break;if(closedRec(UI.factP,norm(x.empresa))){toast('Empresa ya liquidada');break}
+      confirmBox('Eliminar adicional / ajuste',`¿Eliminar <b>${esc(x.concepto||'')}</b> de <b>${esc(x.empresa)}</b> (${fm(x.importe)})?`,()=>{S.fact[UI.factP]=(S.fact[UI.factP]||[]).filter(f=>f.id!==id);saveFact(UI.factP);toast('Ajuste eliminado')},'Eliminar');break}
     case 'det':UI.det=k;render();scrollTo(0,0);break;
     case 'openDet':UI.det=[...UI.sel][0];render();scrollTo(0,0);break;
     case 'backPrev':UI.det=null;render();break;
