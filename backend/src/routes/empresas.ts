@@ -19,6 +19,17 @@ import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
 
+const TIPOS_TRANSFERENCIA = new Set(["Honorarios", "Haberes", "Clasica"]);
+
+function normalizeTipoTransferencia(raw: unknown): string | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const v = String(raw).trim();
+  // Aceptar "Clásica" con tilde y mapear a clave sin tilde.
+  if (v === "Clásica" || v.toLowerCase() === "clasica") return "Clasica";
+  if (TIPOS_TRANSFERENCIA.has(v)) return v;
+  return null;
+}
+
 router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
     let scope: { id: string } | undefined;
@@ -70,6 +81,8 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
           email,
           telefono,
           cbuAlias: e.cbuAlias ?? "",
+          divisionFacturacion: e.divisionFacturacion ?? "",
+          tipoTransferencia: e.tipoTransferencia ?? "",
           mantenimiento: e.verMantenimiento ? "SI" : "NO",
           taller: e.verTaller ? "SI" : "NO",
         };
@@ -126,6 +139,10 @@ router.post("/", ...write, async (req, res) => {
         cbuAlias: req.body?.cbuAlias
           ? String(req.body.cbuAlias).trim()
           : null,
+        divisionFacturacion: req.body?.divisionFacturacion
+          ? String(req.body.divisionFacturacion).trim()
+          : null,
+        tipoTransferencia: normalizeTipoTransferencia(req.body?.tipoTransferencia),
         permiteMultiCamioneta:
           req.body?.permiteMultiCamioneta === undefined
             ? true
@@ -180,6 +197,8 @@ router.put("/:id", ...write, async (req, res) => {
       email?: string | null;
       contacto?: string | null;
       cbuAlias?: string | null;
+      divisionFacturacion?: string | null;
+      tipoTransferencia?: string | null;
       permiteMultiCamioneta?: boolean;
       verMantenimiento?: boolean;
       verTaller?: boolean;
@@ -208,6 +227,16 @@ router.put("/:id", ...write, async (req, res) => {
       data.cbuAlias = req.body.cbuAlias
         ? String(req.body.cbuAlias).trim()
         : null;
+    }
+    if (req.body?.divisionFacturacion !== undefined) {
+      data.divisionFacturacion = req.body.divisionFacturacion
+        ? String(req.body.divisionFacturacion).trim()
+        : null;
+    }
+    if (req.body?.tipoTransferencia !== undefined) {
+      data.tipoTransferencia = normalizeTipoTransferencia(
+        req.body.tipoTransferencia
+      );
     }
     if (req.body?.permiteMultiCamioneta !== undefined) {
       data.permiteMultiCamioneta = Boolean(req.body.permiteMultiCamioneta);

@@ -134,16 +134,26 @@ router.get("/empresas", authenticate, async (req: AuthedRequest, res) => {
         id: true,
         nombre: true,
         cbuAlias: true,
+        divisionFacturacion: true,
+        tipoTransferencia: true,
         inhabilitada: true,
       },
       orderBy: { nombre: "asc" },
       take: 5000,
     });
+    const labelTipo = (t: string | null) => {
+      if (!t) return "";
+      if (t === "Clasica") return "Clásica";
+      return t;
+    };
     res.json({
       items: rows.map((e) => ({
         id: e.id,
         nombre: e.nombre,
+        /** CBU/alias (legado "banco" en plantilla). */
         banco: e.cbuAlias || "",
+        division: e.divisionFacturacion || "",
+        tipoTransferencia: labelTipo(e.tipoTransferencia),
         /** true = inhabilitada (sigue listable); false = habilitada */
         inhabilitada: e.inhabilitada,
       })),

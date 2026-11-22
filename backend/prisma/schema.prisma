@@ -323,6 +323,10 @@ model EmpresaTransporte {
   email                  String?
   /// CBU o alias bancario (solo edición / Excel; no se muestra en el listado).
   cbuAlias               String?
+  /// División para facturación / valor hora (Frio, Seco, etc.).
+  divisionFacturacion    String?
+  /// Tipo de transferencia en liquidaciones: Honorarios | Haberes | Clasica.
+  tipoTransferencia      String?
   /// Legado PROPIA/ALIADA: ya no se usa en ABM (se mantiene por compat).
   tipo                   TipoEmpresa      @default(ALIADA)
   /// Si true, un mismo chofer puede tener varias camionetas activas de esta empresa.

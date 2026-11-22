@@ -28,8 +28,10 @@ import {
   canWriteMaster,
   currentAsignacion,
   currentAsignaciones,
+  DIVISIONES_FACTURACION,
   formatDate,
   isInternalOps,
+  TIPOS_TRANSFERENCIA_EMPRESA,
   type Camioneta,
   type Chofer,
   type Empresa,
@@ -366,6 +368,8 @@ export function M5FichaPage() {
   const [fCuit, setFCuit] = useState("");
   const [fEmailEmpresa, setFEmailEmpresa] = useState("");
   const [fCbuAlias, setFCbuAlias] = useState("");
+  const [fDivisionFacturacion, setFDivisionFacturacion] = useState("");
+  const [fTipoTransferencia, setFTipoTransferencia] = useState("");
   const [fPatente, setFPatente] = useState("");
   const [fMarca, setFMarca] = useState("");
   const [fModelo, setFModelo] = useState("");
@@ -606,6 +610,8 @@ export function M5FichaPage() {
     setFCuit("");
     setFEmailEmpresa("");
     setFCbuAlias("");
+    setFDivisionFacturacion("");
+    setFTipoTransferencia("");
     setFPasswordEmpresa("");
     setFPatente("");
     setFMarca("");
@@ -657,6 +663,8 @@ export function M5FichaPage() {
     setFCuit(item.cuit ?? "");
     setFEmailEmpresa(item.email ?? "");
     setFCbuAlias(item.cbuAlias ?? "");
+    setFDivisionFacturacion(item.divisionFacturacion ?? "");
+    setFTipoTransferencia(item.tipoTransferencia ?? "");
     setFPasswordEmpresa("");
     setFVerMant(!!item.verMantenimiento);
     setFVerTaller(!!item.verTaller);
@@ -806,6 +814,8 @@ export function M5FichaPage() {
           cuit: fCuit || null,
           email: fEmailEmpresa.trim() || null,
           cbuAlias: fCbuAlias.trim() || null,
+          divisionFacturacion: fDivisionFacturacion.trim() || null,
+          tipoTransferencia: fTipoTransferencia.trim() || null,
           password: fPasswordEmpresa || undefined,
           verMantenimiento: fVerMant,
           verTaller: fVerTaller,
@@ -2881,6 +2891,42 @@ export function M5FichaPage() {
                   onChange={(e) => setFCbuAlias(e.target.value)}
                   placeholder="CBU o alias bancario"
                 />
+              </Field>
+              <Field label="División para facturación">
+                <select
+                  className={inputClass}
+                  value={fDivisionFacturacion}
+                  onChange={(e) => setFDivisionFacturacion(e.target.value)}
+                >
+                  <option value="">— Sin división —</option>
+                  {DIVISIONES_FACTURACION.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                  {fDivisionFacturacion &&
+                    !(DIVISIONES_FACTURACION as readonly string[]).includes(
+                      fDivisionFacturacion
+                    ) && (
+                      <option value={fDivisionFacturacion}>
+                        {fDivisionFacturacion}
+                      </option>
+                    )}
+                </select>
+              </Field>
+              <Field label="Tipo de transferencia">
+                <select
+                  className={inputClass}
+                  value={fTipoTransferencia}
+                  onChange={(e) => setFTipoTransferencia(e.target.value)}
+                >
+                  <option value="">— Sin tipo —</option>
+                  {TIPOS_TRANSFERENCIA_EMPRESA.map((t) => (
+                    <option key={t} value={t}>
+                      {t === "Clasica" ? "Clásica" : t}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Módulos">
                 <label className="flex items-center gap-2 text-sm text-[var(--vl-text-muted)]">

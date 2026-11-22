@@ -257,6 +257,22 @@ export type Cliente = {
   contacto: string | null;
 };
 
+export type TipoTransferenciaEmpresa = "Honorarios" | "Haberes" | "Clasica";
+
+export const TIPOS_TRANSFERENCIA_EMPRESA: TipoTransferenciaEmpresa[] = [
+  "Honorarios",
+  "Haberes",
+  "Clasica",
+];
+
+/** Divisiones usadas en liquidaciones / valor hora. */
+export const DIVISIONES_FACTURACION = [
+  "Frio",
+  "Frio Low",
+  "Seco",
+  "Seco Low",
+] as const;
+
 export type Empresa = {
   id: string;
   nombre: string;
@@ -265,6 +281,10 @@ export type Empresa = {
   contacto: string | null;
   /** CBU o alias bancario (ficha / Excel; no se muestra en el listado). */
   cbuAlias?: string | null;
+  /** División para facturación / valor hora. */
+  divisionFacturacion?: string | null;
+  /** Honorarios | Haberes | Clasica — se muestra en Pago (liquidaciones). */
+  tipoTransferencia?: string | null;
   /** Legado; no se edita en ABM. */
   tipo?: TipoEmpresa;
   /** Si true, un mismo chofer puede tener varias camionetas activas de esta empresa. */

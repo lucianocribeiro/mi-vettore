@@ -296,8 +296,10 @@ async function syncEmpresasAbm(){
       const p=prev[k];
       merged.push({
         nombre:p?.nombre||nombre,
-        division:p?.division||'',
-        banco:p?.banco||x.banco||'',
+        // División y tipo vienen del ABM (fuente de verdad).
+        division:x.division||p?.division||'',
+        banco:x.banco||p?.banco||'',
+        tipoTransferencia:x.tipoTransferencia||p?.tipoTransferencia||'',
         id:x.id||p?.id,
         inhabilitada:!!x.inhabilitada,
         abm:true
@@ -314,7 +316,8 @@ async function loadDB(){
   try{const g=c=>db.collection(c).limit(1000).get();
     const [cv,cd,ad,pr,fa,nm,nf,lq,ct]=await Promise.race([Promise.all([db.doc('cfg/valores').get(),db.doc('cfg/divisiones').get(),g('adel'),g('prest'),g('fact'),g('nmeta'),g('nafta'),g('liq'),db.doc('cfg/tipos').get()]),new Promise((_,j)=>setTimeout(()=>j({code:'timeout'}),12000))]);
     if(cv.exists)S.valores=cv.data().items.map(x=>({...x}));if(ct.exists){S.tipos=ct.data().items.map(x=>({...x}));if(!S.tipos.some(t=>t.nombre==='Taller'))S.tipos.push({nombre:'Taller',activo:true})}
-    if(cd.exists){const m=cd.data().map;S.empresas.forEach(e=>{if(m[norm(e.nombre)]!==undefined)e.division=m[norm(e.nombre)]})}
+    // cfg/divisiones es legado: solo rellena huecos si el ABM aún no tiene división.
+    if(cd.exists){const m=cd.data().map;S.empresas.forEach(e=>{if(!e.division&&m[norm(e.nombre)]!==undefined)e.division=m[norm(e.nombre)]})}
     ad.docs.forEach(d=>S.adel[d.id]=JSON.parse(JSON.stringify(d.data())));
     pr.docs.forEach(d=>{const x={...d.data()};if(x.desc){x.concepto=x.concepto+' – '+x.desc;x.desc=''}S.prest[d.id]=x});
     fa.docs.forEach(d=>{const x=d.data();S.fact[d.id]=JSON.parse(JSON.stringify(x.rows||[]));S.factLog[d.id]=JSON.parse(JSON.stringify(x.log||[]))});
@@ -325,8 +328,8 @@ async function loadDB(){
     DB=db;dbState='ok';
   }catch(e){dbState='off';toast('No se pudieron leer los datos guardados ('+(e.code||'error')+')')}
   await syncEmpresasAbm();
-  // Reaplicar divisiones guardadas después de traer el ABM.
-  try{if(DB){const cd=await DB.doc('cfg/divisiones').get();if(cd.exists){const m=cd.data().map;S.empresas.forEach(e=>{if(m[norm(e.nombre)]!==undefined)e.division=m[norm(e.nombre)]});EI.c=null}}}catch(e){}
+  // Legado: rellenar división solo si el ABM no la trajo.
+  try{if(DB){const cd=await DB.doc('cfg/divisiones').get();if(cd.exists){const m=cd.data().map;S.empresas.forEach(e=>{if(!e.division&&m[norm(e.nombre)]!==undefined)e.division=m[norm(e.nombre)]});EI.c=null}}}catch(e){}
   rebuild();render();
 }
 async function resetAll(){
@@ -664,7 +667,7 @@ function vDet(){
   const sec=(t,tot,inner,sign='−')=>`<div class="secbox"><div class="sh"><span>${t}</span><span class="${sign?'ded':''}">${sign} ${fm(tot)}</span></div>${inner}</div>`;
   const tb=(cols,rows,empty)=>rows.length?`<table><thead><tr>${cols.map(x=>`<th class="${x[1]||''}">${x[0]}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`:`<div class="empty">${empty||'Sin registros.'}</div>`;
   const e=EI()[k]||{};
-  return `<div class="toolbar"><button class="btn sm" data-a="backPrev">← Previsualización ${pLabel(p)}</button><h2>${esc(r.empresa)}</h2><span class="mut small">${esc(e.division||'—')} · Banco ${esc(e.banco||'—')} · Valor hora ${r.vh?fm(r.vh):'—'} · ${pRange(p)}</span><div class="sp"></div>${ro?estadoPago(r):''}</div>
+  return `<div class="toolbar"><button class="btn sm" data-a="backPrev">← Previsualización ${pLabel(p)}</button><h2>${esc(r.empresa)}</h2><span class="mut small">${esc(e.division||'—')} · ${esc(e.tipoTransferencia||'—')} · Valor hora ${r.vh?fm(r.vh):'—'} · ${pRange(p)}</span><div class="sp"></div>${ro?estadoPago(r):''}</div>
   ${ro?'':'<div class="alert info">Destildá los conceptos que no quieras descontar en esta liquidación: <b>quedan pendientes y pasan al período siguiente</b>.</div>'}
   <div class="grid2"><div>
    ${sec('Facturación',r.fact,tb([['Archivo'],['Viajes','n'],['Horas','n'],['Importe','n']],r.factRows.map(f=>`<tr><td>${esc(f.archivo||f.origen||'')}</td><td class="n">${fn(f.viajes)}</td><td class="n">${r.vh?fn(f.importe/r.vh,1):'—'}</td><td class="n">${fm(f.importe)}</td></tr>`),'Sin facturación en el período.'),'')}
@@ -706,10 +709,10 @@ function vPago(){
   <div class="toolbar">${[['pend','Pendientes'],['pag','Pagadas'],['all','Todas']].map(([k,l])=>`<button class="pill ${UI.payF===k?'on':''}" data-a="payF" data-k="${k}">${l}</button>`).join('')}
    <select data-a="payP" data-ch="1"><option value="">Todos los períodos</option>${pers.map(p=>`<option value="${p}" ${p===UI.payP?'selected':''}>${pLabel(p)}</option>`).join('')}</select>${searchBox('Buscar empresa...')}</div>
   ${UI.payF!=='pag'?`<div class="card" style="margin-bottom:10px"><div class="cb" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px"><b>${selP.length}</b><span class="mut small">seleccionada(s)${selP.length?` · ${fm(sum(pend.filter(r=>UI.paySel.has(key(r))),'saldo'))}`:''}</span><button class="lnk" data-a="paySelAll">Seleccionar todas las pendientes visibles</button>${selP.length?'<button class="lnk" data-a="paySelNone">Quitar selección</button>':''}<div class="sp"></div><span class="mut small">Fecha de pago</span><input type="date" value="${UI.payFecha||today()}" data-a="payFecha" data-ch="1"><button class="btn green" data-a="payMany" ${selP.length?'':'disabled'}>${selP.length?`Registrar ${selP.length} pago${selP.length>1?'s':''} seleccionado${selP.length>1?'s':''}`:'Registrar pagos seleccionados'}</button></div></div>`:''}
-  <div class="tw"><table><thead><tr><th style="width:34px"></th><th>Período</th><th>Empresa de transporte</th><th>Banco</th><th class="n">Saldo liquidación</th><th class="n">Efectivo</th><th class="n">Transferencia (diferencia)</th><th>Fecha de pago</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${L.map(r=>{const k=key(r),e=EI()[r.k]||{};if(r.pagado)return `<tr class="closed"><td></td><td>${pLabel(r.periodo)}</td><td class="name">${esc(r.empresa)}</td><td>${esc(e.banco||'—')}</td><td class="n"><b>${fm(r.saldo)}</b></td><td class="n">${fm(r.ef)}</td><td class="n">${fm(r.tr)}</td><td>${fD(r.fechaPago)}</td><td><span class="chip g">Pagada</span></td><td><button class="lnk r" data-a="payUndo" data-k="${esc(k)}">Anular pago</button></td></tr>`;
+  <div class="tw"><table><thead><tr><th style="width:34px"></th><th>Período</th><th>Empresa de transporte</th><th>Tipo transferencia</th><th class="n">Saldo liquidación</th><th class="n">Efectivo</th><th class="n">Transferencia (diferencia)</th><th>Fecha de pago</th><th>Estado</th><th></th></tr></thead><tbody>
+  ${L.map(r=>{const k=key(r),e=EI()[r.k]||{};if(r.pagado)return `<tr class="closed"><td></td><td>${pLabel(r.periodo)}</td><td class="name">${esc(r.empresa)}</td><td>${esc(e.tipoTransferencia||'—')}</td><td class="n"><b>${fm(r.saldo)}</b></td><td class="n">${fm(r.ef)}</td><td class="n">${fm(r.tr)}</td><td>${fD(r.fechaPago)}</td><td><span class="chip g">Pagada</span></td><td><button class="lnk r" data-a="payUndo" data-k="${esc(k)}">Anular pago</button></td></tr>`;
     const ef=efv(r),bad=!(ef>=0&&ef<=r.saldo+0.5);
-    return `<tr class="${UI.paySel.has(k)?'sel':''}"><td><input type="checkbox" ${UI.paySel.has(k)?'checked':''} data-a="paySel" data-k="${esc(k)}" data-ch="1"></td><td>${pLabel(r.periodo)}</td><td class="name"><a class="lnk" style="color:#fff;font-weight:600;font-size:13px" data-a="open" data-k="${esc(r.k)}" data-p="${r.periodo}">${esc(r.empresa)}</a></td><td>${esc(e.banco||'—')}</td><td class="n"><b>${fm(r.saldo)}</b></td>
+    return `<tr class="${UI.paySel.has(k)?'sel':''}"><td><input type="checkbox" ${UI.paySel.has(k)?'checked':''} data-a="paySel" data-k="${esc(k)}" data-ch="1"></td><td>${pLabel(r.periodo)}</td><td class="name"><a class="lnk" style="color:#fff;font-weight:600;font-size:13px" data-a="open" data-k="${esc(r.k)}" data-p="${r.periodo}">${esc(r.empresa)}</a></td><td>${esc(e.tipoTransferencia||'—')}</td><td class="n"><b>${fm(r.saldo)}</b></td>
      <td class="n"><input class="money ${bad?'bad':''}" type="number" min="0" max="${Math.round(r.saldo)}" step="1000" value="${ef}" data-a="efIn" data-k="${esc(k)}" data-ch="1"><div class="subt"><button class="lnk" data-a="efAll" data-k="${esc(k)}">todo</button> · <button class="lnk" data-a="efNone" data-k="${esc(k)}">nada</button></div></td>
      <td class="n">${bad?'<span class="neg">inválido</span>':fm(r.saldo-ef)}</td><td><input type="date" value="${UI.fpDraft[k]||today()}" data-a="fpIn" data-k="${esc(k)}" data-ch="1"></td><td><span class="chip w">Pendiente</span></td><td><button class="btn sm green" data-a="payOne" data-k="${esc(k)}" ${bad?'disabled':''}>Registrar pago</button></td></tr>`}).join('')||`<tr><td colspan="10" class="empty">${UI.payF==='pend'?'No hay liquidaciones cerradas pendientes de pago.':'Sin registros.'}</td></tr>`}
   </tbody></table></div>
@@ -756,8 +759,9 @@ function vVH(){
   <div class="card"><div class="ch"><h3>Historia del valor hora</h3><div class="sp"></div><button class="btn sm" data-a="toggleVhList">${UI.vhList?'Ver matriz':'Ver registros'}</button></div>
    ${UI.vhList?`<div class="tw" style="border:0;border-radius:0"><table><thead><tr><th>División</th><th class="n">Valor</th><th>Desde</th><th>Hasta</th><th></th></tr></thead><tbody>${S.valores.slice().sort((a,b)=>a.division.localeCompare(b.division)||(b.desde||'').localeCompare(a.desde||'')).map(v=>`<tr><td>${esc(v.division)}</td><td class="n">${fm(v.valor)}</td><td>${fD(v.desde)}</td><td>${v.hasta?fD(v.hasta):'<span class="chip g">abierta</span>'}</td><td><button class="lnk" data-a="editVh" data-id="${v.id}">Editar</button> · <button class="lnk r" data-a="delVh" data-id="${v.id}">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`
    :`<div class="tw" style="border:0;border-radius:0"><table><thead><tr><th>División</th>${vig.map(d=>`<th class="n">${fD(d)}</th>`).join('')}</tr></thead><tbody>${divs.map(d=>{let prev=null;return `<tr><td class="name">${esc(d)}</td>${vig.map(dt=>{const x=cuadroVig(dt).find(c=>c.d===d).v;const val=x?+x.valor:null;let ch='';if(val!=null&&prev!=null&&val!==prev){const pc=(val/prev-1)*100;ch=`<span class="chg ${pc>0?'pos':'ded'}">${pc>0?'+':''}${fn(pc,1)}%</span>`}const cell=val==null?'<span class="zero">—</span>':(x.desde===dt?`<b>${fm(val)}</b>`:`<span class="mut">${fm(val)}</span>`)+ch;prev=val??prev;return `<td class="n">${cell}</td>`}).join('')}</tr>`}).join('')}</tbody></table></div>`}</div>
-  <div class="card"><div class="ch"><h3>Empresas de transporte activas · división y valor hora</h3><div class="sp"></div>${searchBox('Buscar empresa...',220)}</div>
-   <div class="tw" style="border:0;border-radius:0;max-height:500px"><table><thead><tr><th>Empresa</th><th>División</th><th>Banco</th><th class="n">Valor hora</th></tr></thead><tbody>${S.empresas.filter(e=>!s||norm(e.nombre).includes(s)).map(e=>{const v=(cur.find(c=>c.d===e.division)||{}).v;return `<tr><td>${esc(e.nombre)}</td><td><select data-a="empDiv" data-k="${esc(norm(e.nombre))}" data-ch="1">${['',...divs].map(d=>`<option ${d===e.division?'selected':''} value="${esc(d)}">${esc(d||'— sin división —')}</option>`).join('')}</select></td><td>${esc(e.banco||'—')}</td><td class="n">${v?fm(v.valor):'<span class="chip r">sin valor</span>'}</td></tr>`}).join('')}</tbody></table></div></div>`;
+  <div class="card"><div class="ch"><h3>Empresas · división (desde ABM)</h3><div class="sp"></div>${searchBox('Buscar empresa...',220)}</div>
+   <p class="legend" style="margin:0 14px 8px">La división y el tipo de transferencia se editan en <b>Ficha integral → Empresas</b>. Acá solo se consulta el valor hora vigente.</p>
+   <div class="tw" style="border:0;border-radius:0;max-height:500px"><table><thead><tr><th>Empresa</th><th>División</th><th>Tipo transferencia</th><th class="n">Valor hora</th></tr></thead><tbody>${S.empresas.filter(e=>!s||norm(e.nombre).includes(s)).map(e=>{const v=(cur.find(c=>c.d===e.division)||{}).v;return `<tr><td>${esc(e.nombre)}</td><td>${esc(e.division||'—')}</td><td>${esc(e.tipoTransferencia||'—')}</td><td class="n">${v?fm(v.valor):'<span class="chip r">sin valor</span>'}</td></tr>`}).join('')}</tbody></table></div></div>`;
 }
 function newCuadroForm(){const f=UI.vhRef||today(),cur=cuadroVig(f);
   modal('Nueva vigencia del cuadro tarifario',`<div class="full"><label class="f">Vigencia desde</label><input type="date" name="desde" required><div class="hint">Valores sugeridos del cuadro vigente al ${fD(f)}. Solo se crean registros para las divisiones que cambies.</div></div>
