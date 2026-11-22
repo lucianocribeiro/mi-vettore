@@ -537,7 +537,7 @@ function vAdel(){
   return `<div class="kpis"><div class="kpi"><div class="l">Saldo a descontar</div><div class="v">${fm(sum(pendAll,saldoOf))}</div><div class="s">${pendAll.length} adelantos con cuotas pendientes</div></div>
    ${tiposAll().map(t=>{const x=pendAll.filter(a=>a.tipo===t);return `<div class="kpi"><div class="l">${esc(t)}</div><div class="v">${fmz(sum(x,saldoOf))}</div><div class="s">${x.length} pendientes</div></div>`}).join('')}</div>
   <div class="toolbar"><button class="btn primary" data-a="newAdel">+ Registrar adelanto</button><button class="btn" data-a="tipos">Tipos de adelanto</button>${[['pend','Con cuotas pendientes'],['liq','Cancelados'],['all','Todos']].map(([k,l])=>`<button class="pill ${UI.adelF===k?'on':''}" data-a="adelF" data-k="${k}">${l}</button>`).join('')}
-   <select data-a="adelT" data-ch="1"><option value="">Todos los tipos</option>${tiposAll().map(t=>`<option ${UI.adelT===t?'selected':''}>${esc(t)}</option>`).join('')}</select>${searchBox('Buscar empresa, descripción o patente...')}</div>
+   <select data-a="adelT" data-ch="1"><option value="">Todos los tipos</option>${tiposAll().map(t=>`<option ${UI.adelT===t?'selected':''}>${esc(t)}</option>`).join('')}</select>${searchBox('Buscar empresa, descripción o patente...')}<div class="sp"></div><button class="btn" data-a="export">⤓ Excel</button></div>
   <div class="tw"><table><thead><tr><th>Fecha</th><th>Empresa de transporte</th><th>Tipo</th><th>Descripción</th><th>Patente</th><th class="n">Monto</th><th class="n">Cuotas restantes</th><th class="n">Saldo</th><th></th></tr></thead><tbody>
   ${rows.slice(0,350).map(a=>{const pc=pendC(a),sp=saldoOf(a);return `<tr><td>${fD(a.fecha)}</td><td class="name">${esc(a.empresa)}</td><td><span class="chip">${esc(a.tipo)}</span></td><td>${esc(a.desc)}</td><td>${esc(a.patente||'')}</td><td class="n">${fm(a.importe)}</td>
    <td class="n"><b>${pc.length}/${a.cuotas.length}</b></td><td class="n">${fmz(sp)}</td><td style="white-space:nowrap">${sp>0?`<button class="lnk" data-a="editAdel" data-id="${a.id}">Editar</button>`:''}${a.cuotas.every(c=>!cuotaState(a,c))?` · <button class="lnk r" data-a="delAdel" data-id="${a.id}">Eliminar</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="9" class="empty">Sin registros.</td></tr>'}
@@ -609,7 +609,7 @@ function vPrest(){
   const act=Object.values(S.prest).filter(l=>!l.deleted&&loanEstado(l)==='Activo');
   const pill=(k,l)=>`<button class="pill ${UI.prestF===k?'on':''}" data-a="prestF" data-k="${k}">${l}</button>`;
   return `<div class="kpis"><div class="kpi"><div class="l">Préstamos activos</div><div class="v">${act.length}</div></div><div class="kpi"><div class="l">Saldo total en horas</div><div class="v">${fn(sum(act,l=>l.totalHs-loanAcum(l)),1)} hs</div></div><div class="kpi"><div class="l">Saldo total a valor hora actual</div><div class="v">${fm(sum(act,l=>(l.totalHs-loanAcum(l))*vhEmp(norm(l.empresa),hoy)))}</div><div class="s">valor hora vigente al ${fD(hoy)}</div></div></div>
-  <div class="toolbar"><button class="btn primary" data-a="newLoan">+ Registrar préstamo</button>${pill('Activo','Activo')}${pill('Refinanciado','Refinanciado')}${pill('Finalizado','Finalizado')}${pill('all','Todos')}${searchBox('Buscar empresa o concepto...')}</div>
+  <div class="toolbar"><button class="btn primary" data-a="newLoan">+ Registrar préstamo</button>${pill('Activo','Activo')}${pill('Refinanciado','Refinanciado')}${pill('Finalizado','Finalizado')}${pill('all','Todos')}${searchBox('Buscar empresa o concepto...')}<div class="sp"></div><button class="btn" data-a="export">⤓ Excel</button></div>
   <div class="tw"><table><thead><tr><th>Empresa de transporte</th><th>Concepto</th><th>Solicitud</th><th class="n">Horas solicitadas</th><th class="n">Equiv. $ a la solicitud</th><th class="n">Valor hora actual</th><th class="n">Cuota actual</th><th class="n">Acum. / total hs</th><th>Avance</th><th class="n">Saldo</th><th>Estado</th><th></th></tr></thead><tbody>
   ${L.map(x=>`<tr><td class="name">${esc(x.empresa)}</td><td>${esc(x.concepto)}</td><td>${fD(x.fecha)}<div class="subt">VH ${fm(x.vhSol)}</div></td><td class="n"><b>${fn(x.totalHs,1)} hs</b></td><td class="n">${fm(x.totalHs*x.vhSol)}</td><td class="n">${fm(x.vh)}</td>
    <td class="n">${fn(Math.min(x.cuotaHs,x.saldo),1)} hs<div class="subt">${fm(Math.min(x.cuotaHs,x.saldo)*x.vh)}</div></td><td class="n">${fn(x.ac,1)} / ${fn(x.totalHs,1)}</td><td><div class="bar"><i style="width:${Math.min(100,x.ac/(x.totalHs||1)*100)}%"></i></div><div class="subt">${fn(x.ac/(x.totalHs||1)*100,0)}%</div></td>
@@ -652,7 +652,7 @@ function vFact(){
   const rukas=rows.filter(r=>!r.manual),ajustes=rows.filter(r=>r.manual);
   return `<div class="grid2" style="margin-bottom:16px">${upBox('fact','Subir sábana de facturación','.xlsx / .csv · columnas <code>Empresa</code> <code># Transporte</code> <code>Importe</code> (sin fecha). Acumulable: si una empresa ya tiene facturación en el período, se avisa que se sobrescribe. Los <b>adicionales y ajustes</b> manuales se conservan.')}
    <div class="card" style="margin:0"><div class="ch"><h3>Historial de subidas</h3><span class="mut small">${hist.length}</span></div><div style="max-height:150px;overflow:auto" class="cb">${hist.length?hist.map(x=>`<div class="small" style="margin-bottom:6px">• <b>${pLabel(x.p)}</b> · ${esc(x.archivo)} · ${x.fecha} · ${esc(x.usuario||'')} · ${esc(x.res)}</div>`).join(''):'<div class="small mut">Todavía no hay subidas desde el módulo (la historia ene–1ra oct viene del Excel).</div>'}</div></div></div>
-  <div class="toolbar"><span class="mut small">Período</span><select data-a="factP" data-ch="1">${PERIODS.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${(S.fact[x]||[]).length?' • '+(S.fact[x]||[]).length+' líneas':''}</option>`).join('')}</select><div class="sp"></div><button class="btn primary" data-a="newFactAjuste" ${p<B.PEND?'disabled':''}>+ Adicional / ajuste</button></div>
+  <div class="toolbar"><span class="mut small">Período</span><select data-a="factP" data-ch="1">${PERIODS.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${(S.fact[x]||[]).length?' • '+(S.fact[x]||[]).length+' líneas':''}</option>`).join('')}</select><div class="sp"></div><button class="btn" data-a="export">⤓ Excel</button><button class="btn primary" data-a="newFactAjuste" ${p<B.PEND?'disabled':''}>+ Adicional / ajuste</button></div>
   <div class="tw"><table><thead><tr><th>Empresa de transporte</th><th>Tipo</th><th>Concepto / archivo</th><th class="n">Viajes</th><th class="n">Horas</th><th class="n">Importe</th><th>Estado</th><th></th></tr></thead><tbody>
   ${rows.map(r=>`<tr><td class="name">${esc(r.empresa)}${r.abm?'':' <span class="chip w">no está en ABM</span>'}</td><td>${r.manual?'<span class="chip b">Adicional / ajuste</span>':'<span class="chip">Rukas</span>'}</td><td>${r.manual?esc(r.concepto||'—'):`<span class="mut small">${esc(r.archivo||'')}<div class="subt">${esc(r.cargado||'')}</div></span>`}</td><td class="n">${r.manual?'—':fn(r.viajes)}</td><td class="n">${r.manual?'—':(r.vh?fn(r.horas,1):'—')}</td><td class="n"><b>${fm(r.importe)}</b></td><td>${r.liq?'<span class="chip g">Liquidada</span>':'<span class="chip w">Pendiente</span>'}</td><td>${r.manual&&!r.liq?`<button class="lnk" data-a="editFactAjuste" data-id="${esc(r.id)}">Editar</button> · <button class="lnk r" data-a="delFactAjuste" data-id="${esc(r.id)}">Eliminar</button>`:''}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">Sin facturación ni adicionales para este período.</td></tr>'}
   </tbody><tfoot><tr><td>Total (${rows.length} · Rukas ${rukas.length} · ajustes ${ajustes.length})</td><td></td><td></td><td class="n">${fn(sum(rukas,'viajes'))}</td><td class="n">${fn(sum(rukas,'horas'),1)}</td><td class="n">${fm(sum(rows,'importe'))}</td><td></td><td></td></tr></tfoot></table></div>
@@ -704,7 +704,7 @@ function naftaPer(p,pers){
   const more=(id,isOpen,label)=>`<button type="button" class="naf-more ${isOpen?'open':''}" data-a="${id}" data-k="${esc(label)}"><span class="chev">▸</span> ${isOpen?'Ocultar':'Más información'}</button>`;
   const stChip=(g)=>{const refs=g.refs||[];const allLiq=refs.length&&refs.every(r=>D.nLiq[r]);const someLiq=refs.some(r=>D.nLiq[r]);
     return hist?'<span class="chip g">Liquidado (histórico)</span>':allLiq?'<span class="chip g">Liquidado</span>':someLiq||(g.liq&&g.liq.length)?`<span class="chip g">Liquidado</span>${someLiq&&!allLiq?' <span class="chip w">parcial</span>':''}`:'<span class="chip w">Pendiente</span>'};
-  return `<div class="card"><div class="ch"><h3>Detalle por empresa · quincena de la carga</h3><select data-a="naftaP" data-ch="1">${pers.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${S.nhist[x]?' (histórico)':''}</option>`).join('')}</select><div class="sp"></div><span class="mut small">${fn(sum(G,'cargas'))} cargas · GNC ${fm(tg)} · Nafta ${fm(tt-tg)} · Total <b style="color:#fff">${fm(tt)}</b></span></div>
+  return `<div class="card"><div class="ch"><h3>Detalle por empresa · quincena de la carga</h3><select data-a="naftaP" data-ch="1">${pers.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${S.nhist[x]?' (histórico)':''}</option>`).join('')}</select><div class="sp"></div><span class="mut small">${fn(sum(G,'cargas'))} cargas · GNC ${fm(tg)} · Nafta ${fm(tt-tg)} · Total <b style="color:#fff">${fm(tt)}</b></span><button class="btn sm" data-a="export" style="margin-left:8px">⤓ Excel</button></div>
   <div class="tw" style="border:0;border-radius:0;max-height:600px"><table><thead><tr><th>Empresa de transporte</th><th>Patente</th><th>Tipo</th><th class="n">Cargas</th><th class="n">Importe</th><th>Estado</th></tr></thead><tbody>
   ${ks.map(k=>{const gs=by[k].sort((a,b)=>a.patente.localeCompare(b.patente)||a.tipo.localeCompare(b.tipo));const tot=sum(gs,'importe');
     const empOpen=openEmp.has(k);const nPat=new Set(gs.map(g=>g.patente)).size;
@@ -806,7 +806,7 @@ function vPago(){
   return `<div class="kpis"><div class="kpi"><div class="l">Pendiente de pago</div><div class="v">${fm(sum(pend,'saldo'))}</div><div class="s">${pend.length} liquidaciones cerradas</div></div>
    <div class="kpi"><div class="l">Pagado</div><div class="v pos">${fm(sum(pag,r=>r.tr+r.ef))}</div><div class="s">Transferencia ${fm(sum(pag,'tr'))} · Efectivo ${fm(sum(pag,'ef'))}</div></div></div>
   <div class="toolbar">${[['pend','Pendientes'],['pag','Pagadas'],['all','Todas']].map(([k,l])=>`<button class="pill ${UI.payF===k?'on':''}" data-a="payF" data-k="${k}">${l}</button>`).join('')}
-   <select data-a="payP" data-ch="1"><option value="">Todos los períodos</option>${pers.map(p=>`<option value="${p}" ${p===UI.payP?'selected':''}>${pLabel(p)}</option>`).join('')}</select>${searchBox('Buscar empresa...')}</div>
+   <select data-a="payP" data-ch="1"><option value="">Todos los períodos</option>${pers.map(p=>`<option value="${p}" ${p===UI.payP?'selected':''}>${pLabel(p)}</option>`).join('')}</select>${searchBox('Buscar empresa...')}<div class="sp"></div><button class="btn" data-a="export">⤓ Excel</button></div>
   ${UI.payF!=='pag'?`<div class="card" style="margin-bottom:10px"><div class="cb" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px"><b>${selP.length}</b><span class="mut small">seleccionada(s)${selP.length?` · ${fm(sum(pend.filter(r=>UI.paySel.has(key(r))),'saldo'))}`:''}</span><button class="lnk" data-a="paySelAll">Seleccionar todas las pendientes visibles</button>${selP.length?'<button class="lnk" data-a="paySelNone">Quitar selección</button>':''}<div class="sp"></div><span class="mut small">Fecha de pago</span><input type="date" value="${UI.payFecha||today()}" data-a="payFecha" data-ch="1"><button class="btn green" data-a="payMany" ${selP.length?'':'disabled'}>${selP.length?`Registrar ${selP.length} pago${selP.length>1?'s':''} seleccionado${selP.length>1?'s':''}`:'Registrar pagos seleccionados'}</button></div></div>`:''}
   <div class="tw"><table><thead><tr><th style="width:34px"></th><th>Período</th><th>Empresa de transporte</th><th>Tipo transferencia</th><th class="n">Saldo liquidación</th><th class="n">Efectivo</th><th class="n">Transferencia (diferencia)</th><th>Fecha de pago</th><th>Estado</th><th></th></tr></thead><tbody>
   ${L.map(r=>{const k=key(r),e=EI()[r.k]||{};if(r.pagado)return `<tr class="closed"><td></td><td>${pLabel(r.periodo)}</td><td class="name">${esc(r.empresa)}</td><td>${esc(e.tipoTransferencia||'—')}</td><td class="n"><b>${fm(r.saldo)}</b></td><td class="n">${fm(r.ef)}</td><td class="n">${fm(r.tr)}</td><td>${fD(r.fechaPago)}</td><td><span class="chip g">Pagada</span></td><td><button class="lnk r" data-a="payUndo" data-k="${esc(k)}">Anular pago</button></td></tr>`;
@@ -829,7 +829,7 @@ function vPanel(){
   const cells=r=>`<td class="n">${fn(r.viajes)}</td><td class="n">${r.vh?fn(r.horas,1):'—'}</td><td class="n">${fmz(r.fact)}</td><td class="n ded">${fmz(r.gnc)}</td><td class="n ded">${fmz(r.naf)}</td><td class="n ded">${fmz(r.adelT)}</td><td class="n ded">${fmz(r.prestT)}</td><td class="n ${r.saldo<0?'neg':''}"><b>${fm(r.saldo)}</b></td><td class="n">${fmz(r.ef)}</td><td class="n">${fmz(r.tr)}</td><td>${estadoPago(r)}</td><td><button class="lnk" data-a="open" data-k="${esc(r.k)}" data-p="${r.periodo}">Detalle</button></td>`;
   const kp=L=>`<div class="kpis"><div class="kpi"><div class="l">Facturación</div><div class="v">${fm(sum(L,'fact'))}</div><div class="s">${fn(sum(L,'viajes'))} viajes · ${fn(sum(L,'horas'))} hs</div></div><div class="kpi"><div class="l">Combustible</div><div class="v ded">${fm(sum(L,'naftaT'))}</div><div class="s">GNC ${fm(sum(L,'gnc'))} · Nafta ${fm(sum(L,'naf'))}</div></div><div class="kpi"><div class="l">Adelantos</div><div class="v ded">${fm(sum(L,'adelT'))}</div></div><div class="kpi"><div class="l">Préstamos</div><div class="v ded">${fm(sum(L,'prestT'))}</div></div><div class="kpi"><div class="l">Pagos</div><div class="v pos">${fm(sum(L,r=>r.ef+r.tr))}</div><div class="s">Ef. ${fm(sum(L,'ef'))} · Transf. ${fm(sum(L,'tr'))}</div></div></div>`;
   if(UI.panelMode==='emp'){const e=UI.panelE||S.empresas[0].nombre,k=norm(e);const L=recs.filter(r=>r.k===k).sort((a,b)=>b.periodo.localeCompare(a.periodo));
-    return head+`<select data-a="panelE" data-ch="1" style="min-width:280px">${S.empresas.map(x=>`<option ${x.nombre===e?'selected':''}>${esc(x.nombre)}</option>`).join('')}</select></div>${kp(L)}
+    return head+`<select data-a="panelE" data-ch="1" style="min-width:280px">${S.empresas.map(x=>`<option ${x.nombre===e?'selected':''}>${esc(x.nombre)}</option>`).join('')}</select><button class="btn" data-a="export">⤓ Excel</button></div>${kp(L)}
     <div class="tw"><table><thead><tr><th>Período</th>${cols}</tr></thead><tbody>${L.map(r=>`<tr><td class="name">${pLabel(r.periodo)}</td>${cells(r)}</tr>`).join('')||'<tr><td colspan="14" class="empty">Sin liquidaciones cerradas.</td></tr>'}</tbody></table></div>`}
   const p=UI.panelP,s=norm(UI.search);const L=recs.filter(r=>r.periodo===p).sort((a,b)=>a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'}));const difs=L.filter(r=>r.modo==='historico'&&r.reg&&Math.abs(r.dif)>1);
   return head+`<select data-a="panelP" data-ch="1">${ps.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${x<B.PEND?' · histórico':''}</option>`).join('')}</select><button class="btn" data-a="export" data-k="${p}">⤓ Excel</button></div>${kp(L)}
@@ -855,6 +855,7 @@ function vCat(){
   const usoDiv=d=>S.empresas.filter(e=>e.division===d).length;
   const usoTipo=t=>S.empresas.filter(e=>(e.tipoTransferencia||'')===(t==='Clasica'?'Clásica':t)||e.tipoTransferencia===t).length;
   return `<div class="alert info">Estos listados alimentan el desplegable del <b>ABM Empresas</b> (división para facturación y tipo de transferencia) y la columna de <b>Pago</b>. La empresa de transporte no ve la división al entrar a la app.</div>
+  <div class="toolbar" style="margin-bottom:12px"><div class="sp"></div><button class="btn" data-a="export">⤓ Excel</button></div>
   <div class="card"><div class="ch"><h3>Divisiones para facturación</h3><div class="sp"></div><button class="btn primary" data-a="catDivForm">Editar listado</button></div>
    <div class="tw" style="border:0;border-radius:0"><table><thead><tr><th>División</th><th class="n">Empresas</th></tr></thead><tbody>
    ${divs.map(d=>`<tr><td class="name">${esc(d)}</td><td class="n">${usoDiv(d)}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">Sin divisiones.</td></tr>'}
@@ -908,7 +909,7 @@ function vVH(){
   const vig=vigAll.slice(-3),vigSet=new Set(vig);
   const histRows=S.valores.filter(v=>!v.desde||vigSet.has(v.desde)).slice().sort((a,b)=>a.division.localeCompare(b.division)||(b.desde||'').localeCompare(a.desde||''));
   const s=norm(UI.search);
-  return `<div class="card"><div class="ch"><h3>Cuadro tarifario vigente al</h3><input type="date" value="${f}" data-a="vhRef" data-ch="1"><div class="sp"></div><button class="btn primary" data-a="newCuadro">+ Nueva vigencia (sugerida desde el cuadro actual)</button></div>
+  return `<div class="card"><div class="ch"><h3>Cuadro tarifario vigente al</h3><input type="date" value="${f}" data-a="vhRef" data-ch="1"><div class="sp"></div><button class="btn" data-a="export">⤓ Excel</button><button class="btn primary" data-a="newCuadro">+ Nueva vigencia (sugerida desde el cuadro actual)</button></div>
    <div class="tw" style="border:0;border-radius:0"><table><thead><tr><th>División</th><th class="n">Valor hora</th><th>Desde</th><th>Hasta</th><th class="n">Empresas</th></tr></thead><tbody>${cur.map(x=>`<tr><td class="name">${esc(x.d)}</td><td class="n">${x.v?fm(x.v.valor):'<span class="chip r">sin valor</span>'}</td><td>${x.v?fD(x.v.desde):''}</td><td>${x.v?(x.v.hasta?fD(x.v.hasta):'<span class="chip g">abierta</span>'):''}</td><td class="n">${S.empresas.filter(e=>e.division===x.d).length}</td></tr>`).join('')}</tbody></table></div></div>
   <div class="card"><div class="ch"><h3>Historia del valor hora</h3><span class="mut small">Últimas 3 modificaciones</span><div class="sp"></div><button class="btn sm" data-a="toggleVhList">${UI.vhList?'Ver matriz':'Ver registros'}</button></div>
    ${UI.vhList?`<div class="tw" style="border:0;border-radius:0"><table><thead><tr><th>División</th><th class="n">Valor</th><th>Desde</th><th>Hasta</th><th></th></tr></thead><tbody>${histRows.map(v=>`<tr><td>${esc(v.division)}</td><td class="n">${fm(v.valor)}</td><td>${fD(v.desde)}</td><td>${v.hasta?fD(v.hasta):'<span class="chip g">abierta</span>'}</td><td><button class="lnk" data-a="editVh" data-id="${v.id}">Editar</button> · <button class="lnk r" data-a="delVh" data-id="${v.id}">Eliminar</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Sin modificaciones.</td></tr>'}</tbody></table></div>`
@@ -997,14 +998,105 @@ async function importNafta(file){
 }
 
 /* ================= EXPORT ================= */
-async function exportP(p){
-  const L=UI.mod==='liq'?preview(p).list:Object.values(D.rec).filter(r=>r.periodo===p);
-  const res=L.map(r=>({'Empresa':r.empresa,'Período':pLabel(p),'Estado':r.closed===false?'Pendiente':'Liquidada','Viajes':r.viajes,'Horas':Math.round((r.horas||0)*10)/10,'Facturación':Math.round(r.fact),'Nafta':Math.round(r.naftaT),'Adelantos':Math.round(r.adelT),'Préstamos':Math.round(r.prestT),'Saldo':Math.round(r.saldo),'Efectivo':Math.round(r.ef||0),'Transferencia':Math.round(r.tr||0),'Pagado':r.pagado?'Sí':'No'}));
-  const wb=XLSX.utils.book_new();const w=XLSX.utils.json_to_sheet(res);w['!cols']=[{wch:34},{wch:14},{wch:11},...Array(11).fill({wch:13})];XLSX.utils.book_append_sheet(wb,w,'Liquidación');
-  const fname=`Liquidacion_${pLabel(p).replace(/ /g,'_')}.xlsx`;
+const safeFile=s=>String(s||'export').replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,'_').slice(0,80);
+async function downloadXlsx(fname,sheets){
+  const wb=XLSX.utils.book_new();
+  (sheets||[]).forEach(({name,rows,cols})=>{
+    const w=XLSX.utils.json_to_sheet(rows&&rows.length?rows:[{'(sin datos)':''}]);
+    if(cols)w['!cols']=cols;else{
+      const keys=rows&&rows[0]?Object.keys(rows[0]):[];
+      w['!cols']=keys.map(k=>({wch:Math.min(40,Math.max(12,String(k).length+2))}));
+    }
+    XLSX.utils.book_append_sheet(wb,w,String(name||'Hoja').slice(0,31));
+  });
   const blob=new Blob([XLSX.write(wb,{bookType:'xlsx',type:'array'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   let DL=null;try{DL=await claude.use('downloads')}catch(e){}
   try{if(DL)await DL.save({filename:fname,data:blob});else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}toast('Excel exportado')}catch(e){if(e&&e.code!=='declined')toast('No se pudo descargar ('+(e.code||'error')+')')}
+}
+function exportLiqRows(L,p){
+  return L.map(r=>({'Empresa':r.empresa,'Período':pLabel(r.periodo||p),'Estado':r.closed===false?'Pendiente':(r.pagado?'Pagada':'Liquidada'),'Viajes':r.viajes||0,'Horas':Math.round((r.horas||0)*10)/10,'Facturación':Math.round(r.fact||0),'Nafta':Math.round(r.naftaT||0),'GNC':Math.round(r.gnc||0),'Nafta $':Math.round(r.naf||0),'Adelantos':Math.round(r.adelT||0),'Préstamos':Math.round(r.prestT||0),'Saldo':Math.round(r.saldo||0),'Efectivo':Math.round(r.ef||0),'Transferencia':Math.round(r.tr||0),'Pagado':r.pagado?'Sí':'No'}));
+}
+async function exportP(p){
+  const L=UI.mod==='liq'?preview(p).list:Object.values(D.rec).filter(r=>r.periodo===p);
+  await downloadXlsx(`Liquidacion_${safeFile(pLabel(p))}.xlsx`,[{name:'Liquidación',rows:exportLiqRows(L,p),cols:[{wch:34},{wch:14},{wch:11},...Array(12).fill({wch:13})]}]);
+}
+async function exportCurrent(arg){
+  const mod=UI.mod;
+  if(mod==='liq'){await exportP(arg||UI.p);return}
+  if(mod==='panel'){
+    if(UI.panelMode==='emp'){
+      const e=UI.panelE||(S.empresas[0]||{}).nombre,k=norm(e);
+      const L=Object.values(D.rec).filter(r=>r.k===k).sort((a,b)=>b.periodo.localeCompare(a.periodo));
+      await downloadXlsx(`Panel_${safeFile(e)}.xlsx`,[{name:'Por empresa',rows:exportLiqRows(L)}]);
+    }else await exportP(arg||UI.panelP);
+    return;
+  }
+  if(mod==='adel'){
+    const pendC=a=>a.cuotas.filter(c=>!cuotaState(a,c));
+    let rows=Object.values(S.adel).filter(a=>!a.deleted);
+    if(UI.adelF==='pend')rows=rows.filter(a=>pendC(a).length);
+    else if(UI.adelF==='liq')rows=rows.filter(a=>!pendC(a).length);
+    if(UI.adelT)rows=rows.filter(a=>a.tipo===UI.adelT);
+    const s=norm(UI.search);if(s)rows=rows.filter(a=>norm(a.empresa).includes(s)||norm(a.desc).includes(s)||norm(a.patente).includes(s));
+    rows.sort((a,b)=>b.fecha.localeCompare(a.fecha)||a.empresa.localeCompare(b.empresa));
+    const out=rows.map(a=>{const pc=pendC(a);return {'Fecha':a.fecha,'Empresa':a.empresa,'Tipo':a.tipo,'Descripción':a.desc||'','Patente':a.patente||'','Monto':Math.round(a.importe||0),'Cuotas restantes':pc.length+'/'+a.cuotas.length,'Saldo':Math.round(sum(pc,'importe'))}});
+    await downloadXlsx('Adelantos.xlsx',[{name:'Adelantos',rows:out}]);return;
+  }
+  if(mod==='prest'){
+    const hoy=today();
+    let L=Object.values(S.prest).filter(l=>!l.deleted).map(l=>{const vh=vhEmp(norm(l.empresa),hoy),ac=loanAcum(l),saldo=Math.max(0,l.totalHs-ac),st=loanEstado(l);return {...l,vh,ac,saldo,st}});
+    if(UI.prestF&&UI.prestF!=='all')L=L.filter(x=>x.st===UI.prestF);
+    const s=norm(UI.search);if(s)L=L.filter(x=>norm(x.empresa).includes(s)||norm(x.concepto).includes(s));
+    L.sort((a,b)=>(a.st==='Finalizado')-(b.st==='Finalizado')||a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'}));
+    const out=L.map(x=>({'Empresa':x.empresa,'Concepto':x.concepto,'Solicitud':x.fecha,'Horas solicitadas':Math.round(x.totalHs*10)/10,'Equiv $ solicitud':Math.round(x.totalHs*x.vhSol),'Valor hora actual':Math.round(x.vh),'Cuota hs':Math.round(Math.min(x.cuotaHs,x.saldo)*10)/10,'Acumulado hs':Math.round(x.ac*10)/10,'Saldo hs':Math.round(x.saldo*10)/10,'Saldo $':Math.round(x.saldo*x.vh),'Estado':x.st}));
+    await downloadXlsx('Prestamos.xlsx',[{name:'Préstamos',rows:out}]);return;
+  }
+  if(mod==='fact'){
+    const p=UI.factP,rows=(S.fact[p]||[]).map(f=>{const k=norm(f.empresa),vh=vhEmp(k,pStart(p));return {...f,vh,horas:!f.manual&&vh?f.importe/vh:0,liq:!!closedRec(p,k)}}).sort((a,b)=>a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'})||(!!a.manual)-(!!b.manual));
+    const out=rows.map(r=>({'Período':pLabel(p),'Empresa':r.empresa,'Tipo':r.manual?'Adicional / ajuste':'Rukas','Concepto / archivo':r.manual?(r.concepto||''):(r.archivo||''),'Viajes':r.manual?'':(r.viajes||0),'Horas':r.manual?'':(r.vh?Math.round(r.horas*10)/10:''),'Importe':Math.round(r.importe||0),'Estado':r.liq?'Liquidada':'Pendiente'}));
+    await downloadXlsx(`Facturacion_${safeFile(pLabel(p))}.xlsx`,[{name:'Facturación',rows:out}]);return;
+  }
+  if(mod==='nafta'){
+    const pers=naftaPeriodos();const p=UI.naftaP&&pers.includes(UI.naftaP)?UI.naftaP:pers[0];
+    if(!p){toast('No hay nafta para exportar');return}
+    const hist=!!S.nhist[p]&&!Object.values(S.nup).some(u=>(u.rows||[]).some(r=>rowPer(r)===p));
+    const G=hist?S.nhist[p].map(([e,pat,t,c,l,i])=>({empresa:e,patente:pat,tipo:t,cargas:c,litros:l,importe:i,refs:[]})):naftaGroups(p,'per');
+    const byEmp=[];const by={};G.forEach(g=>{const k=g.empresa||'(sin empresa)';(by[k]=by[k]||[]).push(g)});
+    Object.keys(by).sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'})).forEach(k=>{
+      const gs=by[k];byEmp.push({'Empresa':k,'Cargas':sum(gs,'cargas'),'Importe':Math.round(sum(gs,'importe'))});
+    });
+    const det=G.slice().sort((a,b)=>(a.empresa||'').localeCompare(b.empresa||'','es')||a.patente.localeCompare(b.patente)||a.tipo.localeCompare(b.tipo)).map(g=>{
+      const refs=g.refs||[];const allLiq=refs.length&&refs.every(r=>D.nLiq[r]);
+      return {'Período':pLabel(p),'Empresa':g.empresa||'','Patente':g.patente,'Tipo':g.tipo,'Cargas':g.cargas,'Importe':Math.round(g.importe||0),'Estado':hist||allLiq?'Liquidado':'Pendiente'};
+    });
+    const lines=[];
+    if(!hist)G.forEach(g=>{(g.refs||[]).forEach(ref=>{const r=naftaRaw(ref);if(!r)return;lines.push({'Período':pLabel(p),'Empresa':g.empresa||'','Patente':g.patente,'Tipo':tipoComb(r[6]),'Fecha':r[0],'Hora':r[1]||'','Estación':r[12]||'','Producto':r[6]||'','Litros':+(+r[9]||0).toFixed(2),'Importe':Math.round(+r[10]||0),'Estado':D.nLiq[ref]?'Liquidado · '+pLabel(D.nLiq[ref]):'Pendiente'})})});
+    const sheets=[{name:'Por empresa',rows:byEmp},{name:'Por patente',rows:det}];
+    if(lines.length)sheets.push({name:'Cargas',rows:lines});
+    await downloadXlsx(`Nafta_${safeFile(pLabel(p))}.xlsx`,sheets);return;
+  }
+  if(mod==='pago'){
+    let L=Object.values(D.rec).filter(r=>r.modo!=='historico'&&r.saldo>0);
+    if(UI.payF==='pend')L=L.filter(r=>!r.pagado);else if(UI.payF==='pag')L=L.filter(r=>r.pagado);
+    if(UI.payP)L=L.filter(r=>r.periodo===UI.payP);
+    const s=norm(UI.search);if(s)L=L.filter(r=>norm(r.empresa).includes(s));
+    L.sort((a,b)=>a.periodo.localeCompare(b.periodo)||a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'}));
+    const out=L.map(r=>{const e=EI()[r.k]||{};return {'Período':pLabel(r.periodo),'Empresa':r.empresa,'Tipo transferencia':e.tipoTransferencia||'','Saldo':Math.round(r.saldo||0),'Efectivo':Math.round(r.ef||0),'Transferencia':Math.round(r.tr||(r.pagado?0:r.saldo)||0),'Fecha pago':r.fechaPago||'','Estado':r.pagado?'Pagada':'Pendiente'}});
+    await downloadXlsx('Pagos.xlsx',[{name:'Pagos',rows:out}]);return;
+  }
+  if(mod==='vh'){
+    const f=UI.vhRef||today(),cur=cuadroVig(f);
+    const cuadro=cur.map(x=>({'División':x.d,'Valor hora':x.v?Math.round(x.v.valor):'','Desde':x.v?x.v.desde:'','Hasta':x.v?(x.v.hasta||'abierta'):'','Empresas':S.empresas.filter(e=>e.division===x.d).length}));
+    const emps=S.empresas.map(e=>{const v=(cur.find(c=>c.d===e.division)||{}).v;return {'Empresa':e.nombre,'División':e.division||'','Tipo transferencia':e.tipoTransferencia||'','Valor hora':v?Math.round(v.valor):''}});
+    const hist=S.valores.slice().sort((a,b)=>a.division.localeCompare(b.division)||(b.desde||'').localeCompare(a.desde||'')).map(v=>({'División':v.division,'Valor':Math.round(v.valor),'Desde':v.desde||'','Hasta':v.hasta||'abierta'}));
+    await downloadXlsx(`Valores_hora_${safeFile(f)}.xlsx`,[{name:'Cuadro vigente',rows:cuadro},{name:'Empresas',rows:emps},{name:'Historia',rows:hist}]);return;
+  }
+  if(mod==='cat'){
+    const divs=(S.catalogos.divisiones||[]).map(d=>({'División':d,'Empresas':S.empresas.filter(e=>e.division===d).length}));
+    const tipos=(S.catalogos.tiposTransferencia||[]).map(t=>({'Tipo':labelTipoCat(t),'Empresas':S.empresas.filter(e=>(e.tipoTransferencia||'')===(t==='Clasica'?'Clásica':t)||e.tipoTransferencia===t).length}));
+    await downloadXlsx('Catalogos.xlsx',[{name:'Divisiones',rows:divs},{name:'Tipos transferencia',rows:tipos}]);return;
+  }
+  toast('Nada para exportar en este módulo');
 }
 
 /* ================= EVENTS ================= */
@@ -1065,7 +1157,7 @@ document.addEventListener('click',e=>{
     case 'editVh':vhForm(S.valores.find(v=>v.id===id));break;
     case 'delVh':confirmBox('Eliminar valor','¿Eliminar este registro?',()=>{S.valores=S.valores.filter(v=>v.id!==id);saveCfg('valores')},'Eliminar');break;
     case 'panelMode':UI.panelMode=k;render();break;
-    case 'export':exportP(k);break;
+    case 'export':exportCurrent(k);break;
     case 'open':UI.drawer=[el.dataset.p,k];renderDrawer();break;
     case 'closeDrawer':closeDrawer();break;
   }
