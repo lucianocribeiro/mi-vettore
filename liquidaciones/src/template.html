@@ -140,7 +140,7 @@ const perOpts=(sel,min)=>PERIODS.filter(p=>!min||p>=min).map(p=>`<option value="
 /* ================= STATE ================= */
 const TALADEL=B.talleres.map(t=>({id:t.id,fecha:t.fecha,empresa:t.empresa,tipo:'Taller',desc:('Taller OT - '+(t.desc||'s/ref')).trim(),patente:t.patente||'',importe:t.importe,cuotas:[{n:1,periodo:perOf(t.fecha),importe:t.importe}]}));
 const ALLADEL=B.adelantos.concat(TALADEL);
-let S,D,NM={},UI={mod:'liq',p:B.PEND,det:null,sel:new Set(),ov:{},search:'',adelF:'pend',factP:B.PEND,showAll:false,panelMode:'per',panelP:null,panelE:null,drawer:null,role:'operador',naftaView:null};
+let S,D,NM={},UI={mod:'liq',p:B.PEND,det:null,sel:new Set(),ov:{},search:'',adelF:'pend',factP:B.PEND,showAll:false,panelMode:'per',panelP:null,panelE:null,drawer:null,role:'operador',naftaOpen:new Set(),naftaDet:new Set()};
 try{UI.role=localStorage.getItem('vt_role')||'operador'}catch(e){}
 UI.upFact=B.PEND;UI.upNafta=B.PEND;
 function baseState(){
@@ -694,18 +694,26 @@ function vNafta(){
   </tbody></table></div></div>
   ${v?naftaPer(v,pers):''}`;
 }
+function naftaRaw(ref){const [id,ix]=String(ref||'').split(':');const U=S.nup[id];return U&&U.rows?U.rows[+ix]:null}
 function naftaPer(p,pers){
   const hist=!!S.nhist[p]&&!Object.values(S.nup).some(u=>(u.rows||[]).some(r=>rowPer(r)===p));
   const G=hist?S.nhist[p].map(([e,pat,t,c,l,i])=>({empresa:e,patente:pat,tipo:t,cargas:c,litros:l,importe:i,liq:[p],refs:[]})):naftaGroups(p,'per').map(g=>({...g,liq:g.liq}));
   const by={};G.forEach(g=>{const k=g.empresa||'(sin empresa asignada)';(by[k]=by[k]||[]).push(g)});
   const ks=Object.keys(by).sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));const tg=sum(G.filter(g=>g.tipo==='GNC'),'importe'),tt=sum(G,'importe');
+  const openEmp=UI.naftaOpen||(UI.naftaOpen=new Set()),openDet=UI.naftaDet||(UI.naftaDet=new Set());
+  const more=(id,isOpen,label)=>`<button type="button" class="naf-more ${isOpen?'open':''}" data-a="${id}" data-k="${esc(label)}"><span class="chev">▸</span> ${isOpen?'Ocultar':'Más información'}</button>`;
+  const stChip=(g)=>{const refs=g.refs||[];const allLiq=refs.length&&refs.every(r=>D.nLiq[r]);const someLiq=refs.some(r=>D.nLiq[r]);
+    return hist?'<span class="chip g">Liquidado (histórico)</span>':allLiq?'<span class="chip g">Liquidado</span>':someLiq||(g.liq&&g.liq.length)?`<span class="chip g">Liquidado</span>${someLiq&&!allLiq?' <span class="chip w">parcial</span>':''}`:'<span class="chip w">Pendiente</span>'};
   return `<div class="card"><div class="ch"><h3>Detalle por empresa · quincena de la carga</h3><select data-a="naftaP" data-ch="1">${pers.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${S.nhist[x]?' (histórico)':''}</option>`).join('')}</select><div class="sp"></div><span class="mut small">${fn(sum(G,'cargas'))} cargas · GNC ${fm(tg)} · Nafta ${fm(tt-tg)} · Total <b style="color:#fff">${fm(tt)}</b></span></div>
   <div class="tw" style="border:0;border-radius:0;max-height:600px"><table><thead><tr><th>Empresa de transporte</th><th>Patente</th><th>Tipo</th><th class="n">Cargas</th><th class="n">Litros</th><th class="n">GNC</th><th class="n">Nafta</th><th>Estado</th></tr></thead><tbody>
   ${ks.map(k=>{const gs=by[k].sort((a,b)=>a.patente.localeCompare(b.patente)||a.tipo.localeCompare(b.tipo));const g1=sum(gs.filter(g=>g.tipo==='GNC'),'importe'),n1=sum(gs.filter(g=>g.tipo!=='GNC'),'importe');
-    return `<tr class="grp"><td class="${k[0]==='('?'neg':''}">${esc(k)}</td><td></td><td></td><td class="n">${sum(gs,'cargas')}</td><td class="n">${fn(sum(gs,'litros'),1)}</td><td class="n">${fmz(g1)}</td><td class="n">${fmz(n1)}</td><td></td></tr>`+
-    gs.map(g=>{const refs=g.refs||[];const allLiq=refs.length&&refs.every(r=>D.nLiq[r]);const someLiq=refs.some(r=>D.nLiq[r]);
-      return `<tr><td></td><td>${esc(g.patente)}</td><td><span class="chip ${g.tipo==='GNC'?'b':''}">${g.tipo}</span></td><td class="n">${g.cargas}</td><td class="n">${fn(g.litros,1)}</td><td class="n">${g.tipo==='GNC'?fm(g.importe):''}</td><td class="n">${g.tipo!=='GNC'?fm(g.importe):''}</td><td>${hist?'<span class="chip g">Liquidado (histórico)</span>':allLiq?'<span class="chip g">Liquidado</span>':someLiq||(g.liq&&g.liq.length)?`<span class="chip g">Liquidado</span>${someLiq&&!allLiq?' <span class="chip w">parcial</span>':''}`:'<span class="chip w">Pendiente</span>'}</td></tr>`}).join('')}).join('')||'<tr><td colspan="8" class="empty">Sin cargas en esta quincena.</td></tr>'}
-  </tbody></table></div></div>`;
+    const empOpen=openEmp.has(k);
+    return `<tr class="grp"><td class="${k[0]==='('?'neg':''}"><b>${esc(k)}</b>${more('naftaEmp',empOpen,k)}<div class="subt">Subtotal · ${gs.length} patente(s)</div></td><td></td><td></td><td class="n">${sum(gs,'cargas')}</td><td class="n">${fn(sum(gs,'litros'),1)}</td><td class="n">${fmz(g1)}</td><td class="n">${fmz(n1)}</td><td></td></tr>`+
+    (empOpen?gs.map(g=>{const dk=k+'|'+g.patente+'|'+g.tipo;const detOpen=openDet.has(dk);const refs=g.refs||[];
+      return `<tr><td></td><td>${esc(g.patente)}${refs.length?more('naftaDet',detOpen,dk):''}</td><td><span class="chip ${g.tipo==='GNC'?'b':''}">${g.tipo}</span></td><td class="n">${g.cargas}</td><td class="n">${fn(g.litros,1)}</td><td class="n">${g.tipo==='GNC'?fm(g.importe):''}</td><td class="n">${g.tipo!=='GNC'?fm(g.importe):''}</td><td>${stChip(g)}</td></tr>`+
+      (detOpen?refs.map(ref=>{const r=naftaRaw(ref);if(!r)return '';const liq=D.nLiq[ref];
+        return `<tr class="naf-line"><td colspan="3"><span class="mut small">${fD(r[0])}${r[1]?' · '+esc(String(r[1])):''}${r[12]?' · '+esc(String(r[12])):''}${r[6]?' · '+esc(String(r[6])):''}</span></td><td class="n">1</td><td class="n">${fn(+r[9]||0,1)}</td><td class="n">${tipoComb(r[6])==='GNC'?fm(+r[10]||0):''}</td><td class="n">${tipoComb(r[6])!=='GNC'?fm(+r[10]||0):''}</td><td>${liq?`<span class="chip g">Liquidado · ${pLabel(liq)}</span>`:'<span class="chip w">Pendiente</span>'}</td></tr>`}).join(''):'')}).join(''):'')}).join('')||'<tr><td colspan="8" class="empty">Sin cargas en esta quincena.</td></tr>'}
+  </tbody></table></div><p class="legend">La fila azulada es el <b>subtotal por empresa</b>. Usá <b>Más información</b> para ver patentes y, debajo, cada carga (fecha, hora, estación).</p></div>`;
 }
 /* ================= 5 · LIQUIDACION ================= */
 function vLiq(){
@@ -1051,6 +1059,8 @@ document.addEventListener('click',e=>{
         if(c.adelantoConvertidoId){const a=S.adel[c.adelantoConvertidoId];if(a&&a.cuotas.every(q=>!D.cuotaLiq[a.id+'#'+q.n])){delete S.adel[a.id];persist('adel/'+a.id,null)}}
         delete S.liq[UI.p+'|'+UI.det];delLiq(c);toast('Liquidación reabierta')},'Reabrir');break}
     case 'toggleVhList':UI.vhList=!UI.vhList;render();break;
+    case 'naftaEmp':{const s=UI.naftaOpen||(UI.naftaOpen=new Set());s.has(k)?s.delete(k):s.add(k);render();break}
+    case 'naftaDet':{const s=UI.naftaDet||(UI.naftaDet=new Set());s.has(k)?s.delete(k):s.add(k);render();break}
     case 'newCuadro':newCuadroForm();break;
     case 'editVh':vhForm(S.valores.find(v=>v.id===id));break;
     case 'delVh':confirmBox('Eliminar valor','¿Eliminar este registro?',()=>{S.valores=S.valores.filter(v=>v.id!==id);saveCfg('valores')},'Eliminar');break;
