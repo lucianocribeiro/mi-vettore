@@ -251,6 +251,23 @@ const pLabel=p=>{const [y,m,h]=p.split('-');return `${h==1?'1ra':'2da'} ${MES[+m
 const pStart=p=>{const [y,m,h]=p.split('-');return `${y}-${m}-${h==1?'01':'16'}`};
 const pEnd=p=>{const [y,m,h]=p.split('-');return h==1?`${y}-${m}-15`:`${y}-${m}-${pad(new Date(+y,+m,0).getDate())}`};
 const pNext=(p,n=1)=>{let [y,m,h]=p.split('-').map(Number);for(let i=0;i<n;i++){if(h===1)h=2;else{h=1;m++;if(m>12){m=1;y++}}}return `${y}-${pad(m)}-${h}`};
+/** Solo períodos de meses ya cerrados (no mes actual ni futuros). */
+const ymOf=p=>String(p).slice(0,7);
+const ymNow=()=>today().slice(0,7);
+const isLiqPeriodAllowed=p=>ymOf(p)<ymNow();
+const lastLiqPeriod=()=>{const [y,m]=ymNow().split('-').map(Number);let py=y,pm=m-1;if(pm<1){pm=12;py--}return `${py}-${pad(pm)}-2`};
+const clampLiqPeriod=p=>isLiqPeriodAllowed(p)?p:lastLiqPeriod();
+function liqYearOptions(selY){
+  const maxY=+lastLiqPeriod().split('-')[0];
+  const ys=[];for(let y=2026;y<=maxY;y++)ys.push(y);
+  if(!ys.includes(+selY))ys.push(+selY);
+  return [...new Set(ys)].sort().map(v=>`<option value="${v}" ${v==selY?'selected':''}>${v}</option>`).join('');
+}
+function liqMonthOptions(y,selM){
+  const [my,mm]=lastLiqPeriod().split('-').map(Number);
+  const maxM=+y<my?12:(+y>my?0:mm);
+  return MESL.map((l,i)=>{const mv=pad(i+1);if(+mv>maxM)return '';return `<option value="${mv}" ${mv===selM?'selected':''}>${l}</option>`}).join('');
+}
 const PERIODS=(()=>{const o=[];let p='2026-01-1';while(p<='2027-12-2'){o.push(p);p=pNext(p)}return o})();
 const fD=f=>f?f.split('-').reverse().join('/'):'';
 const pRange=p=>`${fD(pStart(p))} al ${fD(pEnd(p))}`;
@@ -779,6 +796,7 @@ function naftaPer(p,pers){
 }
 /* ================= 5 · LIQUIDACION ================= */
 function vLiq(){
+  UI.p=clampLiqPeriod(UI.p);
   const p=UI.p;if(UI.det)return vDet();
   const [y,m,h]=p.split('-');
   const {list,sinDueno}=preview(p);const s=norm(UI.search);
@@ -788,10 +806,10 @@ function vLiq(){
   const shown=list.filter(r=>!s||norm(r.empresa).includes(s));
   const T=f=>sum(shown,f);
   return `<div class="card"><div class="ch"><h3>Paso 0 · Período a liquidar</h3>
-    <select data-a="pp" data-f="y" data-ch="1">${[2026,2027].map(v=>`<option ${v==y?'selected':''}>${v}</option>`).join('')}</select>
-    <select data-a="pp" data-f="m" data-ch="1">${MESL.map((l,i)=>`<option value="${pad(i+1)}" ${pad(i+1)===m?'selected':''}>${l}</option>`).join('')}</select>
+    <select data-a="pp" data-f="y" data-ch="1">${liqYearOptions(y)}</select>
+    <select data-a="pp" data-f="m" data-ch="1">${liqMonthOptions(y,m)}</select>
     <select data-a="pp" data-f="h" data-ch="1"><option value="1" ${h==1?'selected':''}>1ra quincena (1 al 15)</option><option value="2" ${h==2?'selected':''}>2da quincena (16 a fin de mes)</option></select>
-    <b style="margin-left:6px">${pLabel(p)}</b></div>
+    <b style="margin-left:6px">${pLabel(p)}</b><span class="mut small" style="margin-left:8px">Solo meses anteriores (no el mes en curso)</span></div>
    <div class="cb"><div class="status">
     <div class="it">${fc?'<span class="chip g">✓</span>':'<span class="chip r">✗</span>'} Facturación: ${fc?`${fc} empresas`:'sin cargar'} ${fc||hist?'':'<a class="lnk" data-a="mod" data-k="fact">cargar</a>'}</div>
     <div class="it">${hist||nfC?'<span class="chip g">✓</span>':'<span class="chip w">!</span>'} Nafta: ${hist?'histórico':nfC?`${fn(nfC)} cargas pendientes imputadas hasta este período${nfAnt?` (incluye ${nfAnt} grupos de períodos anteriores)`:''}`:'sin cargas imputadas (se puede liquidar igual)'} ${hist?'':'<a class="lnk" data-a="mod" data-k="nafta">subir</a>'}</div>
@@ -1119,7 +1137,7 @@ document.addEventListener('change',e=>{
   switch(a){
     case 'adelT':UI.adelT=el.value;break;
     case 'factP':UI.factP=el.value;break;
-    case 'pp':{const [y,m,h]=UI.p.split('-');const v={y,m,h};v[el.dataset.f]=el.value;UI.p=`${v.y}-${v.m}-${v.h}`;UI.sel=new Set();break}
+    case 'pp':{const [y,m,h]=UI.p.split('-');const v={y,m,h};v[el.dataset.f]=el.value;UI.p=clampLiqPeriod(`${v.y}-${pad(+v.m)}-${v.h}`);UI.sel=new Set();break}
     case 'showAll':UI.showAll=el.checked;break;
     case 'selRow':el.checked?UI.sel.add(el.dataset.k):UI.sel.delete(el.dataset.k);break;
     case 'selAll':{const {list}=preview(UI.p);UI.sel=el.checked?new Set(list.filter(r=>!r.closed&&r.saldo>=0).map(r=>r.k)):new Set();break}
