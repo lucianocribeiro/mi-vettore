@@ -12,6 +12,7 @@ export const LIQ_MODS = [
   { slug: "pago", mod: "pago", label: "Pago" },
   { slug: "panel", mod: "panel", label: "Panel de control" },
   { slug: "valores-hora", mod: "vh", label: "Valores hora" },
+  { slug: "catalogos", mod: "cat", label: "Catálogos" },
 ] as const;
 
 export type LiqSlug = (typeof LIQ_MODS)[number]["slug"];

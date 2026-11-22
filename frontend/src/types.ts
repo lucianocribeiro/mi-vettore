@@ -257,21 +257,25 @@ export type Cliente = {
   contacto: string | null;
 };
 
-export type TipoTransferenciaEmpresa = "Honorarios" | "Haberes" | "Clasica";
-
-export const TIPOS_TRANSFERENCIA_EMPRESA: TipoTransferenciaEmpresa[] = [
+/** Defaults si aún no hay catálogo guardado en Liquidaciones → Catálogos. */
+export const TIPOS_TRANSFERENCIA_EMPRESA_DEFAULT = [
   "Honorarios",
   "Haberes",
   "Clasica",
-];
+] as const;
 
-/** Divisiones usadas en liquidaciones / valor hora. */
-export const DIVISIONES_FACTURACION = [
+export const DIVISIONES_FACTURACION_DEFAULT = [
   "Frio",
   "Frio Low",
   "Seco",
   "Seco Low",
 ] as const;
+
+/** @deprecated usar catálogo dinámico; se mantiene como alias del default. */
+export const TIPOS_TRANSFERENCIA_EMPRESA = [
+  ...TIPOS_TRANSFERENCIA_EMPRESA_DEFAULT,
+];
+export const DIVISIONES_FACTURACION = [...DIVISIONES_FACTURACION_DEFAULT];
 
 export type Empresa = {
   id: string;

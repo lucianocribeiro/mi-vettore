@@ -19,15 +19,13 @@ import { authenticate, authorize, type AuthedRequest } from "../middleware/auth.
 const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
 
-const TIPOS_TRANSFERENCIA = new Set(["Honorarios", "Haberes", "Clasica"]);
-
 function normalizeTipoTransferencia(raw: unknown): string | null {
   if (raw === undefined || raw === null || raw === "") return null;
-  const v = String(raw).trim();
+  const v = String(raw).trim().slice(0, 60);
+  if (!v) return null;
   // Aceptar "Clásica" con tilde y mapear a clave sin tilde.
   if (v === "Clásica" || v.toLowerCase() === "clasica") return "Clasica";
-  if (TIPOS_TRANSFERENCIA.has(v)) return v;
-  return null;
+  return v;
 }
 
 /** División / valor hora / transferencia / CBU: solo ops internos. La empresa no los ve. */

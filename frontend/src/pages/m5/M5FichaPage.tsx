@@ -28,10 +28,10 @@ import {
   canWriteMaster,
   currentAsignacion,
   currentAsignaciones,
-  DIVISIONES_FACTURACION,
+  DIVISIONES_FACTURACION_DEFAULT,
   formatDate,
   isInternalOps,
-  TIPOS_TRANSFERENCIA_EMPRESA,
+  TIPOS_TRANSFERENCIA_EMPRESA_DEFAULT,
   type Camioneta,
   type Chofer,
   type Empresa,
@@ -370,6 +370,12 @@ export function M5FichaPage() {
   const [fCbuAlias, setFCbuAlias] = useState("");
   const [fDivisionFacturacion, setFDivisionFacturacion] = useState("");
   const [fTipoTransferencia, setFTipoTransferencia] = useState("");
+  const [catDivisiones, setCatDivisiones] = useState<string[]>([
+    ...DIVISIONES_FACTURACION_DEFAULT,
+  ]);
+  const [catTiposTransferencia, setCatTiposTransferencia] = useState<string[]>([
+    ...TIPOS_TRANSFERENCIA_EMPRESA_DEFAULT,
+  ]);
   const [fPatente, setFPatente] = useState("");
   const [fMarca, setFMarca] = useState("");
   const [fModelo, setFModelo] = useState("");
@@ -518,7 +524,7 @@ export function M5FichaPage() {
     setLoading(true);
     setError(null);
     try {
-      const [cami, chof, emp, usu, tServ, marcas, tall, tallMeta, eqFrio] =
+      const [cami, chof, emp, usu, tServ, marcas, tall, tallMeta, eqFrio, cat] =
         await Promise.all([
           apiFetch<Camioneta[]>(
             canEdit ? "/api/camionetas?incluirInactivas=1" : "/api/camionetas",
@@ -545,6 +551,14 @@ export function M5FichaPage() {
           apiFetch<EquipoFrio[]>("/api/equipos-frio", {}, token).catch(
             () => [] as EquipoFrio[]
           ),
+          apiFetch<{ divisiones?: string[]; tiposTransferencia?: string[] }>(
+            "/api/liquidaciones/catalogos",
+            {},
+            token
+          ).catch(() => ({
+            divisiones: [...DIVISIONES_FACTURACION_DEFAULT],
+            tiposTransferencia: [...TIPOS_TRANSFERENCIA_EMPRESA_DEFAULT],
+          })),
         ]);
       setEquiposFrio(Array.isArray(eqFrio) ? eqFrio : []);
       setCamionetas(Array.isArray(cami) ? cami : []);
@@ -559,6 +573,12 @@ export function M5FichaPage() {
           ? tallMeta.tipos
           : (Object.keys(TIPO_TALLER_LABEL) as TipoTaller[])
       );
+      if (Array.isArray(cat.divisiones) && cat.divisiones.length) {
+        setCatDivisiones(cat.divisiones);
+      }
+      if (Array.isArray(cat.tiposTransferencia) && cat.tiposTransferencia.length) {
+        setCatTiposTransferencia(cat.tiposTransferencia);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cargar datos");
     } finally {
@@ -2917,23 +2937,21 @@ export function M5FichaPage() {
                   onChange={(e) => setFDivisionFacturacion(e.target.value)}
                 >
                   <option value="">— Sin división —</option>
-                  {DIVISIONES_FACTURACION.map((d) => (
+                  {catDivisiones.map((d) => (
                     <option key={d} value={d}>
                       {d}
                     </option>
                   ))}
                   {fDivisionFacturacion &&
-                    !(DIVISIONES_FACTURACION as readonly string[]).includes(
-                      fDivisionFacturacion
-                    ) && (
+                    !catDivisiones.includes(fDivisionFacturacion) && (
                       <option value={fDivisionFacturacion}>
                         {fDivisionFacturacion}
                       </option>
                     )}
                 </select>
                 <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                  La empresa de transporte no ve el nombre ni el valor de la
-                  división al entrar a la app.
+                  Listado editable en Liquidaciones → Catálogos. La empresa no
+                  ve el nombre ni el valor de la división al entrar a la app.
                 </p>
               </Field>
               <Field label="Tipo de transferencia">
@@ -2943,11 +2961,19 @@ export function M5FichaPage() {
                   onChange={(e) => setFTipoTransferencia(e.target.value)}
                 >
                   <option value="">— Sin tipo —</option>
-                  {TIPOS_TRANSFERENCIA_EMPRESA.map((t) => (
+                  {catTiposTransferencia.map((t) => (
                     <option key={t} value={t}>
                       {t === "Clasica" ? "Clásica" : t}
                     </option>
                   ))}
+                  {fTipoTransferencia &&
+                    !catTiposTransferencia.includes(fTipoTransferencia) && (
+                      <option value={fTipoTransferencia}>
+                        {fTipoTransferencia === "Clasica"
+                          ? "Clásica"
+                          : fTipoTransferencia}
+                      </option>
+                    )}
                 </select>
               </Field>
               <Field label="Módulos">

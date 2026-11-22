@@ -94,7 +94,10 @@ const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','di
 const MESL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const TIPOS=['Adelanto','Gastos camioneta','Habilitaciones','Seguros','Taller'];
 const NHDR=['FECHA','HORA','UNIDAD','PLACA','TARJETA','MONEDERO','PRODUCTO/SERVICIO','TRANSACCIÓN','PRECIO LTS','LITROS','M.N.','NETO','ESTACIÓN','ODÓMETRO'];
-const MODS=[['adel','','Adelantos'],['prest','','Préstamos'],['fact','','Facturación'],['nafta','','Nafta'],['liq','','Liquidación'],['pago','','Pago'],['panel','','Panel de control'],['vh','','Valores hora']];
+const MODS=[['adel','','Adelantos'],['prest','','Préstamos'],['fact','','Facturación'],['nafta','','Nafta'],['liq','','Liquidación'],['pago','','Pago'],['panel','','Panel de control'],['vh','','Valores hora'],['cat','','Catálogos']];
+const CAT_DIV_DEFAULT=['Frio','Frio Low','Seco','Seco Low'];
+const CAT_TIPO_DEFAULT=['Honorarios','Haberes','Clasica'];
+function labelTipoCat(t){return t==='Clasica'?'Clásica':t}
 const norm=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 const slug=k=>k.replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'x';
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -124,7 +127,7 @@ let S,D,NM={},UI={mod:'liq',p:B.PEND,det:null,sel:new Set(),ov:{},search:'',adel
 try{UI.role=localStorage.getItem('vt_role')||'operador'}catch(e){}
 UI.upFact=B.PEND;UI.upNafta=B.PEND;
 function baseState(){
-  const s={empresas:B.empresas.map(e=>({...e})),valores:B.valores.map((v,i)=>({id:'v'+i,...v})),tipos:TIPOS.map(n=>({nombre:n,activo:true})),adel:{},prest:{},tal:{},fact:{},factLog:{},nhist:{},nup:{},liq:{}};
+  const s={empresas:B.empresas.map(e=>({...e})),valores:B.valores.map((v,i)=>({id:'v'+i,...v})),tipos:TIPOS.map(n=>({nombre:n,activo:true})),catalogos:{divisiones:CAT_DIV_DEFAULT.slice(),tiposTransferencia:CAT_TIPO_DEFAULT.slice()},adel:{},prest:{},tal:{},fact:{},factLog:{},nhist:{},nup:{},liq:{}};
   ALLADEL.forEach(a=>s.adel[a.id]=JSON.parse(JSON.stringify(a)));
   B.prestamos.forEach(l=>s.prest[l.id]={...l,concepto:l.concepto+(l.desc?' – '+l.desc:''),desc:''});
   
@@ -137,7 +140,7 @@ const EI=()=>{if(!EI.c){EI.c={};S.empresas.forEach(e=>EI.c[norm(e.nombre)]=e)}re
 const canon=n=>{const e=EI()[norm(n)];return e?e.nombre:String(n).trim()};
 function valorHora(div,f){const c=S.valores.filter(v=>v.division===div&&(!v.desde||v.desde<=f)&&(!v.hasta||v.hasta>=f)).sort((a,b)=>(b.desde||'').localeCompare(a.desde||''));return c[0]?+c[0].valor:0}
 const vhEmp=(k,f)=>{const e=EI()[k];return e?valorHora(e.division,f):0};
-const divisiones=()=>[...new Set(S.valores.map(v=>v.division).concat(S.empresas.map(e=>e.division)).filter(Boolean))].sort();
+const divisiones=()=>[...new Set((S.catalogos?.divisiones||[]).concat(S.valores.map(v=>v.division)).concat(S.empresas.map(e=>e.division)).filter(Boolean))].sort();
 function ownerOf(pat,f){const p=B.patentes.find(p=>p.patente===pat&&(!p.desde||p.desde<=f)&&(!p.hasta||p.hasta>=f));return p?p.empresa:''}
 const tipoComb=prod=>/GAS NATURAL|GNC/i.test(String(prod||''))?'GNC':'Nafta';
 
@@ -269,7 +272,16 @@ function setSt(){const el=document.getElementById('saveSt');if(el)el.innerHTML=d
   const r=document.getElementById('role');if(r){if(window.__VT_ROLE_LOCKED__){r.setAttribute('data-locked','1');r.innerHTML='';}else{r.removeAttribute('data-locked');r.innerHTML=[['operador','Operador'],['admin','Administrador']].map(([k,l])=>`<button class="${UI.role===k?'on':''}" data-a="role" data-k="${k}">${l}</button>`).join('')}}}
 function persist(path,data){if(!DB)return;const had=path in latest;latest[path]=data;if(had)return;pending++;setSt();
   timers[path]=setTimeout(()=>{const d=latest[path];delete latest[path];chains[path]=(chains[path]||Promise.resolve()).then(()=>d===null?DB.doc(path).delete():DB.doc(path).set(JSON.parse(JSON.stringify(d)))).catch(e=>toast('No se pudo guardar ('+(e&&e.code||'error')+')')).finally(()=>{pending=Math.max(0,pending-1);setSt()})},300)}
-const saveCfg=k=>persist('cfg/'+k,k==='divisiones'?{map:Object.fromEntries(S.empresas.map(e=>[norm(e.nombre),e.division]))}:k==='tipos'?{items:S.tipos}:{items:S.valores});
+const saveCfg=k=>persist('cfg/'+k,k==='divisiones'?{map:Object.fromEntries(S.empresas.map(e=>[norm(e.nombre),e.division]))}:k==='tipos'?{items:S.tipos}:k==='catalogos'?{divisiones:S.catalogos.divisiones,tiposTransferencia:S.catalogos.tiposTransferencia}:{items:S.valores});
+async function saveCatalogosApi(renombresDivision,renombresTipo){
+  try{
+    const token=(function(){try{return localStorage.getItem('mi-vettore-token')||''}catch(e){return ''}})();
+    if(!token){saveCfg('catalogos');return}
+    const res=await fetch('/api/liquidaciones/catalogos',{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({divisiones:S.catalogos.divisiones,tiposTransferencia:S.catalogos.tiposTransferencia,renombresDivision:renombresDivision||[],renombresTipo:renombresTipo||[]})});
+    if(!res.ok)throw new Error('fail');
+    saveCfg('catalogos');
+  }catch(e){saveCfg('catalogos');toast('Catálogo guardado localmente (API no disponible)')}
+}
 const saveAdel=a=>persist('adel/'+a.id,a);
 const savePrest=l=>persist('prest/'+l.id,l);
 const saveFact=p=>persist('fact/'+p,{rows:S.fact[p]||[],log:S.factLog[p]||[]});
@@ -308,14 +320,23 @@ async function syncEmpresasAbm(){
     // No mezclar seed/históricas inactivas: el desplegable (Adelantos, etc.) es solo ABM activo.
     merged.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es',{sensitivity:'base'}));
     S.empresas=merged;EI.c=null;
+    // Catálogos desde API (fuente de verdad para ABM empresas).
+    try{
+      const cres=await fetch('/api/liquidaciones/catalogos',{headers:{Authorization:'Bearer '+token}});
+      if(cres.ok){const c=await cres.json();
+        if(Array.isArray(c.divisiones)&&c.divisiones.length)S.catalogos.divisiones=c.divisiones.map(String);
+        if(Array.isArray(c.tiposTransferencia)&&c.tiposTransferencia.length)S.catalogos.tiposTransferencia=c.tiposTransferencia.map(String);
+      }
+    }catch(e2){}
   }catch(e){}
 }
 async function loadDB(){
   let db=null;try{if(window.claude&&claude.use)db=await Promise.race([claude.use('db'),new Promise(r=>setTimeout(()=>r(null),10000))])}catch(e){}
   if(!db){dbState='off';await syncEmpresasAbm();rebuild();render();return}
   try{const g=c=>db.collection(c).limit(1000).get();
-    const [cv,cd,ad,pr,fa,nm,nf,lq,ct]=await Promise.race([Promise.all([db.doc('cfg/valores').get(),db.doc('cfg/divisiones').get(),g('adel'),g('prest'),g('fact'),g('nmeta'),g('nafta'),g('liq'),db.doc('cfg/tipos').get()]),new Promise((_,j)=>setTimeout(()=>j({code:'timeout'}),12000))]);
+    const [cv,cd,ad,pr,fa,nm,nf,lq,ct,cc]=await Promise.race([Promise.all([db.doc('cfg/valores').get(),db.doc('cfg/divisiones').get(),g('adel'),g('prest'),g('fact'),g('nmeta'),g('nafta'),g('liq'),db.doc('cfg/tipos').get(),db.doc('cfg/catalogos').get()]),new Promise((_,j)=>setTimeout(()=>j({code:'timeout'}),12000))]);
     if(cv.exists)S.valores=cv.data().items.map(x=>({...x}));if(ct.exists){S.tipos=ct.data().items.map(x=>({...x}));if(!S.tipos.some(t=>t.nombre==='Taller'))S.tipos.push({nombre:'Taller',activo:true})}
+    if(cc&&cc.exists){const c=cc.data()||{};if(Array.isArray(c.divisiones)&&c.divisiones.length)S.catalogos.divisiones=c.divisiones.map(String);if(Array.isArray(c.tiposTransferencia)&&c.tiposTransferencia.length)S.catalogos.tiposTransferencia=c.tiposTransferencia.map(String)}
     // cfg/divisiones es legado: solo rellena huecos si el ABM aún no tiene división.
     if(cd.exists){const m=cd.data().map;S.empresas.forEach(e=>{if(!e.division&&m[norm(e.nombre)]!==undefined)e.division=m[norm(e.nombre)]})}
     ad.docs.forEach(d=>S.adel[d.id]=JSON.parse(JSON.stringify(d.data())));
@@ -333,7 +354,7 @@ async function loadDB(){
   rebuild();render();
 }
 async function resetAll(){
-  if(DB){try{for(const c of ['adel','prest','fact','nmeta','nafta','liq']){const s=await DB.collection(c).limit(1000).get();for(const d of s.docs)await DB.doc(c+'/'+d.id).delete()}for(const k of ['valores','divisiones','tipos'])await DB.doc('cfg/'+k).delete()}catch(e){toast('Error al borrar datos guardados')}}
+  if(DB){try{for(const c of ['adel','prest','fact','nmeta','nafta','liq']){const s=await DB.collection(c).limit(1000).get();for(const d of s.docs)await DB.doc(c+'/'+d.id).delete()}for(const k of ['valores','divisiones','tipos','catalogos'])await DB.doc('cfg/'+k).delete()}catch(e){toast('Error al borrar datos guardados')}}
   S=baseState();UI.det=null;UI.sel=new Set();UI.ov={};rebuild();closeDrawer();render();toast('Datos de ejemplo restaurados')}
 
 /* ================= LIQUIDATION CALC ================= */
@@ -452,7 +473,7 @@ function render(){
   // Tabs ocultos: la navegación va por el menú lateral de Mi Vettore.
   const tabs=document.getElementById('tabs');if(tabs)tabs.innerHTML='';
   const sn=document.getElementById('subnav');if(sn)sn.innerHTML='';
-  document.getElementById('view').innerHTML={adel:vAdel,prest:vPrest,fact:vFact,nafta:vNafta,liq:vLiq,pago:vPago,panel:vPanel,vh:vVH}[UI.mod]();
+  document.getElementById('view').innerHTML={adel:vAdel,prest:vPrest,fact:vFact,nafta:vNafta,liq:vLiq,pago:vPago,panel:vPanel,vh:vVH,cat:vCat}[UI.mod]();
   setSt();if(UI.drawer)renderDrawer();
   requestAnimationFrame(()=>{notifyParentHeight();setTimeout(notifyParentHeight,50)});
 }
@@ -750,6 +771,56 @@ function renderDrawer(){
   Dw.classList.add('on');document.getElementById('ov').classList.add('on')}
 function closeDrawer(){UI.drawer=null;document.getElementById('drawer').classList.remove('on');document.getElementById('ov').classList.remove('on')}
 
+/* ================= CATALOGOS (división + tipo transferencia) ================= */
+function vCat(){
+  const divs=S.catalogos.divisiones||[],tipos=S.catalogos.tiposTransferencia||[];
+  const usoDiv=d=>S.empresas.filter(e=>e.division===d).length;
+  const usoTipo=t=>S.empresas.filter(e=>(e.tipoTransferencia||'')===(t==='Clasica'?'Clásica':t)||e.tipoTransferencia===t).length;
+  return `<div class="alert info">Estos listados alimentan el desplegable del <b>ABM Empresas</b> (división para facturación y tipo de transferencia) y la columna de <b>Pago</b>. La empresa de transporte no ve la división al entrar a la app.</div>
+  <div class="card"><div class="ch"><h3>Divisiones para facturación</h3><div class="sp"></div><button class="btn primary" data-a="catDivForm">Editar listado</button></div>
+   <div class="tw" style="border:0;border-radius:0"><table><thead><tr><th>División</th><th class="n">Empresas</th></tr></thead><tbody>
+   ${divs.map(d=>`<tr><td class="name">${esc(d)}</td><td class="n">${usoDiv(d)}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">Sin divisiones.</td></tr>'}
+   </tbody></table></div></div>
+  <div class="card"><div class="ch"><h3>Tipos de transferencia</h3><div class="sp"></div><button class="btn primary" data-a="catTipoForm">Editar listado</button></div>
+   <div class="tw" style="border:0;border-radius:0"><table><thead><tr><th>Tipo</th><th class="n">Empresas</th></tr></thead><tbody>
+   ${tipos.map(t=>`<tr><td class="name">${esc(labelTipoCat(t))}</td><td class="n">${usoTipo(t)}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">Sin tipos.</td></tr>'}
+   </tbody></table></div></div>
+  <p class="legend">Al renombrar un ítem se actualiza en las empresas del ABM que lo tenían. Al eliminar, dejá de ofrecerlo en altas nuevas; las fichas que ya lo tenían conservan el valor hasta que las edites.</p>`;
+}
+function catDivForm(){
+  const L=(S.catalogos.divisiones||[]).slice();
+  modal('Divisiones para facturación',`<div class="full"><div class="hint" style="margin-bottom:8px">Renombrar actualiza las empresas del ABM. Agregá filas nuevas abajo.</div><table><thead><tr><th>Nombre</th></tr></thead><tbody>
+   ${L.map((d,i)=>`<tr><td><input type="text" name="d${i}" value="${esc(d)}" style="width:100%"></td></tr>`).join('')}
+   <tr><td><input type="text" name="dnew" placeholder="+ Nueva división" style="width:100%"></td></tr></tbody></table></div>`,
+  fd=>{
+    const names=L.map((_,i)=>(fd['d'+i]||'').trim()).filter(Boolean);
+    const neu=(fd.dnew||'').trim();if(neu)names.push(neu);
+    if(!names.length)return 'Indicá al menos una división.';
+    if(new Set(names.map(norm)).size!==names.length)return 'Hay divisiones repetidas.';
+    const ren=[];L.forEach((old,i)=>{const nn=(fd['d'+i]||'').trim();if(nn&&nn!==old)ren.push({from:old,to:nn})});
+    S.catalogos.divisiones=names;
+    toast('Divisiones actualizadas');
+    saveCatalogosApi(ren,[]);
+  },'Guardar',true);
+}
+function catTipoForm(){
+  const L=(S.catalogos.tiposTransferencia||[]).slice();
+  modal('Tipos de transferencia',`<div class="full"><div class="hint" style="margin-bottom:8px">Ej.: Honorarios, Haberes, Clásica. Renombrar actualiza las empresas del ABM.</div><table><thead><tr><th>Nombre</th></tr></thead><tbody>
+   ${L.map((t,i)=>`<tr><td><input type="text" name="t${i}" value="${esc(labelTipoCat(t))}" style="width:100%"></td></tr>`).join('')}
+   <tr><td><input type="text" name="tnew" placeholder="+ Nuevo tipo" style="width:100%"></td></tr></tbody></table></div>`,
+  fd=>{
+    const normT=v=>{const x=(v||'').trim();return x==='Clásica'||x.toLowerCase()==='clasica'?'Clasica':x};
+    const names=L.map((_,i)=>normT(fd['t'+i])).filter(Boolean);
+    const neu=normT(fd.tnew);if(neu)names.push(neu);
+    if(!names.length)return 'Indicá al menos un tipo.';
+    if(new Set(names.map(n=>n.toLowerCase())).size!==names.length)return 'Hay tipos repetidos.';
+    const ren=[];L.forEach((old,i)=>{const nn=normT(fd['t'+i]);if(nn&&nn!==old)ren.push({from:old,to:nn})});
+    S.catalogos.tiposTransferencia=names;
+    toast('Tipos actualizados');
+    saveCatalogosApi([],ren);
+  },'Guardar',true);
+}
+
 /* ================= VALORES HORA ================= */
 function cuadroVig(f){return divisiones().map(d=>{const c=S.valores.filter(v=>v.division===d&&(!v.desde||v.desde<=f)&&(!v.hasta||v.hasta>=f)).sort((a,b)=>(b.desde||'').localeCompare(a.desde||''))[0];return {d,v:c}})}
 function vVH(){
@@ -862,6 +933,8 @@ document.addEventListener('click',e=>{
     case 'pick':pickKind=el.dataset.kind;const fi=document.getElementById('fileIn');fi.value='';fi.click();break;
     case 'delNup':confirmBox('Borrar subida de nafta',`Se elimina la subida "${esc(S.nup[k].archivo)}" (${S.nup[k].rows.length} cargas imputadas a ${pLabel(S.nup[k].periodo)}). Solo un administrador puede hacerlo.`,()=>{delete S.nup[k];saveNup(k);toast('Subida borrada')},'Borrar');break;
     case 'tipos':tiposForm();break;
+    case 'catDivForm':catDivForm();break;
+    case 'catTipoForm':catTipoForm();break;
     case 'det':UI.det=k;render();scrollTo(0,0);break;
     case 'openDet':UI.det=[...UI.sel][0];render();scrollTo(0,0);break;
     case 'backPrev':UI.det=null;render();break;

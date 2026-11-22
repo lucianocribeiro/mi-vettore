@@ -121,6 +121,107 @@ router.get("/me", authenticate, async (req: AuthedRequest, res) => {
   });
 });
 
+const CATALOGOS_DEFAULT = {
+  divisiones: ["Frio", "Frio Low", "Seco", "Seco Low"],
+  tiposTransferencia: ["Honorarios", "Haberes", "Clasica"],
+};
+
+function normalizeCatalogoLista(raw: unknown, fallback: string[]): string[] {
+  const arr = Array.isArray(raw) ? raw : fallback;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const x of arr) {
+    const n = String(x ?? "").trim();
+    if (!n || n.length > 60) continue;
+    const k = n.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(n === "Clásica" ? "Clasica" : n);
+  }
+  return out.length ? out : [...fallback];
+}
+
+/** Catálogo editable: divisiones de facturación + tipos de transferencia. */
+router.get("/catalogos", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireOps(req, res)) return;
+    const row = await prisma.liquidacionDoc.findUnique({
+      where: { path: "cfg/catalogos" },
+    });
+    const data = (row?.data as Record<string, unknown> | null) || {};
+    res.json({
+      divisiones: normalizeCatalogoLista(
+        data.divisiones,
+        CATALOGOS_DEFAULT.divisiones
+      ),
+      tiposTransferencia: normalizeCatalogoLista(
+        data.tiposTransferencia,
+        CATALOGOS_DEFAULT.tiposTransferencia
+      ),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al leer catálogos" });
+  }
+});
+
+router.put("/catalogos", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireOps(req, res)) return;
+    const divisiones = normalizeCatalogoLista(
+      req.body?.divisiones,
+      CATALOGOS_DEFAULT.divisiones
+    );
+    const tiposTransferencia = normalizeCatalogoLista(
+      req.body?.tiposTransferencia,
+      CATALOGOS_DEFAULT.tiposTransferencia
+    );
+    const payload = { divisiones, tiposTransferencia };
+    await prisma.liquidacionDoc.upsert({
+      where: { path: "cfg/catalogos" },
+      create: {
+        path: "cfg/catalogos",
+        data: payload,
+        updatedById: req.user!.id,
+      },
+      update: {
+        data: payload,
+        updatedById: req.user!.id,
+      },
+    });
+    const renDiv = Array.isArray(req.body?.renombresDivision)
+      ? req.body.renombresDivision
+      : [];
+    for (const r of renDiv) {
+      const from = String(r?.from ?? "").trim();
+      const to = String(r?.to ?? "").trim();
+      if (!from || !to || from === to) continue;
+      await prisma.empresaTransporte.updateMany({
+        where: { divisionFacturacion: from },
+        data: { divisionFacturacion: to },
+      });
+    }
+    const renTipo = Array.isArray(req.body?.renombresTipo)
+      ? req.body.renombresTipo
+      : [];
+    for (const r of renTipo) {
+      let from = String(r?.from ?? "").trim();
+      let to = String(r?.to ?? "").trim();
+      if (from === "Clásica") from = "Clasica";
+      if (to === "Clásica") to = "Clasica";
+      if (!from || !to || from === to) continue;
+      await prisma.empresaTransporte.updateMany({
+        where: { tipoTransferencia: from },
+        data: { tipoTransferencia: to },
+      });
+    }
+    res.json(payload);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al guardar catálogos" });
+  }
+});
+
 /**
  * Empresas del ABM para liquidaciones / adelantos:
  * habilitadas + inhabilitadas (activo=true). NO inactivas (activo=false).

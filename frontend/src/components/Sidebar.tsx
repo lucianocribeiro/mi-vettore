@@ -159,6 +159,7 @@ const NAV: NavItem[] = [
       { to: "/liquidaciones/pago", label: "Pago" },
       { to: "/liquidaciones/panel", label: "Panel de control" },
       { to: "/liquidaciones/valores-hora", label: "Valores hora" },
+      { to: "/liquidaciones/catalogos", label: "Catálogos" },
     ],
   },
 ];
