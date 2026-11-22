@@ -247,7 +247,7 @@ const pad=n=>String(n).padStart(2,'0');
 const isoD=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const today=()=>isoD(new Date());
 const perOf=f=>{const [y,m,d]=f.split('-').map(Number);return `${y}-${pad(m)}-${d<16?1:2}`};
-const pLabel=p=>{const [y,m,h]=p.split('-');return `${h==1?'1ra':'2da'} ${MES[+m-1]} ${y}`};
+const pLabel=p=>{const [y,m,h]=p.split('-');return `${h==1?'1ra':'2da'} ${MES[+m-1]} ${String(y).slice(-2)}`};
 const pStart=p=>{const [y,m,h]=p.split('-');return `${y}-${m}-${h==1?'01':'16'}`};
 const pEnd=p=>{const [y,m,h]=p.split('-');return h==1?`${y}-${m}-15`:`${y}-${m}-${pad(new Date(+y,+m,0).getDate())}`};
 const pNext=(p,n=1)=>{let [y,m,h]=p.split('-').map(Number);for(let i=0;i<n;i++){if(h===1)h=2;else{h=1;m++;if(m>12){m=1;y++}}}return `${y}-${pad(m)}-${h}`};
@@ -740,7 +740,7 @@ function loanHist(l){const rs=Object.values(D.rec).filter(r=>r.prest.some(x=>x.i
 
 /* ================= 3 · FACTURACION ================= */
 const upBox=(kind,title,body)=>{const cur=kind==='fact'?UI.upFact:UI.upNafta;return `<div class="card" style="margin:0"><div class="cb">
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><b>${title}</b><div class="sp"></div><label class="small mut">Período que se carga</label><select data-a="upP" data-k="${kind}" data-ch="1" style="font-weight:600">${PERIODS.filter(p=>p>=B.PEND).map(p=>`<option value="${p}" ${p===cur?'selected':''}>${pLabel(p)} (${pRange(p)})</option>`).join('')}</select></div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><b>${title}</b><div class="sp"></div><label class="small mut">Período que se carga</label><select data-a="upP" data-k="${kind}" data-ch="1" style="font-weight:600">${PERIODS.filter(p=>p>=B.PEND).map(p=>`<option value="${p}" ${p===cur?'selected':''}>${pLabel(p)}</option>`).join('')}</select></div>
   <div class="drop" data-a="pick" data-kind="${kind}">Arrastrá o hacé clic para subir el archivo de <b>${pLabel(cur)}</b><br><span class="small">${body}</span></div></div></div>`};
 
 function vFact(){
@@ -748,7 +748,7 @@ function vFact(){
   const hist=[];Object.entries(S.factLog).forEach(([pp,l])=>l.forEach(x=>hist.push({p:pp,...x})));hist.sort((a,b)=>(b.ts||0)-(a.ts||0));
   return `<div class="grid2" style="margin-bottom:16px">${upBox('fact','Subir sábana de facturación','.xlsx / .csv · columnas <code>Empresa</code> <code># Transporte</code> <code>Importe</code> (sin fecha). Acumulable: si una empresa ya tiene facturación en el período, se avisa que se sobrescribe.')}
    <div class="card" style="margin:0"><div class="ch"><h3>Historial de subidas</h3><span class="mut small">${hist.length}</span></div><div style="max-height:150px;overflow:auto" class="cb">${hist.length?hist.map(x=>`<div class="small" style="margin-bottom:6px">• <b>${pLabel(x.p)}</b> · ${esc(x.archivo)} · ${x.fecha} · ${esc(x.usuario||'')} · ${esc(x.res)}</div>`).join(''):'<div class="small mut">Todavía no hay subidas desde el módulo (la historia ene–1ra oct viene del Excel).</div>'}</div></div></div>
-  <div class="toolbar"><span class="mut small">Período</span><select data-a="factP" data-ch="1">${PERIODS.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${(S.fact[x]||[]).length?' • '+(S.fact[x]||[]).length+' empresas':''}</option>`).join('')}</select><span class="mut small">${pRange(p)}</span></div>
+  <div class="toolbar"><span class="mut small">Período</span><select data-a="factP" data-ch="1">${PERIODS.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${(S.fact[x]||[]).length?' • '+(S.fact[x]||[]).length+' empresas':''}</option>`).join('')}</select></div>
   <div class="tw"><table><thead><tr><th>Empresa de transporte</th><th>División</th><th class="n">Valor hora</th><th class="n">Cant. de viajes (# Transporte)</th><th class="n">Cant. de horas</th><th class="n">Importe</th><th>Subida</th><th>Estado</th></tr></thead><tbody>
   ${rows.map(r=>`<tr><td class="name">${esc(r.empresa)}${r.abm?'':' <span class="chip w">no está en ABM</span>'}</td><td>${esc((EI()[r.k]||{}).division||'—')}</td><td class="n">${r.vh?fm(r.vh):'<span class="chip r">sin valor</span>'}</td><td class="n">${fn(r.viajes)}</td><td class="n">${r.vh?fn(r.horas,1):'—'}</td><td class="n"><b>${fm(r.importe)}</b></td><td class="mut small">${esc(r.archivo)}<div class="subt">${esc(r.cargado||'')}</div></td><td>${r.liq?'<span class="chip g">Liquidada</span>':'<span class="chip w">Pendiente</span>'}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">Sin facturación cargada para este período.</td></tr>'}
   </tbody><tfoot><tr><td>Total (${rows.length})</td><td></td><td></td><td class="n">${fn(sum(rows,'viajes'))}</td><td class="n">${fn(sum(rows,'horas'),1)}</td><td class="n">${fm(sum(rows,'importe'))}</td><td></td><td></td></tr></tfoot></table></div>`;
@@ -791,7 +791,7 @@ function vLiq(){
     <select data-a="pp" data-f="y" data-ch="1">${[2026,2027].map(v=>`<option ${v==y?'selected':''}>${v}</option>`).join('')}</select>
     <select data-a="pp" data-f="m" data-ch="1">${MESL.map((l,i)=>`<option value="${pad(i+1)}" ${pad(i+1)===m?'selected':''}>${l}</option>`).join('')}</select>
     <select data-a="pp" data-f="h" data-ch="1"><option value="1" ${h==1?'selected':''}>1ra quincena (1 al 15)</option><option value="2" ${h==2?'selected':''}>2da quincena (16 a fin de mes)</option></select>
-    <b style="margin-left:6px">${pLabel(p)}</b><span class="mut small">${pRange(p)}</span></div>
+    <b style="margin-left:6px">${pLabel(p)}</b></div>
    <div class="cb"><div class="status">
     <div class="it">${fc?'<span class="chip g">✓</span>':'<span class="chip r">✗</span>'} Facturación: ${fc?`${fc} empresas`:'sin cargar'} ${fc||hist?'':'<a class="lnk" data-a="mod" data-k="fact">cargar</a>'}</div>
     <div class="it">${hist||nfC?'<span class="chip g">✓</span>':'<span class="chip w">!</span>'} Nafta: ${hist?'histórico':nfC?`${fn(nfC)} cargas pendientes imputadas hasta este período${nfAnt?` (incluye ${nfAnt} grupos de períodos anteriores)`:''}`:'sin cargas imputadas (se puede liquidar igual)'} ${hist?'':'<a class="lnk" data-a="mod" data-k="nafta">subir</a>'}</div>
@@ -827,7 +827,7 @@ function vDet(){
   const sec=(t,tot,inner,sign='−')=>`<div class="secbox"><div class="sh"><span>${t}</span><span class="${sign?'ded':''}">${sign} ${fm(tot)}</span></div>${inner}</div>`;
   const tb=(cols,rows,empty)=>rows.length?`<table><thead><tr>${cols.map(x=>`<th class="${x[1]||''}">${x[0]}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`:`<div class="empty">${empty||'Sin registros.'}</div>`;
   const e=EI()[k]||{};
-  return `<div class="toolbar"><button class="btn sm" data-a="backPrev">← Previsualización ${pLabel(p)}</button><h2>${esc(r.empresa)}</h2><span class="mut small">${esc(e.division||'—')} · ${esc(e.tipoTransferencia||'—')} · Valor hora ${r.vh?fm(r.vh):'—'} · ${pRange(p)}</span><div class="sp"></div>${ro?estadoPago(r):''}</div>
+  return `<div class="toolbar"><button class="btn sm" data-a="backPrev">← Previsualización ${pLabel(p)}</button><h2>${esc(r.empresa)}</h2><span class="mut small">${esc(e.division||'—')} · ${esc(e.tipoTransferencia||'—')} · Valor hora ${r.vh?fm(r.vh):'—'}</span><div class="sp"></div>${ro?estadoPago(r):''}</div>
   ${ro?'':'<div class="alert info">Destildá los conceptos que no quieras descontar en esta liquidación: <b>quedan pendientes y pasan al período siguiente</b>.</div>'}
   <div class="grid2"><div>
    ${sec('Facturación',r.fact,tb([['Archivo'],['Viajes','n'],['Horas','n'],['Importe','n']],r.factRows.map(f=>`<tr><td>${esc(f.archivo||f.origen||'')}</td><td class="n">${fn(f.viajes)}</td><td class="n">${r.vh?fn(f.importe/r.vh,1):'—'}</td><td class="n">${fm(f.importe)}</td></tr>`),'Sin facturación en el período.'),'')}
@@ -901,7 +901,7 @@ function vPanel(){
 function renderDrawer(){
   const [p,k]=UI.drawer,r=closedRec(p,k),Dw=document.getElementById('drawer');if(!r){closeDrawer();return}
   const tb=(cols,rows)=>rows.length?`<table><thead><tr>${cols.map(c=>`<th class="${c[1]||''}">${c[0]}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`:'<div class="empty">Sin registros.</div>';
-  Dw.innerHTML=`<div class="dh"><div><h2>${esc(r.empresa)}</h2><div class="subt">${pLabel(p)} (${pRange(p)}) · Valor hora ${r.vh?fm(r.vh):'—'} · ${estadoPago(r)}</div></div><button class="x" data-a="closeDrawer">×</button></div><div class="db">
+  Dw.innerHTML=`<div class="dh"><div><h2>${esc(r.empresa)}</h2><div class="subt">${pLabel(p)} · Valor hora ${r.vh?fm(r.vh):'—'} · ${estadoPago(r)}</div></div><button class="x" data-a="closeDrawer">×</button></div><div class="db">
    <div class="sec"><div class="sh">Facturación <span>${fm(r.fact)}</span></div>${tb([['Archivo'],['Viajes','n'],['Importe','n']],r.factRows.map(f=>`<tr><td>${esc(f.archivo||'')}</td><td class="n">${fn(f.viajes)}</td><td class="n">${fm(f.importe)}</td></tr>`))}</div>
    <div class="sec"><div class="sh">Nafta <span class="ded">− ${fm(r.naftaT)}</span></div>${tb([['Patente'],['Tipo'],['Cargas','n'],['Importe','n']],r.nafta.map(n=>`<tr><td>${esc(n.patente)}</td><td>${n.tipo}</td><td class="n">${n.cargas}</td><td class="n">${fm(n.importe)}</td></tr>`))}</div>
    <div class="sec"><div class="sh">Adelantos <span class="ded">− ${fm(r.adelT)}</span></div>${tb([['Fecha'],['Tipo'],['Descripción'],['Cuota'],['Importe','n']],r.adel.map(a=>`<tr><td>${fD(a.fecha)}</td><td>${esc(a.tipo)}</td><td>${esc(a.desc)}</td><td>${a.n}/${a.de}</td><td class="n">${fm(a.importe)}</td></tr>`))}</div>
