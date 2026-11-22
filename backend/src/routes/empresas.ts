@@ -30,6 +30,21 @@ function normalizeTipoTransferencia(raw: unknown): string | null {
   return null;
 }
 
+/** División / valor hora / transferencia / CBU: solo ops internos. La empresa no los ve. */
+function sanitizeEmpresaParaExterno<T extends Record<string, unknown>>(row: T): T {
+  const {
+    divisionFacturacion: _d,
+    tipoTransferencia: _t,
+    cbuAlias: _c,
+    ...rest
+  } = row as T & {
+    divisionFacturacion?: unknown;
+    tipoTransferencia?: unknown;
+    cbuAlias?: unknown;
+  };
+  return rest as T;
+}
+
 router.get("/", authenticate, async (req: AuthedRequest, res) => {
   try {
     let scope: { id: string } | undefined;
@@ -48,6 +63,10 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
         unidades: { orderBy: { patente: "asc" }, select: { id: true, patente: true, estado: true } },
       },
     });
+    if (!isInternalOpsRole(req.user!.rol)) {
+      res.json(items.map((e) => sanitizeEmpresaParaExterno(e as unknown as Record<string, unknown>)));
+      return;
+    }
     res.json(items);
   } catch (err) {
     console.error(err);
@@ -95,7 +114,7 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
   }
 });
 
-router.get("/:id", authenticate, async (req, res) => {
+router.get("/:id", authenticate, async (req: AuthedRequest, res) => {
   try {
     const item = await prisma.empresaTransporte.findUnique({
       where: { id: req.params.id },
@@ -106,6 +125,21 @@ router.get("/:id", authenticate, async (req, res) => {
     });
     if (!item) {
       res.status(404).json({ error: "Empresa no encontrada" });
+      return;
+    }
+    const rol = req.user!.rol;
+    if (rol === Role.EMPRESA) {
+      const actor = await prisma.usuario.findUnique({
+        where: { id: req.user!.id },
+        select: { empresaId: true },
+      });
+      if (!actor?.empresaId || actor.empresaId !== item.id) {
+        res.status(403).json({ error: "Sin permiso" });
+        return;
+      }
+    }
+    if (!isInternalOpsRole(rol)) {
+      res.json(sanitizeEmpresaParaExterno(item as unknown as Record<string, unknown>));
       return;
     }
     res.json(item);

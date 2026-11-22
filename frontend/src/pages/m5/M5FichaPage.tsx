@@ -2931,6 +2931,10 @@ export function M5FichaPage() {
                       </option>
                     )}
                 </select>
+                <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                  La empresa de transporte no ve el nombre ni el valor de la
+                  división al entrar a la app.
+                </p>
               </Field>
               <Field label="Tipo de transferencia">
                 <select
