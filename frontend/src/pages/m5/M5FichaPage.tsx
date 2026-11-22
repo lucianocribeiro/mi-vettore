@@ -2405,12 +2405,24 @@ export function M5FichaPage() {
           </p>
         </div>
         <EntityTable
-          headers={["Empresa", "Estado", "Choferes", "Patentes", ""]}
+          headers={[
+            "Empresa",
+            "Estado",
+            "División",
+            "Tipo transf.",
+            "Choferes",
+            "Patentes",
+            "",
+          ]}
           rows={empresasFiltradas.map((e) => {
             const wa = whatsappDigits(e.contacto);
             const choferesEmp = (e.choferes ?? []).filter((c) => c.estado !== "INACTIVO");
             const unidadesEmp = (e.unidades ?? []).filter((u) => u.estado !== "INACTIVA");
             const estadoEmp = estadoEmpresa(e);
+            const tipoLabel =
+              e.tipoTransferencia === "Clasica"
+                ? "Clásica"
+                : e.tipoTransferencia || "—";
             return [
               <div key={`emp-${e.id}`} className="min-w-[11rem]">
                 <div className="font-medium text-[var(--vl-heading)]">{e.nombre}</div>
@@ -2422,6 +2434,12 @@ export function M5FichaPage() {
                 </div>
               </div>,
               <EstadoBadge key={`est-${e.id}`} estado={estadoEmp} />,
+              <span key={`div-${e.id}`} className="text-sm text-[var(--vl-text-muted)]">
+                {e.divisionFacturacion || "—"}
+              </span>,
+              <span key={`tt-${e.id}`} className="text-sm text-[var(--vl-text-muted)]">
+                {tipoLabel}
+              </span>,
               choferesEmp.length ? (
                 <ul key={`ch-${e.id}`} className="space-y-0.5">
                   {choferesEmp.map((c) => (
