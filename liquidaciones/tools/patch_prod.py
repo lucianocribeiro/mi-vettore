@@ -29,7 +29,11 @@ DB_ADAPTER = r"""
 /* ===== Mi Vettore: persistencia via /api/liquidaciones ===== */
 (function(){
   // Si se abre el embed a pantalla completa (F5 en URL vieja), volver a la app con menú.
-  try{if(window.top===window.self){location.replace('/liquidaciones'+location.search);return}}catch(e){}
+  try{if(window.top===window.self){
+    const q=new URLSearchParams(location.search);
+    const m=q.get('mod')||'adel';
+    const slug={adel:'adelantos',prest:'prestamos',fact:'facturacion',nafta:'nafta',liq:'liquidacion',pago:'pago',panel:'panel',vh:'valores-hora'}[m]||'adelantos';
+    location.replace('/liquidaciones/'+slug);return}}catch(e){}
   const TOKEN_KEY='mi-vettore-token';
   function token(){try{return localStorage.getItem(TOKEN_KEY)||''}catch(e){return ''}}
   async function api(method, url, body){
@@ -73,7 +77,7 @@ DB_ADAPTER = r"""
     };
     return null;
   }};
-  // Rol forzado desde la app (Administrador / Operaciones)
+  // Rol + submódulo forzados desde la app (Administrador / Operaciones)
   try{
     const q=new URLSearchParams(location.search);
     const forced=q.get('role');
@@ -82,7 +86,20 @@ DB_ADAPTER = r"""
       window.__VT_ROLE_LOCKED__=true;
       try{localStorage.setItem('vt_role',forced)}catch(e){}
     }
+    const m=q.get('mod');
+    if(m&&MODS.some(x=>x[0]===m))UI.mod=m;
   }catch(e){}
+  function notifyParentMod(k){
+    try{if(parent!==window)parent.postMessage({type:'vt-liq-mod',mod:k},'*')}catch(e){}
+  }
+  window.addEventListener('message',ev=>{
+    const d=ev&&ev.data;if(!d||d.type!=='vt-liq-mod'||!d.mod)return;
+    if(!MODS.some(x=>x[0]===d.mod)||UI.mod===d.mod)return;
+    UI.mod=d.mod;UI.search='';UI.det=null;
+    try{closeDrawer();document.getElementById('modal').classList.remove('on')}catch(e){}
+    render();scrollTo(0,0);
+  });
+  window.__vtNotifyLiqMod=notifyParentMod;
 })();
 """
 

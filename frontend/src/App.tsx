@@ -216,6 +216,16 @@ export default function App() {
                 </SugerenciasOnlyGate>
               }
             />
+            <Route
+              path="/liquidaciones/:etapa"
+              element={
+                <SugerenciasOnlyGate>
+                  <VettoreOpsGate>
+                    <LiquidacionesPage />
+                  </VettoreOpsGate>
+                </SugerenciasOnlyGate>
+              }
+            />
             <Route path="/sugerencias" element={<SugerenciasPage />} />
           </Route>
         </Route>

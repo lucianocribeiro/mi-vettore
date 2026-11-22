@@ -147,9 +147,19 @@ const NAV: NavItem[] = [
   {
     to: "/liquidaciones",
     label: "Liquidaciones",
-    sub: "Quincenal",
+    sub: "Etapas",
     icon: CreditCard,
     roles: ["ADMINISTRADOR", "OPERACIONES"],
+    children: [
+      { to: "/liquidaciones/adelantos", label: "Adelantos" },
+      { to: "/liquidaciones/prestamos", label: "Préstamos" },
+      { to: "/liquidaciones/facturacion", label: "Facturación" },
+      { to: "/liquidaciones/nafta", label: "Nafta" },
+      { to: "/liquidaciones/liquidacion", label: "Liquidación" },
+      { to: "/liquidaciones/pago", label: "Pago" },
+      { to: "/liquidaciones/panel", label: "Panel de control" },
+      { to: "/liquidaciones/valores-hora", label: "Valores hora" },
+    ],
   },
 ];
 
