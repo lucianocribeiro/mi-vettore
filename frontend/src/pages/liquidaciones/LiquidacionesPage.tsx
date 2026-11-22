@@ -77,8 +77,9 @@ export function LiquidacionesPage() {
 
   // Ajustar alto del iframe al contenido → un solo scroll afuera.
   useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
+    const frame = iframeRef.current;
+    if (!frame) return;
+    const el: HTMLIFrameElement = frame;
 
     let ro: ResizeObserver | null = null;
     let mo: MutationObserver | null = null;
@@ -86,7 +87,7 @@ export function LiquidacionesPage() {
 
     function measure() {
       try {
-        const doc = iframe.contentDocument;
+        const doc = el.contentDocument;
         if (!doc) return;
         const root =
           (doc.querySelector(".app") as HTMLElement | null) || doc.body;
@@ -107,7 +108,7 @@ export function LiquidacionesPage() {
 
     function bind() {
       try {
-        const doc = iframe.contentDocument;
+        const doc = el.contentDocument;
         if (!doc?.body) return;
         measure();
         ro?.disconnect();
@@ -132,11 +133,11 @@ export function LiquidacionesPage() {
       }
     }
 
-    iframe.addEventListener("load", bind);
-    if (iframe.contentDocument?.readyState === "complete") bind();
+    el.addEventListener("load", bind);
+    if (el.contentDocument?.readyState === "complete") bind();
 
     return () => {
-      iframe.removeEventListener("load", bind);
+      el.removeEventListener("load", bind);
       ro?.disconnect();
       mo?.disconnect();
       window.clearInterval(poll);
