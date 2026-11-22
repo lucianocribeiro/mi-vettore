@@ -25,6 +25,27 @@ export function AppLayout() {
     };
   }, [menuOpen]);
 
+  // Liquidaciones: bloquear scroll del document; solo scrollea el panel main.
+  useEffect(() => {
+    if (!wideShell) return;
+    const html = document.documentElement;
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: document.body.style.overflow,
+      rootOverflow: (document.getElementById("root") as HTMLElement | null)
+        ?.style.overflow,
+    };
+    html.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    const root = document.getElementById("root");
+    if (root) root.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prev.htmlOverflow;
+      document.body.style.overflow = prev.bodyOverflow;
+      if (root) root.style.overflow = prev.rootOverflow || "";
+    };
+  }, [wideShell]);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setMenuOpen(false);
@@ -37,14 +58,14 @@ export function AppLayout() {
     <div
       className={`flex w-full justify-center ${
         wideShell
-          ? "h-dvh min-h-0 overflow-hidden p-0"
+          ? "h-dvh max-h-dvh min-h-0 overflow-hidden p-0"
           : "min-h-dvh p-0 sm:p-3 md:p-6"
       }`}
     >
       <div
         className={`relative flex w-full flex-col overflow-hidden bg-[var(--vl-shell)] shadow-none md:flex-row ${
           wideShell
-            ? "h-full max-w-none rounded-none border-0"
+            ? "h-full max-h-full max-w-none rounded-none border-0"
             : "max-w-6xl sm:rounded-2xl sm:border sm:border-[var(--vl-shell-border)] sm:shadow-xl md:min-h-[min(900px,calc(100dvh-3rem))]"
         }`}
       >
@@ -108,7 +129,7 @@ export function AppLayout() {
           <main
             className={`min-h-0 flex-1 ${
               wideShell
-                ? "flex flex-col overflow-hidden bg-[#070b14] p-0"
+                ? "overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[#070b14] p-0 [scrollbar-width:thin]"
                 : "overflow-y-auto bg-[var(--vl-main)] p-4 safe-bottom sm:p-5 md:p-6"
             }`}
           >

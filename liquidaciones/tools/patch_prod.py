@@ -5,22 +5,23 @@ ROOT = Path(__file__).resolve().parent.parent
 tpl = (ROOT / "src" / "template.html").read_text(encoding="utf-8")
 
 CSS_EXTRA = """
-/* Integración Mi Vettore: menú de la app afuera; acá solo contenido. */
+/* Integración Mi Vettore: menú de la app afuera; acá solo contenido.
+   Sin scroll interno: el panel de Mi Vettore scrollea una sola vez. */
 .side{display:none!important}
 .tabs,#tabs{display:none!important}
-.app{display:flex;flex-direction:column;min-height:100%;height:100%}
-html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
-.main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;height:100%}
-.topbar{height:36px;padding:0 12px;flex:0 0 auto}
-.content{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px 12px 28px;max-width:none;width:100%;box-sizing:border-box}
+html,body{margin:0;height:auto!important;min-height:0;overflow:visible!important;background:var(--bg)}
+.app{display:block;min-height:0;height:auto!important}
+.main{display:block;min-width:0;min-height:0;height:auto!important}
+.topbar{height:36px;padding:0 12px}
+.content{overflow:visible;padding:10px 12px 88px;max-width:none;width:100%;box-sizing:border-box}
 .head{gap:8px;margin-bottom:12px}
 .head h1{font-size:18px}
-.toolbar{gap:8px}
+.toolbar{gap:8px;flex-wrap:wrap}
 .toolbar .grow{min-width:140px}
-.tw{max-width:100%;-webkit-overflow-scrolling:touch}
+.tw{max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .role[data-locked="1"]{display:none!important}
 @media (max-width:900px){
-  .content{padding:8px 8px 72px}
+  .content{padding:8px 8px 96px}
   .topbar{height:32px;padding:0 8px;font-size:11px}
   .head h1{font-size:16px}
   .btn,.pill,.tab{font-size:12px;padding:8px 10px}

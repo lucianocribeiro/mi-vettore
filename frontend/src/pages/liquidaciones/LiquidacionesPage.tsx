@@ -30,15 +30,15 @@ function buildSrc(role: string, mod: string) {
 
 /**
  * Módulo Liquidaciones (prototipo v7 integrado).
- * Solo roles internos: el gate está en App/Sidebar.
- * Embed en /liq-embed (no /liquidaciones) para que F5 no pierda el menú.
- * Submódulos = etapas en el menú lateral (/liquidaciones/:etapa).
+ * Un solo scroll en el panel de la app: el iframe crece con el contenido
+ * (sin barra interna) para que PC y celu se lean cómodos.
  */
 export function LiquidacionesPage() {
   const { user } = useAuth();
   const { etapa } = useParams<{ etapa?: string }>();
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [iframeH, setIframeH] = useState(480);
 
   const slug = etapa && MOD_BY_SLUG[etapa] ? etapa : null;
   const mod = slug ? MOD_BY_SLUG[slug]! : "adel";
@@ -70,17 +70,103 @@ export function LiquidacionesPage() {
     }
   }, [mod, slug]);
 
+  // Ajustar alto del iframe al contenido → un solo scroll afuera.
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    let ro: ResizeObserver | null = null;
+    let mo: MutationObserver | null = null;
+    let poll: number | undefined;
+
+    function measure() {
+      try {
+        const doc = iframe.contentDocument;
+        if (!doc) return;
+        const root =
+          (doc.querySelector(".app") as HTMLElement | null) || doc.body;
+        if (!root) return;
+        const h = Math.ceil(
+          Math.max(
+            root.scrollHeight,
+            root.offsetHeight,
+            doc.documentElement?.scrollHeight || 0,
+            doc.body?.scrollHeight || 0
+          )
+        );
+        if (h > 0) setIframeH((prev) => (Math.abs(prev - h) > 2 ? h : prev));
+      } catch {
+        /* ignore cross-origin */
+      }
+    }
+
+    function bind() {
+      try {
+        const doc = iframe.contentDocument;
+        if (!doc?.body) return;
+        measure();
+        ro?.disconnect();
+        mo?.disconnect();
+        if (typeof ResizeObserver !== "undefined") {
+          ro = new ResizeObserver(() => measure());
+          ro.observe(doc.body);
+          const app = doc.querySelector(".app");
+          if (app) ro.observe(app);
+        }
+        mo = new MutationObserver(() => measure());
+        mo.observe(doc.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          characterData: true,
+        });
+        window.clearInterval(poll);
+        poll = window.setInterval(measure, 800);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    iframe.addEventListener("load", bind);
+    if (iframe.contentDocument?.readyState === "complete") bind();
+
+    return () => {
+      iframe.removeEventListener("load", bind);
+      ro?.disconnect();
+      mo?.disconnect();
+      window.clearInterval(poll);
+    };
+  }, [iframeSrc]);
+
+  // Remedir al cambiar de submódulo (contenido distinto).
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      try {
+        const doc = iframeRef.current?.contentDocument;
+        const root =
+          (doc?.querySelector(".app") as HTMLElement | null) || doc?.body;
+        if (!root) return;
+        const h = Math.ceil(Math.max(root.scrollHeight, root.offsetHeight));
+        if (h > 0) setIframeH(h);
+      } catch {
+        /* ignore */
+      }
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [mod]);
+
   if (!slug) {
     return <Navigate to="/liquidaciones/adelantos" replace />;
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-[#070b14]">
+    <div className="w-full min-w-0 bg-[#070b14]">
       <iframe
         ref={iframeRef}
         title="Liquidaciones"
         src={iframeSrc}
-        className="block h-full w-full min-h-0 min-w-0 flex-1 border-0 bg-[#070b14]"
+        style={{ height: iframeH }}
+        className="block w-full min-w-0 border-0 bg-[#070b14]"
         allow="downloads"
         onLoad={() => {
           try {
