@@ -53,7 +53,7 @@ DB_ADAPTER = r"""
   try{if(window.top===window.self){
     const q=new URLSearchParams(location.search);
     const m=q.get('mod')||'adel';
-    const slug={adel:'adelantos',prest:'prestamos',fact:'facturacion',nafta:'nafta',liq:'liquidacion',pago:'pago',panel:'panel',vh:'valores-hora',cat:'catalogos'}[m]||'adelantos';
+    const slug={vh:'valores-hora',adel:'adelantos',prest:'prestamos',nafta:'nafta',fact:'facturacion',liq:'liquidacion',pago:'pago',panel:'panel',cat:'catalogos'}[m]||'valores-hora';
     location.replace('/liquidaciones/'+slug);return}}catch(e){}
   const TOKEN_KEY='mi-vettore-token';
   function token(){try{return localStorage.getItem(TOKEN_KEY)||''}catch(e){return ''}}

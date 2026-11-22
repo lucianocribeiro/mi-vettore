@@ -4,14 +4,14 @@ import { useAuth } from "../../auth/AuthContext";
 
 /** Slug de URL ↔ clave interna del prototipo (MODS). */
 export const LIQ_MODS = [
+  { slug: "valores-hora", mod: "vh", label: "Valores hora" },
   { slug: "adelantos", mod: "adel", label: "Adelantos" },
   { slug: "prestamos", mod: "prest", label: "Préstamos" },
-  { slug: "facturacion", mod: "fact", label: "Facturación" },
   { slug: "nafta", mod: "nafta", label: "Nafta" },
+  { slug: "facturacion", mod: "fact", label: "Facturación" },
   { slug: "liquidacion", mod: "liq", label: "Liquidación" },
   { slug: "pago", mod: "pago", label: "Pago" },
   { slug: "panel", mod: "panel", label: "Panel de control" },
-  { slug: "valores-hora", mod: "vh", label: "Valores hora" },
   { slug: "catalogos", mod: "cat", label: "Catálogos" },
 ] as const;
 
@@ -163,7 +163,7 @@ export function LiquidacionesPage() {
   }, [mod]);
 
   if (!slug) {
-    return <Navigate to="/liquidaciones/adelantos" replace />;
+    return <Navigate to="/liquidaciones/valores-hora" replace />;
   }
 
   return (
