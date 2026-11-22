@@ -677,7 +677,7 @@ function loanForm(l){
    fld('Concepto',`<input type="text" name="concepto" required value="${esc(d.concepto)}" placeholder="Ej.: Partner – compra de camioneta">`,1)+
    fld('Horas solicitadas',`<input type="number" name="horas" step="0.5" min="0.5" required value="${d.totalHs?Math.round(d.totalHs*100)/100:''}" data-lc="1" ${ac?'disabled':''}>`)+fld('Cuota por quincena (horas)',`<input type="number" name="cuotaHs" step="0.5" min="0" required value="${d.cuotaHs?Math.round(d.cuotaHs*100)/100:''}" data-lc="1">`)+
    `<div class="full" id="lcalc"></div>`,
-   fd=>{const emp=l&&ac?l.empresa:fd.empresa;const e=EI()[norm(emp)];if(!e)return 'Empresa inexistente en el ABM.';
+   fd=>{const emp=l&&ac?l.empresa:fd.empresa;const e=EI()[norm(emp)];if(!e)return 'Solo se permiten empresas habilitadas o inhabilitadas del ABM (no inactivas).';
      const fecha=l&&ac?l.fecha:fd.fecha,hs=l&&ac?l.totalHs:+fd.horas,vs=l&&ac?l.vhSol:valorHora(e.division,fecha);if(!vs)return 'La división de la empresa no tiene valor hora a esa fecha.';if(!(hs>0))return 'Indicá las horas solicitadas.';
      const rec={fecha,empresa:e.nombre,concepto:fd.concepto.trim(),desc:'',totalHs:hs,vhSol:vs,monto:hs*vs,cuotaHs:+fd.cuotaHs,estado:fd.estado};
      if(l){Object.assign(l,rec);savePrest(l)}else{const x={id:uid('L'),acum0:0,...rec};S.prest[x.id]=x;savePrest(x)}rebuild();toast('Préstamo guardado')},'Guardar');
