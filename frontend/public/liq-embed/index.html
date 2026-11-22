@@ -301,8 +301,27 @@ function rebuild(){
   D={rec:{...histRecords()},cuotaLiq:{},talLiq:{},loanHs:{},loanPer:{},nLiq:{}};
   Object.values(S.liq).forEach(r=>D.rec[r.periodo+'|'+r.k]=r);
   Object.values(D.rec).forEach(r=>{['nafta','adel','tal','prest','factRows'].forEach(f=>{if(!Array.isArray(r[f]))r[f]=[]});if(r.tal.length){r.tal.forEach(t=>r.adel.push({id:t.id,n:1,de:1,fecha:t.fecha,tipo:'Taller',desc:'Taller OT - '+(t.desc||''),periodo:r.periodo,importe:t.importe}));r.tal=[];finish(r)}r.nafta.forEach(n=>(n.refs||[]).forEach(x=>D.nLiq[x]=r.periodo));r.adel.forEach(a=>D.cuotaLiq[a.id+'#'+a.n]=r.periodo);r.tal.forEach(t=>{D.talLiq[t.id]=r.periodo;D.cuotaLiq[t.id+'#1']=r.periodo});r.prest.forEach(x=>{D.loanHs[x.id]=(D.loanHs[x.id]||0)+(+x.horas||0);D.loanPer[x.id+'|'+r.periodo]=x.horas})});
+  syncPrestEstados();
 }
 const loanAcum=l=>(+l.acum0||0)+(D.loanHs[l.id]||0);
+/** Estados: Activo | Refinanciado | Finalizado (auto al completar horas). Pausado legado → Refinanciado. */
+const loanFin=l=>loanAcum(l)>=(+l.totalHs||0)-0.0001;
+function loanEstado(l){
+  if(loanFin(l))return 'Finalizado';
+  if(l.estado==='Pausado')return 'Refinanciado';
+  if(l.estado==='Finalizado')return 'Activo'; // reabierto: aún no está pago
+  return l.estado==='Refinanciado'?'Refinanciado':'Activo';
+}
+function syncPrestEstados(){
+  Object.values(S.prest).forEach(l=>{
+    if(l.deleted)return;
+    let next=l.estado;
+    if(l.estado==='Pausado')next='Refinanciado';
+    if(loanFin(l))next='Finalizado';
+    else if(l.estado==='Finalizado')next='Activo';
+    if(next!==l.estado){l.estado=next;savePrest(l)}
+  });
+}
 const closedRec=(p,k)=>D.rec[p+'|'+k];
 
 
@@ -472,7 +491,7 @@ function calcEmp(p,k,ov,cache){
   Object.values(S.adel).forEach(a=>{if(a.deleted||norm(a.empresa)!==k)return;a.cuotas.forEach(c=>{if(c.periodo<=p&&!D.cuotaLiq[a.id+'#'+c.n]){const key=a.id+'#'+c.n;r.adel.push({id:a.id,n:c.n,de:a.cuotas.length,fecha:a.fecha,tipo:a.tipo,desc:a.desc,periodo:c.periodo,importe:+c.importe,key,inc:!exA.has(key)})}})});
   Object.values(S.tal).forEach(t=>{if(norm(t.empresa)===k&&t.fecha<=pEnd(p)&&!D.talLiq[t.id])r.tal.push({...t,inc:!exT.has(t.id)})});
   const vh=vhEmp(k,pStart(p));
-  Object.values(S.prest).forEach(l=>{if(norm(l.empresa)!==k||l.estado!=='Activo'||l.fecha>pEnd(p))return;const ac=loanAcum(l),saldo=Math.max(0,l.totalHs-ac);if(saldo<=0.0001)return;
+  Object.values(S.prest).forEach(l=>{if(norm(l.empresa)!==k||loanEstado(l)!=='Activo'||l.fecha>pEnd(p))return;const ac=loanAcum(l),saldo=Math.max(0,l.totalHs-ac);if(saldo<=0.0001)return;
     const h=ov.hs&&ov.hs[l.id]!=null?+ov.hs[l.id]:Math.min(l.cuotaHs,saldo);r.prest.push({id:l.id,concepto:l.concepto,horas:h,vh,importe:h*vh,acum:ac,total:l.totalHs,inc:!exL.has(l.id)})});
   const inc=x=>x.filter(i=>i.inc);
   const nI=inc(r.nafta);r.naftaT=sum(nI,'importe');r.gnc=sum(nI.filter(n=>n.tipo==='GNC'),'importe');r.naf=r.naftaT-r.gnc;
@@ -487,7 +506,7 @@ function preview(p){
   if(p>=B.PEND){
     Object.values(S.adel).forEach(a=>{if(!a.deleted&&a.cuotas.some(c=>c.periodo<=p&&!D.cuotaLiq[a.id+'#'+c.n]))keys.add(norm(a.empresa))});
     Object.values(S.tal).forEach(t=>{if(t.fecha<=pEnd(p)&&!D.talLiq[t.id])keys.add(norm(t.empresa))});
-    Object.values(S.prest).forEach(l=>{if(l.estado==='Activo'&&l.fecha<=pEnd(p)&&loanAcum(l)<l.totalHs-0.0001)keys.add(norm(l.empresa))});
+    Object.values(S.prest).forEach(l=>{if(loanEstado(l)==='Activo'&&l.fecha<=pEnd(p)&&!loanFin(l))keys.add(norm(l.empresa))});
     // Totalidad del ABM: también las sin facturación ni descuentos (liquidación en $0).
     S.empresas.forEach(e=>keys.add(norm(e.nombre)));
   }
@@ -655,31 +674,35 @@ const dlE=()=>`<datalist id="dlE">${S.empresas.map(e=>`<option value="${esc(e.no
 /* ================= 2 · PRESTAMOS ================= */
 function vPrest(){
   const s=norm(UI.search),hoy=today();
-  let L=Object.values(S.prest).filter(l=>!l.deleted).map(l=>{const vh=vhEmp(norm(l.empresa),hoy),ac=loanAcum(l),saldo=Math.max(0,l.totalHs-ac);return {...l,vh,ac,saldo,fin:saldo<=0.0001}});
+  let L=Object.values(S.prest).filter(l=>!l.deleted).map(l=>{const vh=vhEmp(norm(l.empresa),hoy),ac=loanAcum(l),saldo=Math.max(0,l.totalHs-ac),st=loanEstado(l);return {...l,vh,ac,saldo,fin:st==='Finalizado',st}});
   if(s)L=L.filter(x=>norm(x.empresa).includes(s)||norm(x.concepto).includes(s));
-  if(!UI.prestAll)L=L.filter(x=>!x.fin);
-  L.sort((a,b)=>a.fin-b.fin||a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'}));
-  const act=Object.values(S.prest).filter(l=>!l.deleted&&loanAcum(l)<l.totalHs-0.0001);
-  return `<div class="kpis"><div class="kpi"><div class="l">Préstamos vigentes</div><div class="v">${act.length}</div></div><div class="kpi"><div class="l">Saldo total en horas</div><div class="v">${fn(sum(act,l=>l.totalHs-loanAcum(l)),1)} hs</div></div><div class="kpi"><div class="l">Saldo total a valor hora actual</div><div class="v">${fm(sum(act,l=>(l.totalHs-loanAcum(l))*vhEmp(norm(l.empresa),hoy)))}</div><div class="s">valor hora vigente al ${fD(hoy)}</div></div></div>
-  <div class="toolbar"><button class="btn primary" data-a="newLoan">+ Registrar préstamo</button><button class="pill ${!UI.prestAll?'on':''}" data-a="prestAll" data-k="0">Vigentes</button><button class="pill ${UI.prestAll?'on':''}" data-a="prestAll" data-k="1">Todos</button>${searchBox('Buscar empresa o concepto...')}</div>
+  if(!UI.prestAll)L=L.filter(x=>x.st==='Activo');
+  L.sort((a,b)=>(a.st==='Finalizado')-(b.st==='Finalizado')||a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'}));
+  const act=Object.values(S.prest).filter(l=>!l.deleted&&loanEstado(l)==='Activo');
+  return `<div class="kpis"><div class="kpi"><div class="l">Préstamos activos</div><div class="v">${act.length}</div></div><div class="kpi"><div class="l">Saldo total en horas</div><div class="v">${fn(sum(act,l=>l.totalHs-loanAcum(l)),1)} hs</div></div><div class="kpi"><div class="l">Saldo total a valor hora actual</div><div class="v">${fm(sum(act,l=>(l.totalHs-loanAcum(l))*vhEmp(norm(l.empresa),hoy)))}</div><div class="s">valor hora vigente al ${fD(hoy)}</div></div></div>
+  <div class="toolbar"><button class="btn primary" data-a="newLoan">+ Registrar préstamo</button><button class="pill ${!UI.prestAll?'on':''}" data-a="prestAll" data-k="0">Activos</button><button class="pill ${UI.prestAll?'on':''}" data-a="prestAll" data-k="1">Todos</button>${searchBox('Buscar empresa o concepto...')}</div>
   <div class="tw"><table><thead><tr><th>Empresa de transporte</th><th>Concepto</th><th>Solicitud</th><th class="n">Horas solicitadas</th><th class="n">Equiv. $ a la solicitud</th><th class="n">Valor hora actual</th><th class="n">Cuota actual</th><th class="n">Acum. / total hs</th><th>Avance</th><th class="n">Saldo</th><th>Estado</th><th></th></tr></thead><tbody>
   ${L.map(x=>`<tr><td class="name">${esc(x.empresa)}</td><td>${esc(x.concepto)}</td><td>${fD(x.fecha)}<div class="subt">VH ${fm(x.vhSol)}</div></td><td class="n"><b>${fn(x.totalHs,1)} hs</b></td><td class="n">${fm(x.totalHs*x.vhSol)}</td><td class="n">${fm(x.vh)}</td>
    <td class="n">${fn(Math.min(x.cuotaHs,x.saldo),1)} hs<div class="subt">${fm(Math.min(x.cuotaHs,x.saldo)*x.vh)}</div></td><td class="n">${fn(x.ac,1)} / ${fn(x.totalHs,1)}</td><td><div class="bar"><i style="width:${Math.min(100,x.ac/(x.totalHs||1)*100)}%"></i></div><div class="subt">${fn(x.ac/(x.totalHs||1)*100,0)}%</div></td>
-   <td class="n">${fn(x.saldo,1)} hs<div class="subt">${fm(x.saldo*x.vh)}</div></td><td><span class="chip ${x.fin?'g':x.estado==='Pausado'?'w':''}">${x.fin?'Cancelado':esc(x.estado)}</span></td><td style="white-space:nowrap"><button class="lnk" data-a="histLoan" data-id="${x.id}">Historial</button> · <button class="lnk" data-a="editLoan" data-id="${x.id}">Editar</button></td></tr>`).join('')||'<tr><td colspan="12" class="empty">Sin préstamos.</td></tr>'}
+   <td class="n">${fn(x.saldo,1)} hs<div class="subt">${fm(x.saldo*x.vh)}</div></td><td><span class="chip ${x.st==='Finalizado'?'g':x.st==='Refinanciado'?'w':''}">${esc(x.st)}</span></td><td style="white-space:nowrap"><button class="lnk" data-a="histLoan" data-id="${x.id}">Historial</button>${x.st==='Finalizado'?'':` · <button class="lnk" data-a="editLoan" data-id="${x.id}">Editar</button>`}</td></tr>`).join('')||'<tr><td colspan="12" class="empty">Sin préstamos.</td></tr>'}
   </tbody></table></div>
-  <p class="legend">El préstamo se registra siempre en <b>horas</b>; los pesos son solo la equivalencia (a la fecha de solicitud y al valor hora actual de la división). Cada quincena se descuenta la cuota en horas × el valor hora vigente de ese período, hasta completar el total. 12 préstamos del Excel estaban en cuotas fijas de $ y se convirtieron a horas.</p>`;
+  <p class="legend">Estados: <b>Activo</b> (se descuenta en liquidación), <b>Refinanciado</b> (no se descuenta), <b>Finalizado</b> (automático al pagar la última cuota; no se edita). El préstamo se registra en <b>horas</b>; cada quincena se descuenta la cuota × valor hora vigente.</p>`;
 }
 function loanForm(l){
+  if(l&&loanEstado(l)==='Finalizado'){toast('Préstamo finalizado: no se puede editar');loanHist(l);return}
+  const st0=l?loanEstado(l):'Activo';
   const d=l||{fecha:today(),empresa:'',concepto:'',totalHs:'',cuotaHs:35,estado:'Activo'};const ac=l?loanAcum(l):0;
   modal(l?'Editar préstamo':'Registrar préstamo',
-   fld('Fecha de solicitud',`<input type="date" name="fecha" required value="${d.fecha}" data-lc="1" ${ac?'disabled':''}>`)+fld('Estado',`<select name="estado"><option ${d.estado==='Activo'?'selected':''}>Activo</option><option ${d.estado==='Pausado'?'selected':''}>Pausado</option></select>`)+
+   fld('Fecha de solicitud',`<input type="date" name="fecha" required value="${d.fecha}" data-lc="1" ${ac?'disabled':''}>`)+fld('Estado',`<select name="estado"><option value="Activo" ${st0==='Activo'?'selected':''}>Activo</option><option value="Refinanciado" ${st0==='Refinanciado'?'selected':''}>Refinanciado</option></select><div class="hint">Finalizado se asigna solo al completar las horas (última cuota liquidada).</div>`)+
    fld('Empresa de transporte',`<input type="text" name="empresa" list="dlE" required value="${esc(d.empresa)}" data-lc="1" ${ac?'disabled':''}>${dlE()}`,1)+
    fld('Concepto',`<input type="text" name="concepto" required value="${esc(d.concepto)}" placeholder="Ej.: Partner – compra de camioneta">`,1)+
    fld('Horas solicitadas',`<input type="number" name="horas" step="0.5" min="0.5" required value="${d.totalHs?Math.round(d.totalHs*100)/100:''}" data-lc="1" ${ac?'disabled':''}>`)+fld('Cuota por quincena (horas)',`<input type="number" name="cuotaHs" step="0.5" min="0" required value="${d.cuotaHs?Math.round(d.cuotaHs*100)/100:''}" data-lc="1">`)+
    `<div class="full" id="lcalc"></div>`,
    fd=>{const emp=l&&ac?l.empresa:fd.empresa;const e=EI()[norm(emp)];if(!e)return 'Solo se permiten empresas habilitadas o inhabilitadas del ABM (no inactivas).';
+     if(l&&loanEstado(l)==='Finalizado')return 'Préstamo finalizado: no se puede editar.';
      const fecha=l&&ac?l.fecha:fd.fecha,hs=l&&ac?l.totalHs:+fd.horas,vs=l&&ac?l.vhSol:valorHora(e.division,fecha);if(!vs)return 'La división de la empresa no tiene valor hora a esa fecha.';if(!(hs>0))return 'Indicá las horas solicitadas.';
-     const rec={fecha,empresa:e.nombre,concepto:fd.concepto.trim(),desc:'',totalHs:hs,vhSol:vs,monto:hs*vs,cuotaHs:+fd.cuotaHs,estado:fd.estado};
+     const est=fd.estado==='Refinanciado'?'Refinanciado':'Activo';
+     const rec={fecha,empresa:e.nombre,concepto:fd.concepto.trim(),desc:'',totalHs:hs,vhSol:vs,monto:hs*vs,cuotaHs:+fd.cuotaHs,estado:est};
      if(l){Object.assign(l,rec);savePrest(l)}else{const x={id:uid('L'),acum0:0,...rec};S.prest[x.id]=x;savePrest(x)}rebuild();toast('Préstamo guardado')},'Guardar');
   const F=document.getElementById('mform');
   const calc=()=>{const e=EI()[norm(F.empresa.value)],f=F.fecha.value,vs=e?valorHora(e.division,f):0,vn=e?valorHora(e.division,today()):0,h=+F.horas.value||0,c=+F.cuotaHs.value||0;
@@ -966,7 +989,7 @@ document.addEventListener('click',e=>{
     case 'delAdel':confirmBox('Eliminar adelanto','¿Eliminar este adelanto?',()=>{const x=S.adel[id];x.deleted=true;saveAdel(x)},'Eliminar');break;
     case 'adelF':UI.adelF=k;render();break;
     case 'newLoan':loanForm();break;
-    case 'editLoan':loanForm(S.prest[id]);break;
+    case 'editLoan':{const L=S.prest[id];if(!L)break;if(loanEstado(L)==='Finalizado'){toast('Préstamo finalizado: no se puede editar');loanHist(L);break}loanForm(L);break}
     case 'histLoan':loanHist(S.prest[id]);break;
     case 'prestAll':UI.prestAll=k==='1';render();break;
     case 'pick':pickKind=el.dataset.kind;const fi=document.getElementById('fileIn');fi.value='';fi.click();break;
