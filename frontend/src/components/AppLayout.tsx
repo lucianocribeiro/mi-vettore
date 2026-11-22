@@ -35,15 +35,17 @@ export function AppLayout() {
 
   return (
     <div
-      className={`flex min-h-dvh w-full justify-center ${
-        wideShell ? "p-0 md:p-2" : "p-0 sm:p-3 md:p-6"
+      className={`flex w-full justify-center ${
+        wideShell
+          ? "h-dvh min-h-0 overflow-hidden p-0"
+          : "min-h-dvh p-0 sm:p-3 md:p-6"
       }`}
     >
       <div
-        className={`relative flex w-full flex-col overflow-hidden bg-[var(--vl-shell)] shadow-none sm:rounded-2xl sm:border sm:border-[var(--vl-shell-border)] sm:shadow-xl md:flex-row md:min-h-[min(900px,calc(100dvh-3rem))] ${
+        className={`relative flex w-full flex-col overflow-hidden bg-[var(--vl-shell)] shadow-none md:flex-row ${
           wideShell
-            ? "max-w-none md:min-h-[calc(100dvh-1rem)]"
-            : "max-w-6xl"
+            ? "h-full max-w-none rounded-none border-0"
+            : "max-w-6xl sm:rounded-2xl sm:border sm:border-[var(--vl-shell-border)] sm:shadow-xl md:min-h-[min(900px,calc(100dvh-3rem))]"
         }`}
       >
         <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-[var(--vl-sidebar-border)] bg-[var(--vl-sidebar)] px-2 py-2.5 md:hidden safe-top sm:gap-3 sm:px-3">
@@ -98,20 +100,16 @@ export function AppLayout() {
         <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div
-            className={`hidden items-center justify-end border-b px-4 py-2 md:flex ${
-              wideShell
-                ? "border-[#1e293b] bg-[#070b14]"
-                : "border-[var(--vl-card-border)] bg-[var(--vl-main)]"
-            }`}
-          >
-            <AvisosBell />
-          </div>
+          {!wideShell && (
+            <div className="hidden items-center justify-end border-b border-[var(--vl-card-border)] bg-[var(--vl-main)] px-4 py-2 md:flex">
+              <AvisosBell />
+            </div>
+          )}
           <main
-            className={`min-h-0 flex-1 overflow-y-auto safe-bottom ${
+            className={`min-h-0 flex-1 ${
               wideShell
-                ? "bg-[#070b14] p-0"
-                : "bg-[var(--vl-main)] p-4 sm:p-5 md:p-6"
+                ? "flex flex-col overflow-hidden bg-[#070b14] p-0"
+                : "overflow-y-auto bg-[var(--vl-main)] p-4 safe-bottom sm:p-5 md:p-6"
             }`}
           >
             <Outlet />

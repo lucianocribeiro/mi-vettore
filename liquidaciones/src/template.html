@@ -29,14 +29,32 @@ tr.off td:first-child{opacity:1;text-decoration:none}
 /* Integración Mi Vettore: menú de la app afuera; acá solo contenido. */
 .side{display:none!important}
 .tabs,#tabs{display:none!important}
-.app{display:block;min-height:100%}
-html,body{margin:0;min-height:100%;height:auto;overflow:auto;background:var(--bg)}
-.main{min-height:100%;min-width:0}
-.topbar{height:40px;padding:0 14px}
-.content{padding:12px 14px 48px;max-width:none;width:100%;box-sizing:border-box}
+.app{display:flex;flex-direction:column;min-height:100%;height:100%}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;height:100%}
+.topbar{height:36px;padding:0 12px;flex:0 0 auto}
+.content{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px 12px 28px;max-width:none;width:100%;box-sizing:border-box}
+.head{gap:8px;margin-bottom:12px}
 .head h1{font-size:18px}
-.tw{max-width:100%}
+.toolbar{gap:8px}
+.toolbar .grow{min-width:140px}
+.tw{max-width:100%;-webkit-overflow-scrolling:touch}
 .role[data-locked="1"]{display:none!important}
+@media (max-width:900px){
+  .content{padding:8px 8px 72px}
+  .topbar{height:32px;padding:0 8px;font-size:11px}
+  .head h1{font-size:16px}
+  .btn,.pill,.tab{font-size:12px;padding:8px 10px}
+  .btn.sm{padding:6px 8px;font-size:11px}
+  .toolbar .grow{min-width:100%;flex:1 1 100%}
+  .toolbar select{max-width:100%}
+  th,td{padding:8px 8px;font-size:12px}
+  .kpis{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+  .grid2{grid-template-columns:1fr}
+  .stepper{flex-direction:column}
+  .stp{border-right:0;border-bottom:1px solid var(--line)}
+  .drop{padding:14px}
+}
 
 </style>
 </head>
