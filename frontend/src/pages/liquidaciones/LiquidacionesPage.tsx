@@ -75,12 +75,12 @@ export function LiquidacionesPage() {
   }
 
   return (
-    <div className="flex h-[min(860px,calc(100dvh-8rem))] min-h-[560px] w-full flex-col overflow-hidden bg-[#070b14] md:h-[min(860px,calc(100dvh-6rem))]">
+    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[560px] w-full min-w-0 flex-1 flex-col overflow-hidden bg-[#070b14] md:h-[calc(100dvh-4.5rem)]">
       <iframe
         ref={iframeRef}
         title="Liquidaciones"
         src={iframeSrc}
-        className="h-full w-full flex-1 border-0 bg-[#070b14]"
+        className="h-full w-full min-w-0 flex-1 border-0 bg-[#070b14]"
         allow="downloads"
         onLoad={() => {
           try {

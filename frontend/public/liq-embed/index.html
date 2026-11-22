@@ -167,12 +167,14 @@ tr.off td:first-child{opacity:1;text-decoration:none}
 
 /* Integración Mi Vettore: menú de la app afuera; acá solo contenido. */
 .side{display:none!important}
+.tabs,#tabs{display:none!important}
 .app{display:block;min-height:100%}
-html,body{margin:0;height:100%;background:var(--bg)}
-.main{min-height:100%}
-.topbar{height:44px;padding:0 18px}
-.content{padding:14px 18px 40px;max-width:none}
+html,body{margin:0;min-height:100%;height:auto;overflow:auto;background:var(--bg)}
+.main{min-height:100%;min-width:0}
+.topbar{height:40px;padding:0 14px}
+.content{padding:12px 14px 48px;max-width:none;width:100%;box-sizing:border-box}
 .head h1{font-size:18px}
+.tw{max-width:100%}
 .role[data-locked="1"]{display:none!important}
 
 </style>
@@ -449,7 +451,8 @@ function closeEmp(p,k,ov,modo){
 function render(){
   if(!D)rebuild();
   document.getElementById('ttl').textContent=(MODS.find(m=>m[0]===UI.mod)||['','','Liquidaciones'])[2];
-  document.getElementById('tabs').innerHTML=MODS.map(([k,n,l])=>`<button class="tab ${UI.mod===k?'on':''}" data-a="mod" data-k="${k}">${l}</button>`).join('');
+  // Tabs ocultos: la navegación va por el menú lateral de Mi Vettore.
+  const tabs=document.getElementById('tabs');if(tabs)tabs.innerHTML='';
   const sn=document.getElementById('subnav');if(sn)sn.innerHTML='';
   document.getElementById('view').innerHTML={adel:vAdel,prest:vPrest,fact:vFact,nafta:vNafta,liq:vLiq,pago:vPago,panel:vPanel,vh:vVH}[UI.mod]();
   setSt();if(UI.drawer)renderDrawer();
