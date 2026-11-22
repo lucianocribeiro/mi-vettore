@@ -49,8 +49,13 @@ export function LiquidacionesPage() {
 
   useEffect(() => {
     function onMsg(ev: MessageEvent) {
-      const data = ev.data as { type?: string; mod?: string } | null;
-      if (!data || data.type !== "vt-liq-mod" || !data.mod) return;
+      const data = ev.data as { type?: string; mod?: string; h?: number } | null;
+      if (!data?.type) return;
+      if (data.type === "vt-liq-h" && typeof data.h === "number" && data.h > 0) {
+        setIframeH((prev) => (Math.abs(prev - data.h!) > 2 ? data.h! : prev));
+        return;
+      }
+      if (data.type !== "vt-liq-mod" || !data.mod) return;
       const next = SLUG_BY_MOD[data.mod];
       if (!next || next === slug) return;
       navigate(`/liquidaciones/${next}`, { replace: true });
