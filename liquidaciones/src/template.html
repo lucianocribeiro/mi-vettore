@@ -426,6 +426,8 @@ function preview(p){
 }
 const esCero=(r)=>!r.closed&&Math.round(r.fact||0)===0&&Math.round(r.desc||0)===0;
 function closeEmp(p,k,ov,modo,extra){
+  // No sobrescribir liquidaciones ya cerradas: hay que reabrir primero.
+  if(closedRec(p,k)){toast('Esa liquidación ya está cerrada: reabrila antes de volver a liquidar');return null}
   const r=calcEmp(p,k,ov);const keep=x=>x.filter(i=>i.inc).map(i=>{const y={...i};delete y.inc;return y});
   // Control estricto: no se cierra en negativo salvo conversión a adelanto.
   if(r.saldo<-0.5&&!(extra&&extra.saldoConvertido>0)){
@@ -934,10 +936,15 @@ async function importFact(file){
   const p0=UI.upFact;
   modal('Importar '+esc(file.name),`<div class="full"><div>Se leyeron <b>${recs.length}</b> empresas (${fn(sum(recs,'viajes'))} viajes · ${fm(sum(recs,'importe'))})${rep?` · ${rep} filas repetidas sumadas`:''}${vac?` · ${vac} filas vacías`:''}.</div>
    <div style="margin-top:12px"><label class="f">Período que se está cargando (podés corregirlo)</label>${perPick('per',p0)}</div><div id="ipv">${info(p0).html}</div></div>`,
-   fd=>{const p=fd.per;if(p<B.PEND)return 'No se puede cargar en un período histórico.';const {ok,ow}=info(p);if(!ok.length)return 'No hay empresas para importar en ese período.';if(ow.length&&!fd.confOw)return `Hay ${ow.length} registro(s) ya procesado(s) en ${pLabel(p)}: tildá la confirmación para sobrescribirlos.`;
+   fd=>{const p=fd.per;if(p<B.PEND)return 'No se puede cargar en un período histórico.';
+     // Revalidar: nunca tocar empresas con liquidación cerrada.
+     const ok=recs.filter(r=>!closedRec(p,norm(r.empresa)));
+     const ow=ok.filter(r=>!!rukasOf(p,r.empresa));
+     if(!ok.length)return 'No hay empresas para importar (las liquidadas no se sobrescriben).';
+     if(ow.length&&!fd.confOw)return `Hay ${ow.length} registro(s) ya procesado(s) en ${pLabel(p)}: tildá la confirmación para sobrescribirlos.`;
      const keys=new Set(ok.map(r=>norm(r.empresa))),st=stamp();
-     // Conservar adicionales/ajustes manuales al sobrescribir Rukas.
-     S.fact[p]=(S.fact[p]||[]).filter(f=>f.manual||!keys.has(norm(f.empresa))).concat(ok.map(r=>({...r,archivo:file.name,cargado:st,manual:false})));
+     // Conservar adicionales/ajustes manuales al sobrescribir Rukas. No tocar cerradas.
+     S.fact[p]=(S.fact[p]||[]).filter(f=>f.manual||!keys.has(norm(f.empresa))||!!closedRec(p,norm(f.empresa))).concat(ok.map(r=>({...r,archivo:file.name,cargado:st,manual:false})));
      (S.factLog[p]=S.factLog[p]||[]).push({archivo:file.name,fecha:st,ts:Date.now(),usuario:who(),res:`${ok.length-ow.length} nuevas · ${ow.length} sobrescritas`});saveFact(p);UI.factP=p;UI.upFact=p;toast(`Facturación imputada a ${pLabel(p)}`)},'Importar',true);
   document.querySelector('#mform [name=per]').addEventListener('change',e=>{const i=info(e.target.value);document.getElementById('ipv').innerHTML=i.html;document.querySelector('#mform button[type=submit]').textContent=i.ow.length?'Sobrescribir e importar':'Importar'});
   await waitModal();
@@ -1019,7 +1026,8 @@ document.addEventListener('click',e=>{
       if(r.saldo<-0.5){toast('No se puede cerrar en negativo: convertí el saldo en adelanto o destildá conceptos');break}
       confirmBox('Cerrar liquidación · '+esc(r.empresa),`Saldo <b>${fm(r.saldo)}</b>. El pago se registra después en el módulo Pago.<br>Se descuentan ${r.nafta.filter(x=>x.inc).length} grupo(s) de nafta, ${r.adel.filter(x=>x.inc).length} cuota(s) de adelantos y ${r.prest.filter(x=>x.inc).length} cuota(s) de préstamos. Lo destildado queda pendiente.`,()=>{if(!closeEmp(p,UI.det,UI.ov[key],'individual'))return;UI.sel.delete(UI.det);toast('Liquidación cerrada')},'Cerrar liquidación');break}
     case 'convertNeg':formConvertirNegativo();break;
-    case 'reopenEmp':{const c=closedRec(UI.p,UI.det);confirmBox('Reabrir liquidación · '+esc(c.empresa),`Las cuotas de adelantos, órdenes de taller y horas de préstamos vuelven a quedar pendientes.${c.saldoConvertido>0?' Si el adelanto generado por la conversión no se debitó, también se elimina.':''}`,()=>{
+    case 'reopenEmp':{const c=closedRec(UI.p,UI.det);if(!c)break;if(c.pagado){toast('Anulá el pago antes de reabrir');break}
+      confirmBox('Reabrir liquidación · '+esc(c.empresa),`Las cuotas de adelantos, órdenes de taller y horas de préstamos vuelven a quedar pendientes.${c.saldoConvertido>0?' Si el adelanto generado por la conversión no se debitó, también se elimina.':''}`,()=>{
         if(c.adelantoConvertidoId){const a=S.adel[c.adelantoConvertidoId];if(a&&a.cuotas.every(q=>!D.cuotaLiq[a.id+'#'+q.n])){delete S.adel[a.id];persist('adel/'+a.id,null)}}
         delete S.liq[UI.p+'|'+UI.det];delLiq(c);toast('Liquidación reabierta')},'Reabrir');break}
     case 'toggleVhList':UI.vhList=!UI.vhList;render();break;
