@@ -397,9 +397,34 @@ const saveLiq=r=>persist(`liq/${r.periodo}__${slug(r.k)}`,r);
 const delLiq=r=>persist(`liq/${r.periodo}__${slug(r.k)}`,null);
 function saveNup(id){const U=S.nup[id];if(!U){const n=(saveNup.ch||{})[id]||20;persist('nmeta/'+id,null);for(let i=0;i<n;i++)persist(`nafta/${id}_${i}`,null);return}
   const n=Math.ceil(U.rows.length/450);(saveNup.ch=saveNup.ch||{})[id]=n;persist('nmeta/'+id,{periodo:U.periodo,archivo:U.archivo,fecha:U.fecha,usuario:U.usuario,dup:U.dup||0,chunks:n});for(let i=0;i<n;i++)persist(`nafta/${id}_${i}`,{id,i,rows:U.rows.slice(i*450,(i+1)*450)})}
+/** Trae todas las empresas activas del ABM Mi Vettore (incluye las sin facturación/descuentos). */
+async function syncEmpresasAbm(){
+  try{
+    const token=(function(){try{return localStorage.getItem('mi-vettore-token')||''}catch(e){return ''}})();
+    if(!token)return;
+    const res=await fetch('/api/liquidaciones/empresas',{headers:{Authorization:'Bearer '+token}});
+    if(!res.ok)return;
+    const data=await res.json();
+    const items=Array.isArray(data.items)?data.items:[];
+    if(!items.length)return;
+    const prev=Object.fromEntries(S.empresas.map(e=>[norm(e.nombre),e]));
+    const seen=new Set();
+    const merged=[];
+    items.forEach(x=>{
+      const nombre=String(x.nombre||'').trim();if(!nombre)return;
+      const k=norm(nombre);if(seen.has(k))return;seen.add(k);
+      const p=prev[k];
+      merged.push({nombre:p?.nombre||nombre,division:p?.division||'',banco:p?.banco||x.banco||'',id:x.id||p?.id});
+    });
+    // Conservar las del seed/históricas que no estén en el ABM (movimientos viejos).
+    S.empresas.forEach(e=>{const k=norm(e.nombre);if(!seen.has(k)){seen.add(k);merged.push(e)}});
+    merged.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es',{sensitivity:'base'}));
+    S.empresas=merged;EI.c=null;
+  }catch(e){}
+}
 async function loadDB(){
   let db=null;try{if(window.claude&&claude.use)db=await Promise.race([claude.use('db'),new Promise(r=>setTimeout(()=>r(null),10000))])}catch(e){}
-  if(!db){dbState='off';rebuild();render();return}
+  if(!db){dbState='off';await syncEmpresasAbm();rebuild();render();return}
   try{const g=c=>db.collection(c).limit(1000).get();
     const [cv,cd,ad,pr,fa,nm,nf,lq,ct]=await Promise.race([Promise.all([db.doc('cfg/valores').get(),db.doc('cfg/divisiones').get(),g('adel'),g('prest'),g('fact'),g('nmeta'),g('nafta'),g('liq'),db.doc('cfg/tipos').get()]),new Promise((_,j)=>setTimeout(()=>j({code:'timeout'}),12000))]);
     if(cv.exists)S.valores=cv.data().items.map(x=>({...x}));if(ct.exists){S.tipos=ct.data().items.map(x=>({...x}));if(!S.tipos.some(t=>t.nombre==='Taller'))S.tipos.push({nombre:'Taller',activo:true})}
@@ -413,6 +438,9 @@ async function loadDB(){
     legacy.forEach(id=>db.doc('liq/'+id).delete().catch(()=>{}));if(legacy.length)setTimeout(()=>toast(`Se descartaron ${legacy.length} liquidación(es) guardadas con un formato de una versión anterior del prototipo.`),600);
     DB=db;dbState='ok';
   }catch(e){dbState='off';toast('No se pudieron leer los datos guardados ('+(e.code||'error')+')')}
+  await syncEmpresasAbm();
+  // Reaplicar divisiones guardadas después de traer el ABM.
+  try{if(DB){const cd=await DB.doc('cfg/divisiones').get();if(cd.exists){const m=cd.data().map;S.empresas.forEach(e=>{if(m[norm(e.nombre)]!==undefined)e.division=m[norm(e.nombre)]});EI.c=null}}}catch(e){}
   rebuild();render();
 }
 async function resetAll(){
@@ -454,12 +482,14 @@ function preview(p){
     Object.values(S.adel).forEach(a=>{if(!a.deleted&&a.cuotas.some(c=>c.periodo<=p&&!D.cuotaLiq[a.id+'#'+c.n]))keys.add(norm(a.empresa))});
     Object.values(S.tal).forEach(t=>{if(t.fecha<=pEnd(p)&&!D.talLiq[t.id])keys.add(norm(t.empresa))});
     Object.values(S.prest).forEach(l=>{if(l.estado==='Activo'&&l.fecha<=pEnd(p)&&loanAcum(l)<l.totalHs-0.0001)keys.add(norm(l.empresa))});
+    // Totalidad del ABM: también las sin facturación ni descuentos (liquidación en $0).
+    S.empresas.forEach(e=>keys.add(norm(e.nombre)));
   }
-  if(p>=B.PEND)S.empresas.forEach(e=>keys.add(norm(e.nombre)));
   const list=[...keys].map(k=>{const c=closedRec(p,k);if(c)return {...c,closed:true};if(p<B.PEND)return null;return {...calcEmp(p,k,UI.ov[p+'|'+k],cache),closed:false}}).filter(Boolean);
   list.sort((a,b)=>a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'}));
   return {list,sinDueno:cache.nafta.filter(n=>!n.empresa)};
 }
+const esCero=(r)=>!r.closed&&Math.round(r.fact||0)===0&&Math.round(r.desc||0)===0;
 function closeEmp(p,k,ov,modo){
   const r=calcEmp(p,k,ov);const keep=x=>x.filter(i=>i.inc).map(i=>{const y={...i};delete y.inc;return y});
   const rec={periodo:p,k,empresa:r.empresa,modo,fact:r.fact,viajes:r.viajes,factRows:r.factRows,nafta:keep(r.nafta).map(n=>({empresa:n.empresa,patente:n.patente,tipo:n.tipo,cargas:n.cargas,litros:n.litros,importe:n.importe,refs:n.refs,periodos:n.periodos})),adel:keep(r.adel),tal:keep(r.tal),prest:keep(r.prest).map(x=>({...x,acumDespues:x.acum+x.horas})),
@@ -659,23 +689,23 @@ function vLiq(){
     <div class="it">${hist||nfC?'<span class="chip g">✓</span>':'<span class="chip w">!</span>'} Nafta: ${hist?'histórico':nfC?`${fn(nfC)} cargas pendientes imputadas hasta este período${nfAnt?` (incluye ${nfAnt} grupos de períodos anteriores)`:''}`:'sin cargas imputadas (se puede liquidar igual)'} ${hist?'':'<a class="lnk" data-a="mod" data-k="nafta">subir</a>'}</div>
     <div class="it"><span class="chip b">i</span> Adelantos (incluye talleres) y préstamos: se traen los pendientes al ${fD(pEnd(p))}</div>
     <div class="it"><span class="chip ${cl.length===list.length&&list.length?'g':'w'}">${cl.length}/${list.length}</span> empresas liquidadas</div></div>
-    ${hist?'<div class="alert info" style="margin:0">Período histórico importado del Excel: solo consulta.</div>':fc?'':'<div class="alert" style="margin:0">Este período <b>no tiene facturación cargada</b>: las empresas solo muestran descuentos y quedan con saldo negativo, por eso no se pueden tildar. Cargá la sábana en <a class="lnk" data-a="mod" data-k="fact">Facturación</a> eligiendo este período.</div>'}
+    ${hist?'<div class="alert info" style="margin:0">Período histórico importado del Excel: solo consulta.</div>':fc?'':`<div class="alert" style="margin:0">Este período <b>no tiene facturación cargada</b>. Las empresas <b>sin movimiento</b> aparecen igual y se pueden cerrar en <b>$0</b>. Las que solo tienen descuentos quedan en saldo negativo y se cierran desde el detalle. Cargá la sábana en <a class="lnk" data-a="mod" data-k="fact">Facturación</a> si corresponde.</div>`}
     ${sinDueno.length?`<div class="alert err" style="margin:8px 0 0">Nafta sin empresa asignada (no se descuenta): ${sinDueno.map(n=>`${esc(n.patente)} ${fm(n.importe)}`).join(', ')}</div>`:''}
    </div></div>
-  <div class="toolbar"><h2 style="margin-right:8px">Previsualización</h2>${searchBox('Buscar empresa...',260)}${hist?'':'<span class="mut small">Se muestran todas las empresas activas, aun sin movimiento: las liquidaciones en $0 también se cierran.</span>'}<div class="sp"></div><button class="btn" data-a="export" data-k="${p}">⤓ Excel</button></div>
+  <div class="toolbar"><h2 style="margin-right:8px">Previsualización</h2>${searchBox('Buscar empresa...',260)}${hist?'':`<span class="mut small">ABM completo: ${S.empresas.length} empresas · las sin facturación ni descuentos se cierran en $0</span>`}<div class="sp"></div><button class="btn" data-a="export" data-k="${p}">⤓ Excel</button></div>
   ${hist?'':`<div class="card" style="position:sticky;top:0;z-index:5;margin-bottom:10px"><div class="cb" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px">
-   <b>${sel.length}</b><span class="mut small">empresa(s) seleccionada(s)${sel.length?` · saldo ${fm(sum(pend.filter(r=>UI.sel.has(r.k)),'saldo'))}`:''}</span>
+   <b>${sel.length}</b><span class="mut small">empresa(s) seleccionada(s)${sel.length?` · saldo ${fm(sum(pend.filter(r=>UI.sel.has(r.k)),'saldo'))}`:''}${pend.filter(esCero).length?` · ${pend.filter(esCero).length} en $0`:''}</span>
    <button class="lnk" data-a="selOk">Seleccionar todas las pendientes (${pend.filter(r=>r.saldo>=0).length})</button>${sel.length?'<button class="lnk" data-a="selNone">Quitar selección</button>':''}<div class="sp"></div>
    <button class="btn" data-a="openDet" ${sel.length===1?'':'disabled'} title="Para revisar y decidir qué conceptos incluir">Revisar en detalle</button>
    <button class="btn green" data-a="massClose" ${sel.length?'':'disabled'}>✓ Cerrar ${sel.length||''} liquidación${sel.length===1?'':'es'} sin revisar</button></div></div>`}
   <div class="tw"><table><thead><tr><th style="width:34px">${hist?'':`<input type="checkbox" data-a="selAll" data-ch="1" ${pend.filter(r=>r.saldo>=0).length&&sel.length===pend.filter(r=>r.saldo>=0).length?'checked':''}>`}</th><th>Empresa de transporte</th><th class="n">Facturación</th><th class="n">Nafta</th><th class="n">Adelantos</th><th class="n">Préstamos</th><th class="n">Saldo liquidación</th><th>Estado</th><th></th></tr></thead><tbody>
   ${shown.map(r=>`<tr class="${r.closed?'closed':UI.sel.has(r.k)?'sel':''}"><td>${r.closed?'':r.saldo<0?`<input type="checkbox" disabled title="Saldo negativo: se cierra desde el detalle">`:`<input type="checkbox" ${UI.sel.has(r.k)?'checked':''} data-a="selRow" data-k="${esc(r.k)}" data-ch="1">`}</td>
-   <td class="name"><a class="lnk" style="color:#fff;font-weight:600;font-size:13px" data-a="det" data-k="${esc(r.k)}">${esc(r.empresa)}</a><div class="subt">${esc((EI()[r.k]||{}).division||'—')}${r.vh?' · '+fn(r.horas,1)+' hs':''}</div></td><td class="n">${fmz(r.fact)}</td><td class="n ded">${fmz(r.naftaT)}</td><td class="n ded">${fmz(r.adelT)}</td><td class="n ded">${fmz(r.prestT)}</td>
+   <td class="name"><a class="lnk" style="color:#fff;font-weight:600;font-size:13px" data-a="det" data-k="${esc(r.k)}">${esc(r.empresa)}</a><div class="subt">${esc((EI()[r.k]||{}).division||'—')}${r.vh?' · '+fn(r.horas,1)+' hs':''}${esCero(r)?' · sin movimiento':''}</div></td><td class="n">${fmz(r.fact)}</td><td class="n ded">${fmz(r.naftaT)}</td><td class="n ded">${fmz(r.adelT)}</td><td class="n ded">${fmz(r.prestT)}</td>
    <td class="n ${r.saldo<0?'neg':''}"><b>${fm(r.saldo)}</b></td>
-   <td>${r.closed?estadoPago(r):r.saldo<0?'<span class="chip r">Negativo</span>':'<span class="chip w">Pendiente</span>'}</td>
-   <td><button class="lnk" data-a="det" data-k="${esc(r.k)}">${r.closed?'Ver':'Detalle'}</button></td></tr>`).join('')||'<tr><td colspan="9" class="empty">Sin empresas con movimiento en el período.</td></tr>'}
+   <td>${r.closed?estadoPago(r):r.saldo<0?'<span class="chip r">Negativo</span>':esCero(r)?'<span class="chip b">$0 · cerrar</span>':'<span class="chip w">Pendiente</span>'}</td>
+   <td><button class="lnk" data-a="det" data-k="${esc(r.k)}">${r.closed?'Ver':'Detalle'}</button></td></tr>`).join('')||'<tr><td colspan="9" class="empty">Sin empresas en el ABM para este período.</td></tr>'}
   </tbody><tfoot><tr><td></td><td>Total (${shown.length})</td><td class="n">${fm(T('fact'))}</td><td class="n">${fm(T('naftaT'))}</td><td class="n">${fm(T('adelT'))}</td><td class="n">${fm(T('prestT'))}</td><td class="n">${fm(T('saldo'))}</td><td></td><td></td></tr></tfoot></table></div>
-  <p class="legend">Los gastos de taller llegan como adelantos de tipo "Taller" (concepto "Taller OT - …"). <b>Cerrar sin revisar:</b> tildá una o varias empresas (o "Seleccionar todas las pendientes") y se cierran tal cual muestra la previsualización, con todos sus conceptos; solo se elige la forma de pago. <b>Revisar:</b> hacé clic en el nombre de la empresa para abrir su liquidación y decidir qué conceptos incluir. Las empresas con saldo negativo no se pueden cerrar sin revisar.</p>`;
+  <p class="legend">Se listan <b>todas</b> las empresas de transporte activas del ABM. Si no tienen facturación ni descuentos, la liquidación queda en <b>$0</b> y se puede cerrar igual (queda como liquidada · sin pago). <b>Cerrar sin revisar:</b> tildá una o varias (incluye las de $0) y se cierran tal cual la previsualización. Las de saldo negativo se cierran desde el detalle.</p>`;
 }
 function estadoPago(r){if(r.modo==='historico')return r.reg?(Math.abs(r.dif)>1?`<span class="chip r" title="Pago registrado en el Excel distinto del saldo calculado">Histórico · difiere ${fm(r.dif)}</span>`:`<span class="chip g">Histórico · pagado ${fD(r.fechaPago)}</span>`):'<span class="chip w">Histórico · sin pago</span>';
   return `<span class="chip g">Liquidada${r.modo==='masivo'?' (masivo)':''}</span> ${r.saldo<=0?'<span class="chip">Sin pago</span>':r.pagado?`<span class="chip g">Pagada ${fD(r.fechaPago)}</span>`:'<span class="chip w">Pago pendiente</span>'}`}
@@ -707,7 +737,7 @@ function massClose(){
   const p=UI.p,keys=[...UI.sel];const rs=keys.map(k=>calcEmp(p,k,UI.ov[p+'|'+k]));const ok=rs.filter(r=>r.saldo>=0),neg=rs.filter(r=>r.saldo<0);
   modal(`Cerrar sin revisar · ${pLabel(p)}`,`<div class="full">Se cerrarán <b>${ok.length}</b> liquidación(es) con todos sus conceptos, tal cual la previsualización, por un saldo total de <b>${fm(sum(ok,r=>r.saldo))}</b>.${neg.length?`<div class="alert err" style="margin-top:10px">${neg.length} con saldo negativo se excluyen (cerralas desde el detalle): ${neg.map(r=>esc(r.empresa)).join(', ')}</div>`:''}</div>
    <div class="full mut small">El pago (transferencia / efectivo) se registra después en el módulo <b>Pago</b>.</div>`,
-   fd=>{if(!ok.length)return 'No hay liquidaciones con saldo para cerrar.';ok.forEach(r=>closeEmp(p,r.k,UI.ov[p+'|'+r.k],'masivo'));UI.sel=new Set();rebuild();toast(`${ok.length} liquidaciones cerradas`)},'Cerrar '+ok.length+(ok.length===1?' liquidación':' liquidaciones'));
+   fd=>{if(!ok.length)return 'No hay liquidaciones para cerrar (saldo ≥ $0).';ok.forEach(r=>closeEmp(p,r.k,UI.ov[p+'|'+r.k],'masivo'));UI.sel=new Set();rebuild();toast(`${ok.length} liquidaciones cerradas${ok.filter(esCero).length?` (${ok.filter(esCero).length} en $0)`:''}`)},'Cerrar '+ok.length+(ok.length===1?' liquidación':' liquidaciones'));
 }
 
 /* ================= PAGO ================= */

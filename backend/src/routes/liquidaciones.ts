@@ -121,4 +121,33 @@ router.get("/me", authenticate, async (req: AuthedRequest, res) => {
   });
 });
 
+/** Empresas de transporte activas del ABM (para liquidar también las de saldo $0). */
+router.get("/empresas", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireOps(req, res)) return;
+    const rows = await prisma.empresaTransporte.findMany({
+      where: { activo: true },
+      select: {
+        id: true,
+        nombre: true,
+        cbuAlias: true,
+        inhabilitada: true,
+      },
+      orderBy: { nombre: "asc" },
+      take: 5000,
+    });
+    res.json({
+      items: rows.map((e) => ({
+        id: e.id,
+        nombre: e.nombre,
+        banco: e.cbuAlias || "",
+        inhabilitada: e.inhabilitada,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al listar empresas" });
+  }
+});
+
 export { router as liquidacionesRouter };
