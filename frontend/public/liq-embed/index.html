@@ -259,6 +259,9 @@ const pLabel=p=>{const [y,m,h]=p.split('-');return `${h==1?'1ra':'2da'} ${MES[+m
 const pStart=p=>{const [y,m,h]=p.split('-');return `${y}-${m}-${h==1?'01':'16'}`};
 const pEnd=p=>{const [y,m,h]=p.split('-');return h==1?`${y}-${m}-15`:`${y}-${m}-${pad(new Date(+y,+m,0).getDate())}`};
 const pNext=(p,n=1)=>{let [y,m,h]=p.split('-').map(Number);for(let i=0;i<n;i++){if(h===1)h=2;else{h=1;m++;if(m>12){m=1;y++}}}return `${y}-${pad(m)}-${h}`};
+const pPrev=(p,n=1)=>{let [y,m,h]=p.split('-').map(Number);for(let i=0;i<n;i++){if(h===2)h=1;else{h=2;m--;if(m<1){m=12;y--}}}return `${y}-${pad(m)}-${h}`};
+/** Adelantos: la 1ª cuota no puede ir más atrás que 1 quincena antes de la fecha de carga. */
+const adelMinPer=f=>pPrev(perOf(String(f||today()).slice(0,10)),1);
 /** Solo períodos de meses ya cerrados (no mes actual ni futuros). */
 const ymOf=p=>String(p).slice(0,7);
 const ymNow=()=>today().slice(0,7);
@@ -560,7 +563,7 @@ function calcEmp(p,k,ov,cache){
     factRukas+=+f.importe||0;
   });
   (cache?cache.nafta:naftaGroups(p,'pend')).forEach(n=>{if(norm(n.empresa)===k)r.nafta.push({...n,inc:!exN.has(n.key)})});
-  Object.values(S.adel).forEach(a=>{if(a.deleted||norm(a.empresa)!==k)return;a.cuotas.forEach(c=>{if(c.periodo<=p&&!D.cuotaLiq[a.id+'#'+c.n]){const key=a.id+'#'+c.n;r.adel.push({id:a.id,n:c.n,de:a.cuotas.length,fecha:a.fecha,tipo:a.tipo,desc:a.desc,periodo:c.periodo,importe:+c.importe,key,inc:!exA.has(key)})}})});
+  Object.values(S.adel).forEach(a=>{if(a.deleted||norm(a.empresa)!==k)return;const amin=adelMinPer(a.fecha);a.cuotas.forEach(c=>{if(c.periodo<amin)return;if(c.periodo<=p&&!D.cuotaLiq[a.id+'#'+c.n]){const key=a.id+'#'+c.n;r.adel.push({id:a.id,n:c.n,de:a.cuotas.length,fecha:a.fecha,tipo:a.tipo,desc:a.desc,periodo:c.periodo,importe:+c.importe,key,inc:!exA.has(key)})}})});
   Object.values(S.tal).forEach(t=>{if(norm(t.empresa)===k&&t.fecha<=pEnd(p)&&!D.talLiq[t.id])r.tal.push({...t,inc:!exT.has(t.id)})});
   const vh=vhEmp(k,pStart(p));
   Object.values(S.prest).forEach(l=>{if(norm(l.empresa)!==k||loanEstado(l)!=='Activo'||l.fecha>pEnd(p))return;const ac=loanAcum(l),saldo=Math.max(0,l.totalHs-ac);if(saldo<=0.0001)return;
@@ -689,29 +692,41 @@ function vAdel(){
   ${rows.slice(0,350).map(a=>{const pc=pendC(a),sp=saldoOf(a);return `<tr><td>${fD(a.fecha)}</td><td class="name">${esc(a.empresa)}</td><td><span class="chip">${esc(a.tipo)}</span></td><td>${esc(a.desc)}</td><td>${esc(a.patente||'')}</td><td class="n">${fm(a.importe)}</td>
    <td class="n"><b>${pc.length}/${a.cuotas.length}</b></td><td class="n">${fmz(sp)}</td><td style="white-space:nowrap">${sp>0?`<button class="lnk" data-a="editAdel" data-id="${a.id}">Editar</button>`:''}${a.cuotas.every(c=>!cuotaState(a,c))?` · <button class="lnk r" data-a="delAdel" data-id="${a.id}">Eliminar</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="9" class="empty">Sin registros.</td></tr>'}
   </tbody></table></div>${rows.length>350?`<p class="legend">Mostrando 350 de ${rows.length}.</p>`:''}
-  <p class="legend">Cuotas restantes = cuotas pendientes / total. Las órdenes de taller ingresan como adelantos de tipo "Taller" (concepto "Taller OT - …") en 1 cuota, refinanciables como cualquier adelanto. Los registros del Excel se cargaron en 1 cuota en la quincena de su fecha.</p>`;
+  <p class="legend">Cuotas restantes = cuotas pendientes / total. La primera cuota no puede debitarse más de <b>1 quincena atrás</b> de la fecha de carga. Las órdenes de taller ingresan como adelantos de tipo "Taller" (concepto "Taller OT - …") en 1 cuota, refinanciables como cualquier adelanto.</p>`;
 }
 const patsOf=(emp,f)=>B.patentes.filter(p=>norm(p.empresa)===norm(emp)&&(!p.hasta||!f||p.hasta>=f)).map(p=>p.patente).filter((v,i,a)=>a.indexOf(v)===i).sort();
 function adelForm(a){
   const isNew=!a;const d=a||{fecha:today(),empresa:'',tipo:'Adelanto',desc:'',importe:'',patente:'',cuotas:[]};
   const locked=a?a.cuotas.filter(c=>cuotaState(a,c)).sort((x,y)=>x.periodo.localeCompare(y.periodo)):[];const lockedSum=sum(locked,'importe');
   const pendC=a?a.cuotas.filter(c=>!cuotaState(a,c)).sort((x,y)=>x.periodo.localeCompare(y.periodo)||x.n-y.n):[];
-  const minP=locked.length?pNext(locked[locked.length-1].periodo):PERIODS[0];
+  const floorFromFecha=f=>{
+    const fromFecha=adelMinPer(f);
+    const fromLocked=locked.length?pNext(locked[locked.length-1].periodo):fromFecha;
+    return fromLocked>fromFecha?fromLocked:fromFecha;
+  };
+  let minP=floorFromFecha(d.fecha);
   let plan=pendC.length?pendC.map(c=>({p:c.periodo,v:+c.importe})):[{p:perOf(d.fecha)<minP?minP:perOf(d.fecha),v:+d.importe||0}];
+  const clampPlan=()=>{plan.forEach((c,i)=>{const mn=i?pNext(plan[i-1].p):minP;if(c.p<mn)c.p=mn})};
+  clampPlan();
   modal(isNew?'Registrar adelanto':'Editar adelanto',
-   fld('Fecha',`<input type="date" name="fecha" required value="${d.fecha}" ${locked.length?'disabled':''}>`)+
+   fld('Fecha',`<input type="date" name="fecha" required value="${d.fecha}" ${locked.length?'disabled':''}><div class="hint">La 1ª cuota no puede ir más atrás que <b>1 quincena</b> antes de esta fecha (mín. <span id="adelMinLbl">${pLabel(minP)}</span>).</div>`)+
    fld('Tipo',`<select name="tipo" data-tipo="1">${[...new Set(tiposAct().concat(a?[d.tipo]:[]))].map(t=>`<option ${t===d.tipo?'selected':''}>${esc(t)}</option>`).join('')}<option value="__new">+ Nuevo tipo…</option></select><input type="text" name="tipoNuevo" placeholder="Nombre del nuevo tipo" style="display:none;width:100%;margin-top:6px">`)+
    fld('Empresa de transporte',`<input type="text" name="empresa" list="dlE" required value="${esc(d.empresa)}" autocomplete="off" ${locked.length?'disabled':''}>${dlE()}`)+
    fld('Patente (opcional)',`<select name="patente" id="patSel"></select><div class="hint">Solo patentes habilitadas para la empresa.</div>`)+
    fld('Descripción',`<input type="text" name="desc" value="${esc(d.desc)}" placeholder="Ej.: EF 09/1 · Ref. 1206 VTV">`,1)+
    fld('Monto $',`<input type="number" name="importe" step="0.01" min="0.01" required value="${d.importe}" ${locked.length?'disabled':''}>`)+
    fld(locked.length?'Cuotas pendientes (sobre el saldo)':'Cantidad de cuotas',`<input type="number" name="ncuotas" min="1" max="36" step="1" value="${plan.length}">`)+
-   `<div class="full"><label class="f">Plan de cuotas</label><div id="plan"></div><div class="hint" id="planMsg"></div><div class="hint">Si cambiás el período de una cuota, las siguientes se corren automáticamente un período cada una. Una cuota no puede debitarse antes que la anterior.</div></div>`,
+   `<div class="full"><label class="f">Plan de cuotas</label><div id="plan"></div><div class="hint" id="planMsg"></div><div class="hint">Si cambiás el período de una cuota, las siguientes se corren automáticamente. No se puede debitar antes que la anterior ni más de 1 quincena atrás de la fecha de carga.</div></div>`,
    fd=>{const e=EI()[norm(a?a.empresa:fd.empresa)];if(!e)return 'Solo se permiten empresas habilitadas o inhabilitadas del ABM (no inactivas).';
      if(fd.tipo==='__new'){const nt=(fd.tipoNuevo||'').trim();if(!nt)return 'Escribí el nombre del nuevo tipo.';if(!S.tipos.some(t=>norm(t.nombre)===norm(nt))){S.tipos.push({nombre:nt,activo:true});saveCfg('tipos')}fd.tipo=S.tipos.find(t=>norm(t.nombre)===norm(nt)).nombre}
-     const pat=fd.patente||'';if(pat&&!patsOf(e.nombre,a&&locked.length?a.fecha:fd.fecha).includes(pat)&&pat!==(a&&a.patente))return 'La patente no está habilitada para esa empresa.';
+     const pat=fd.patente||'';const fecha=locked.length?a.fecha:fd.fecha;if(pat&&!patsOf(e.nombre,fecha).includes(pat)&&pat!==(a&&a.patente))return 'La patente no está habilitada para esa empresa.';
+     minP=floorFromFecha(fecha);clampPlan();
      const rs=rest();
-     for(let i=0;i<plan.length;i++){if(!(plan[i].v>0))return `La cuota ${locked.length+i+1} necesita un importe mayor a 0.`;if(plan[i].p<(i?pNext(plan[i-1].p):minP))return `La cuota ${locked.length+i+1} no puede debitarse antes que la anterior.`}
+     for(let i=0;i<plan.length;i++){
+       if(!(plan[i].v>0))return `La cuota ${locked.length+i+1} necesita un importe mayor a 0.`;
+       const mn=i?pNext(plan[i-1].p):minP;
+       if(plan[i].p<mn)return `La cuota ${locked.length+i+1} no puede debitarse antes de ${pLabel(mn)}${i?'':' (máx. 1 quincena atrás de la fecha de carga)'}.`;
+     }
      if(Math.abs(sum(plan,'v')-rs)>0.5)return `Las cuotas pendientes suman ${fm(sum(plan,'v'))} y deben sumar ${fm(rs)}.`;
      const cuotas=locked.map(c=>({...c}));const nB=Math.max(0,...locked.map(c=>+c.n||0));plan.forEach((c,i)=>cuotas.push({n:nB+i+1,periodo:c.p,importe:Math.round(c.v*100)/100}));
      if(a){Object.assign(a,{tipo:fd.tipo,desc:fd.desc.trim(),patente:pat,cuotas});if(!locked.length)Object.assign(a,{fecha:fd.fecha,empresa:e.nombre,importe:+fd.importe});saveAdel(a)}
@@ -721,19 +736,20 @@ function adelForm(a){
   const F=document.getElementById('mform');
   const rest=()=>(locked.length?+a.importe:(+F.importe.value||0))-lockedSum;
   const resplit=()=>{const n=plan.length,r=rest(),b=Math.floor(r/n*100)/100;plan.forEach((c,i)=>c.v=i===n-1?Math.round((r-b*(n-1))*100)/100:b)};
+  const refreshMin=()=>{minP=floorFromFecha(locked.length?a.fecha:F.fecha.value);const lbl=document.getElementById('adelMinLbl');if(lbl)lbl.textContent=pLabel(minP);clampPlan()};
   const pats=()=>{const emp=a&&locked.length?a.empresa:F.empresa.value,f=a&&locked.length?a.fecha:F.fecha.value,L=patsOf(emp,f),cur=F.patente.value||d.patente||'';
     const opts=L.concat(cur&&!L.includes(cur)?[cur]:[]);F.patente.innerHTML=`<option value="">— Sin patente —</option>`+opts.map(p=>`<option ${p===cur?'selected':''}>${esc(p)}</option>`).join('');F.patente.disabled=!EI()[norm(emp)]};
-  const msg=()=>{const s=sum(plan,'v'),r=rest();document.getElementById('planMsg').innerHTML=Math.abs(s-r)>0.5?`<span class="ded">Las cuotas pendientes suman ${fm(s)} y deben sumar ${fm(r)}</span>`:`Cuotas pendientes: ${fm(s)} ✓`};
-  const draw=()=>{const tot=locked.length+plan.length;
+  const msg=()=>{const s=sum(plan,'v'),r=rest();document.getElementById('planMsg').innerHTML=Math.abs(s-r)>0.5?`<span class="ded">Las cuotas pendientes suman ${fm(s)} y deben sumar ${fm(r)}</span>`:`Cuotas pendientes: ${fm(s)} ✓ · mínimo debitable ${pLabel(minP)}`};
+  const draw=()=>{refreshMin();const tot=locked.length+plan.length;
     document.getElementById('plan').innerHTML=`<table class="plan"><thead><tr><th>Cuota</th><th>Período a debitar</th><th class="n">Importe</th><th>Estado</th></tr></thead><tbody>
     ${locked.map(c=>`<tr style="opacity:.45"><td>${c.n} de ${tot}</td><td><select disabled><option>${pLabel(c.periodo)}</option></select></td><td class="n"><input class="money" disabled value="${c.importe}"></td><td><span class="chip g">Debitada ${pLabel(cuotaState(a,c))}</span></td></tr>`).join('')}
     ${plan.map((c,i)=>{const mn=i?pNext(plan[i-1].p):minP;return `<tr><td>${locked.length+i+1} de ${tot}</td><td><select data-ci="${i}">${PERIODS.filter(p=>p>=mn).map(p=>`<option value="${p}" ${p===c.p?'selected':''}>${pLabel(p)}</option>`).join('')}</select></td><td class="n"><input class="money" type="number" step="0.01" min="0.01" data-vi="${i}" value="${c.v}"></td><td><span class="chip w">Pendiente</span></td></tr>`}).join('')}</tbody></table>`;msg()};
   pats();draw();
   F.addEventListener('change',e=>{const t=e.target;
     if(t.dataset.ci!=null){const i=+t.dataset.ci;plan[i].p=t.value;for(let j=i+1;j<plan.length;j++)plan[j].p=pNext(plan[i].p,j-i);draw()}
-    if(t.name==='ncuotas'){const n=Math.max(1,Math.min(36,+t.value||1));while(plan.length<n)plan.push({p:pNext(plan.length?plan[plan.length-1].p:minP,plan.length?1:0),v:0});plan.length=n;resplit();draw()}
+    if(t.name==='ncuotas'){refreshMin();const n=Math.max(1,Math.min(36,+t.value||1));while(plan.length<n)plan.push({p:pNext(plan.length?plan[plan.length-1].p:minP,plan.length?1:0),v:0});plan.length=n;resplit();draw()}
     if(t.name==='empresa'||t.name==='fecha')pats();
-    if(t.name==='fecha'&&isNew&&plan.length){const p0=perOf(t.value);plan.forEach((c,j)=>c.p=pNext(p0,j));draw()}
+    if(t.name==='fecha'&&!locked.length&&plan.length){refreshMin();const p0=perOf(t.value)<minP?minP:perOf(t.value);plan.forEach((c,j)=>c.p=pNext(p0,j));draw()}
     if(t.dataset.tipo)F.tipoNuevo.style.display=t.value==='__new'?'block':'none'});
   F.addEventListener('input',e=>{const t=e.target;if(t.dataset.vi!=null){plan[+t.dataset.vi].v=+t.value||0;msg()}if(t.name==='importe'){resplit();draw()}if(t.name==='empresa')pats()});
 }
