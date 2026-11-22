@@ -351,11 +351,63 @@ function preview(p){
   return {list,sinDueno:cache.nafta.filter(n=>!n.empresa)};
 }
 const esCero=(r)=>!r.closed&&Math.round(r.fact||0)===0&&Math.round(r.desc||0)===0;
-function closeEmp(p,k,ov,modo){
+function closeEmp(p,k,ov,modo,extra){
   const r=calcEmp(p,k,ov);const keep=x=>x.filter(i=>i.inc).map(i=>{const y={...i};delete y.inc;return y});
+  // Control estricto: no se cierra en negativo salvo conversión a adelanto.
+  if(r.saldo<-0.5&&!(extra&&extra.saldoConvertido>0)){
+    toast('No se puede cerrar en negativo');return null;
+  }
   const rec={periodo:p,k,empresa:r.empresa,modo,fact:r.fact,viajes:r.viajes,factRows:r.factRows,nafta:keep(r.nafta).map(n=>({empresa:n.empresa,patente:n.patente,tipo:n.tipo,cargas:n.cargas,litros:n.litros,importe:n.importe,refs:n.refs,periodos:n.periodos})),adel:keep(r.adel),tal:keep(r.tal),prest:keep(r.prest).map(x=>({...x,acumDespues:x.acum+x.horas})),
     ef:0,tr:0,pagado:false,fechaPago:'',cerrada:today()};
-  finish(rec);S.liq[p+'|'+k]=rec;saveLiq(rec);return rec;
+  finish(rec);
+  if(extra&&extra.saldoConvertido>0){
+    rec.saldoBruto=rec.saldo;
+    rec.saldoConvertido=Math.round(extra.saldoConvertido);
+    rec.adelantoConvertidoId=extra.adelantoId||'';
+    rec.saldo=0;
+  }
+  if(rec.saldo<-0.5){toast('No se puede cerrar en negativo');return null}
+  S.liq[p+'|'+k]=rec;saveLiq(rec);return rec;
+}
+/** Saldo negativo → nuevo adelanto (cuotas desde la quincena siguiente) y cierra la liquidación en $0. */
+function convertirNegativoYCerrar(p,k,ov,nCuotas){
+  const r=calcEmp(p,k,ov);
+  if(!(r.saldo<-0.5))return 'El saldo no es negativo.';
+  const monto=Math.round(Math.abs(r.saldo));
+  if(!(monto>0))return 'Monto inválido.';
+  const n=Math.max(1,Math.min(36,Math.round(+nCuotas||1)));
+  const base=Math.floor(monto/n),resto=monto-base*n;
+  const cuotas=[];let per=pNext(p);
+  for(let i=0;i<n;i++){
+    cuotas.push({n:i+1,periodo:per,importe:base+(i===n-1?resto:0)});
+    per=pNext(per);
+  }
+  const tipoNom='Saldo liquidación';
+  if(!S.tipos.some(t=>norm(t.nombre)===norm(tipoNom))){S.tipos.push({nombre:tipoNom,activo:true});saveCfg('tipos')}
+  const adel={
+    id:uid('n'),fecha:today(),empresa:r.empresa,tipo:tipoNom,
+    desc:`Conversión saldo negativo · ${pLabel(p)}`,
+    patente:'',importe:monto,cuotas,
+    origenLiq:p+'|'+k
+  };
+  S.adel[adel.id]=adel;saveAdel(adel);
+  const closed=closeEmp(p,k,ov,'individual',{saldoConvertido:monto,adelantoId:adel.id});
+  if(!closed){delete S.adel[adel.id];persist('adel/'+adel.id,null);return 'No se pudo cerrar la liquidación.';}
+  return null;
+}
+function formConvertirNegativo(){
+  const p=UI.p,k=UI.det,key=p+'|'+k,r=calcEmp(p,k,UI.ov[key]);
+  if(!(r.saldo<-0.5)){toast('El saldo no es negativo');return}
+  const monto=Math.round(Math.abs(r.saldo));
+  modal('Convertir saldo negativo en adelanto',
+    `<div class="full"><div class="alert info" style="margin:0 0 10px">La liquidación de <b>${esc(r.empresa)}</b> tiene saldo <b class="neg">${fm(r.saldo)}</b>. Se genera un adelanto por <b>${fm(monto)}</b> (a debitar desde la quincena siguiente) y esta liquidación se cierra en <b>$0</b>. No se permiten cierres en negativo.</div>
+     ${fld('Cuotas del nuevo adelanto',`<input type="number" name="ncuotas" min="1" max="36" step="1" value="1">`)}
+     <div class="mut small">Primera cuota: <b>${pLabel(pNext(p))}</b> · Tipo: Saldo liquidación</div></div>`,
+    fd=>{
+      const err=convertirNegativoYCerrar(p,k,UI.ov[key],fd.ncuotas);
+      if(err)return err;
+      UI.sel.delete(k);rebuild();toast(`Adelanto de ${fm(monto)} creado · liquidación cerrada en $0`);
+    },'Convertir y cerrar en $0');
 }
 
 /* ================= SHELL ================= */
@@ -566,10 +618,11 @@ function vLiq(){
    <td>${r.closed?estadoPago(r):r.saldo<0?'<span class="chip r">Negativo</span>':esCero(r)?'<span class="chip b">$0 · cerrar</span>':'<span class="chip w">Pendiente</span>'}</td>
    <td><button class="lnk" data-a="det" data-k="${esc(r.k)}">${r.closed?'Ver':'Detalle'}</button></td></tr>`).join('')||'<tr><td colspan="9" class="empty">Sin empresas en el ABM para este período.</td></tr>'}
   </tbody><tfoot><tr><td></td><td>Total (${shown.length})</td><td class="n">${fm(T('fact'))}</td><td class="n">${fm(T('naftaT'))}</td><td class="n">${fm(T('adelT'))}</td><td class="n">${fm(T('prestT'))}</td><td class="n">${fm(T('saldo'))}</td><td></td><td></td></tr></tfoot></table></div>
-  <p class="legend">Se listan <b>todas</b> las empresas de transporte activas del ABM. Si no tienen facturación ni descuentos, la liquidación queda en <b>$0</b> y se puede cerrar igual (queda como liquidada · sin pago). <b>Cerrar sin revisar:</b> tildá una o varias (incluye las de $0) y se cierran tal cual la previsualización. Las de saldo negativo se cierran desde el detalle.</p>`;
+  <p class="legend">Se listan <b>todas</b> las empresas de transporte activas del ABM. Sin movimiento → cierre en <b>$0</b>. Saldo negativo → en el detalle se puede <b>convertir en adelanto</b> y cerrar en $0 (no se permite cerrar en negativo). <b>Cerrar sin revisar:</b> solo pendientes con saldo ≥ $0.</p>`;
 }
 function estadoPago(r){if(r.modo==='historico')return r.reg?(Math.abs(r.dif)>1?`<span class="chip r" title="Pago registrado en el Excel distinto del saldo calculado">Histórico · difiere ${fm(r.dif)}</span>`:`<span class="chip g">Histórico · pagado ${fD(r.fechaPago)}</span>`):'<span class="chip w">Histórico · sin pago</span>';
-  return `<span class="chip g">Liquidada${r.modo==='masivo'?' (masivo)':''}</span> ${r.saldo<=0?'<span class="chip">Sin pago</span>':r.pagado?`<span class="chip g">Pagada ${fD(r.fechaPago)}</span>`:'<span class="chip w">Pago pendiente</span>'}`}
+  const conv=r.saldoConvertido>0?` <span class="chip b" title="Saldo bruto ${fm(r.saldoBruto||0)}">→ adelanto ${fm(r.saldoConvertido)}</span>`:'';
+  return `<span class="chip g">Liquidada${r.modo==='masivo'?' (masivo)':''}</span>${conv} ${r.saldo<=0?'<span class="chip">Sin pago</span>':r.pagado?`<span class="chip g">Pagada ${fD(r.fechaPago)}</span>`:'<span class="chip w">Pago pendiente</span>'}`}
 /* detail for one empresa */
 function vDet(){
   const p=UI.p,k=UI.det,c=closedRec(p,k),key=p+'|'+k;
@@ -587,11 +640,13 @@ function vDet(){
    ${sec('Préstamos',r.prestT,tb([['',''],['Concepto'],['Horas','n'],['Valor hora','n'],['Importe','n'],['Avance','n']],r.prest.map(x=>`<tr class="${ro||x.inc?'':'off'}"><td>${cb('exL',x.id,x.inc)}</td><td>${esc(x.concepto)}</td><td class="n">${ro?fn(x.horas,2):`<input class="sm" type="number" step="0.5" min="0" value="${x.horas}" data-a="hsL" data-id="${x.id}" data-ch="1">`}</td><td class="n">${fm(x.vh)}</td><td class="n">${fm(x.importe)}</td><td class="n">${fn(ro?x.acumDespues||0:x.acum+(x.inc?x.horas:0),1)} / ${fn(x.total,1)}</td></tr>`),'Sin préstamos vigentes.'))}
   </div><div>
    ${sec('Adelantos',r.adelT,tb([['',''],['Fecha'],['Tipo'],['Descripción'],['Cuota'],['Importe','n']],r.adel.map(a=>`<tr class="${ro||a.inc?'':'off'}"><td>${cb('exA',a.key||'',a.inc)}</td><td>${fD(a.fecha)}</td><td><span class="chip">${esc(a.tipo)}</span></td><td>${esc(a.desc)}</td><td class="small">${a.n}/${a.de} · ${pLabel(a.periodo)}${a.periodo<p?' <span class="chip r">vencida</span>':''}</td><td class="n">${fm(a.importe)}</td></tr>`),'Sin cuotas pendientes.'))}
-   <div class="tot"><span>Facturación</span><span>${fm(r.fact)}</span><span>Nafta</span><span class="ded">− ${fm(r.naftaT)}</span><span>Adelantos</span><span class="ded">− ${fm(r.adelT)}</span><span>Préstamos</span><span class="ded">− ${fm(r.prestT)}</span><span class="big">Saldo liquidación</span><span class="big ${r.saldo<0?'neg':'pos'}">${fm(r.saldo)}</span></div>
-   ${r.saldo<0&&!ro?'<div class="alert err" style="margin-top:12px">Saldo negativo: destildá nafta, adelantos o préstamos para poder cerrar (lo destildado pasa al período siguiente).</div>':''}
+   <div class="tot"><span>Facturación</span><span>${fm(r.fact)}</span><span>Nafta</span><span class="ded">− ${fm(r.naftaT)}</span><span>Adelantos</span><span class="ded">− ${fm(r.adelT)}</span><span>Préstamos</span><span class="ded">− ${fm(r.prestT)}</span><span class="big">Saldo liquidación</span><span class="big ${r.saldo<0?'neg':'pos'}">${fm(r.saldo)}</span>${ro&&c.saldoConvertido>0?`<span class="mut small">Bruto ${fm(c.saldoBruto||0)} → adelanto ${fm(c.saldoConvertido)}</span><span class="pos">$ 0</span>`:''}</div>
+   ${r.saldo<0&&!ro?`<div class="alert err" style="margin-top:12px">Saldo negativo: no se puede cerrar así. Podés <b>destildar</b> conceptos (pasan al período siguiente) o <b>convertir el saldo en un adelanto</b> y cerrar en $0.</div>`:''}
    ${ro?`<div class="paybox" style="grid-template-columns:repeat(4,minmax(0,1fr))"><div><label>Transferencia</label><b>${c.pagado||c.modo==='historico'?fm(c.tr):'—'}</b></div><div><label>Efectivo</label><b>${c.pagado||c.modo==='historico'?fm(c.ef):'—'}</b></div><div><label>Pago</label>${r.saldo<=0?'Sin pago':c.pagado?'Pagada '+fD(c.fechaPago):'Pendiente'}</div><div>${c.modo!=='historico'&&r.saldo>0?`<button class="btn sm" data-a="toPago" data-k="${esc(p+'|'+k)}">${c.pagado?'Ver en Pago':'Registrar pago →'}</button>`:''}</div></div>`:''}
-   <div class="stepfoot">${ro?(c.modo==='historico'?'<span class="mut small">Liquidación histórica (Excel): solo lectura.</span>':`<span class="mut small">Cerrada el ${fD(c.cerrada)} (${c.modo}).</span>${c.pagado?'<span class="mut small">Para reabrir, anulá primero el pago.</span>':'<button class="btn warn" data-a="reopenEmp">Reabrir</button>'}`)
-     :`<span class="mut small">El pago se registra después, en el módulo Pago.</span><button class="btn green" data-a="closeOne" ${r.saldo>=0?'':'disabled'}>Cerrar liquidación de ${esc(r.empresa)}</button>`}</div>
+   <div class="stepfoot">${ro?(c.modo==='historico'?'<span class="mut small">Liquidación histórica (Excel): solo lectura.</span>':`<span class="mut small">Cerrada el ${fD(c.cerrada)} (${c.modo})${c.saldoConvertido>0?` · convertido a adelanto ${fm(c.saldoConvertido)}`:''}.</span>${c.pagado?'<span class="mut small">Para reabrir, anulá primero el pago.</span>':'<button class="btn warn" data-a="reopenEmp">Reabrir</button>'}`)
+     :r.saldo<0
+       ?`<button class="btn" data-a="closeOne" disabled title="No se cierra en negativo">Cerrar liquidación</button><button class="btn green" data-a="convertNeg">Convertir en adelanto y cerrar en $0</button>`
+       :`<span class="mut small">El pago se registra después, en el módulo Pago.</span><button class="btn green" data-a="closeOne">Cerrar liquidación de ${esc(r.empresa)}</button>`}</div>
   </div></div>`;
 }
 function massClose(){
@@ -789,8 +844,12 @@ document.addEventListener('click',e=>{
     case 'selOk':UI.sel=new Set(preview(UI.p).list.filter(r=>!r.closed&&r.saldo>=0).map(r=>r.k));render();break;
     case 'selNone':UI.sel=new Set();render();break;
     case 'closeOne':{const p=UI.p,key=p+'|'+UI.det,r=calcEmp(p,UI.det,UI.ov[key]);
-      confirmBox('Cerrar liquidación · '+esc(r.empresa),`Saldo <b>${fm(r.saldo)}</b>. El pago se registra después en el módulo Pago.<br>Se descuentan ${r.nafta.filter(x=>x.inc).length} grupo(s) de nafta, ${r.adel.filter(x=>x.inc).length} cuota(s) de adelantos y ${r.prest.filter(x=>x.inc).length} cuota(s) de préstamos. Lo destildado queda pendiente.`,()=>{closeEmp(p,UI.det,UI.ov[key],'individual');UI.sel.delete(UI.det);toast('Liquidación cerrada')},'Cerrar liquidación');break}
-    case 'reopenEmp':{const c=closedRec(UI.p,UI.det);confirmBox('Reabrir liquidación · '+esc(c.empresa),'Las cuotas de adelantos, órdenes de taller y horas de préstamos vuelven a quedar pendientes.',()=>{delete S.liq[UI.p+'|'+UI.det];delLiq(c);toast('Liquidación reabierta')},'Reabrir');break}
+      if(r.saldo<-0.5){toast('No se puede cerrar en negativo: convertí el saldo en adelanto o destildá conceptos');break}
+      confirmBox('Cerrar liquidación · '+esc(r.empresa),`Saldo <b>${fm(r.saldo)}</b>. El pago se registra después en el módulo Pago.<br>Se descuentan ${r.nafta.filter(x=>x.inc).length} grupo(s) de nafta, ${r.adel.filter(x=>x.inc).length} cuota(s) de adelantos y ${r.prest.filter(x=>x.inc).length} cuota(s) de préstamos. Lo destildado queda pendiente.`,()=>{if(!closeEmp(p,UI.det,UI.ov[key],'individual'))return;UI.sel.delete(UI.det);toast('Liquidación cerrada')},'Cerrar liquidación');break}
+    case 'convertNeg':formConvertirNegativo();break;
+    case 'reopenEmp':{const c=closedRec(UI.p,UI.det);confirmBox('Reabrir liquidación · '+esc(c.empresa),`Las cuotas de adelantos, órdenes de taller y horas de préstamos vuelven a quedar pendientes.${c.saldoConvertido>0?' Si el adelanto generado por la conversión no se debitó, también se elimina.':''}`,()=>{
+        if(c.adelantoConvertidoId){const a=S.adel[c.adelantoConvertidoId];if(a&&a.cuotas.every(q=>!D.cuotaLiq[a.id+'#'+q.n])){delete S.adel[a.id];persist('adel/'+a.id,null)}}
+        delete S.liq[UI.p+'|'+UI.det];delLiq(c);toast('Liquidación reabierta')},'Reabrir');break}
     case 'toggleVhList':UI.vhList=!UI.vhList;render();break;
     case 'newCuadro':newCuadroForm();break;
     case 'editVh':vhForm(S.valores.find(v=>v.id===id));break;
