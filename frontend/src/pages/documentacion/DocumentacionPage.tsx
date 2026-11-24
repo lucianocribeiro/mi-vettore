@@ -361,7 +361,11 @@ export function DocumentacionPage() {
       setSelectedChofer(null);
     }
     try {
-      const cams = await apiFetch<Camioneta[]>("/api/camionetas", {}, token);
+      const camsRaw = await apiFetch<Camioneta[]>("/api/camionetas", {}, token);
+      // Documentación: solo empresas activas o inhabilitadas (no inactivas).
+      const cams = (Array.isArray(camsRaw) ? camsRaw : []).filter(
+        (c) => c.empresa?.activo !== false
+      );
       setCamionetas(cams);
       apiFetch<TipoServicio[]>("/api/tipos-servicio", {}, token)
         .then((ts) =>
@@ -374,7 +378,10 @@ export function DocumentacionPage() {
         .catch(() => setTiposServicio([]));
       let chIds: string[] = [];
       if (ops || user?.esDuenoFlota || user?.rol === "EMPRESA") {
-        const ch = await apiFetch<Chofer[]>("/api/choferes", {}, token);
+        const chRaw = await apiFetch<Chofer[]>("/api/choferes", {}, token);
+        const ch = (Array.isArray(chRaw) ? chRaw : []).filter(
+          (c) => c.empresa?.activo !== false
+        );
         setChoferes(ch);
         chIds = ch.map((c) => c.id);
       } else if (user?.choferId) {

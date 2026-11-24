@@ -321,6 +321,7 @@ export type Chofer = {
   nombre: string;
   apellido?: string | null;
   empresaId?: string | null;
+  empresa?: Empresa | null;
   dni: string;
   cuil: string | null;
   licencia: string | null;

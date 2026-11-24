@@ -25,6 +25,7 @@ const router = Router();
 const write = [authenticate, authorize(...MASTER_WRITE_ROLES)] as const;
 
 const includeAsignaciones = {
+  empresa: { select: { id: true, nombre: true, cuit: true, activo: true, inhabilitada: true } },
   asignaciones: {
     where: { periodoHasta: null },
     orderBy: { periodoDesde: "desc" as const },
@@ -33,7 +34,7 @@ const includeAsignaciones = {
       camioneta: {
         select: { id: true, patente: true, estado: true, empresaId: true },
       },
-      empresa: { select: { id: true, nombre: true, cuit: true } },
+      empresa: { select: { id: true, nombre: true, cuit: true, activo: true, inhabilitada: true } },
     },
   },
 };
