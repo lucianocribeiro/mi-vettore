@@ -358,7 +358,10 @@ export type Camioneta = {
   empresaId?: string | null;
   empresa?: Empresa | null;
   datosTecnicos: string | null;
+  /** @deprecated Usar pideSenasa + pideHomologacion. */
   pideSenasaHomologacion?: boolean;
+  /** Si false, no se pide Homologación en esta unidad. */
+  pideHomologacion?: boolean;
   km: number;
   kmActualizadoAt?: string | null;
   fechaUltimoAceite: string | null;

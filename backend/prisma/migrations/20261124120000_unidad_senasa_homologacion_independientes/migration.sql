@@ -1,0 +1,18 @@
+-- SENASA y Homologación independientes por unidad.
+ALTER TABLE "Camioneta" ADD COLUMN IF NOT EXISTS "pideSenasa" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "Camioneta" ADD COLUMN IF NOT EXISTS "pideHomologacion" BOOLEAN NOT NULL DEFAULT true;
+
+-- Migrar desde el flag combinado (si todavía existe).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'Camioneta'
+      AND column_name = 'pideSenasaHomologacion'
+  ) THEN
+    EXECUTE 'UPDATE "Camioneta" SET "pideSenasa" = "pideSenasaHomologacion", "pideHomologacion" = "pideSenasaHomologacion"';
+    EXECUTE 'ALTER TABLE "Camioneta" DROP COLUMN "pideSenasaHomologacion"';
+  END IF;
+END $$;

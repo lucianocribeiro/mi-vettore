@@ -1029,7 +1029,18 @@ router.post("/", ...write, async (req, res) => {
         tipoTransporte: tipo === undefined ? null : tipo,
         tipoServicioId: strOrNull(req.body?.tipoServicioId),
         datosTecnicos: strOrNull(req.body?.datosTecnicos),
-        pideSenasaHomologacion: req.body?.pideSenasaHomologacion !== false,
+        pideSenasa:
+          typeof req.body?.pideSenasa === "boolean"
+            ? req.body.pideSenasa
+            : typeof req.body?.pideSenasaHomologacion === "boolean"
+              ? req.body.pideSenasaHomologacion
+              : true,
+        pideHomologacion:
+          typeof req.body?.pideHomologacion === "boolean"
+            ? req.body.pideHomologacion
+            : typeof req.body?.pideSenasaHomologacion === "boolean"
+              ? req.body.pideSenasaHomologacion
+              : true,
         km: kmInicial,
         kmActualizadoAt: kmInicial > 0 ? new Date() : null,
         fechaUltimoAceite: parseDate(req.body?.fechaUltimoAceite),
@@ -1191,8 +1202,16 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
     if (req.body?.datosTecnicos !== undefined) {
       data.datosTecnicos = strOrNull(req.body.datosTecnicos);
     }
-    if (typeof req.body?.pideSenasaHomologacion === "boolean") {
-      data.pideSenasaHomologacion = req.body.pideSenasaHomologacion;
+    if (typeof req.body?.pideSenasa === "boolean") {
+      data.pideSenasa = req.body.pideSenasa;
+    } else if (typeof req.body?.pideSenasaHomologacion === "boolean") {
+      // Compat: flag viejo combinado.
+      data.pideSenasa = req.body.pideSenasaHomologacion;
+    }
+    if (typeof req.body?.pideHomologacion === "boolean") {
+      data.pideHomologacion = req.body.pideHomologacion;
+    } else if (typeof req.body?.pideSenasaHomologacion === "boolean") {
+      data.pideHomologacion = req.body.pideSenasaHomologacion;
     }
     if ("equipoFrio" in data || "tipoServicioId" in data) {
       const errorFrio = await errorEquipoTipoFrio(

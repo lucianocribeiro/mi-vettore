@@ -136,7 +136,8 @@ async function tiposOcultos(
     const cam = await prisma.camioneta.findUnique({
       where: { id: camionetaId },
       select: {
-        pideSenasaHomologacion: true,
+        pideSenasa: true,
+        pideHomologacion: true,
         empresa: { select: { pideSenasa: true } },
       },
     });
@@ -146,12 +147,14 @@ async function tiposOcultos(
 }
 
 function ocultosUnidad(c: {
-  pideSenasaHomologacion: boolean;
+  pideSenasa: boolean;
+  pideHomologacion: boolean;
   empresa: { pideSenasa: boolean };
 }): TipoDocumento[] {
-  if (!c.pideSenasaHomologacion)
-    return [TipoDocumento.SENASA, TipoDocumento.HOMOLOGACION];
-  return c.empresa.pideSenasa ? [] : [TipoDocumento.SENASA];
+  const ocultos: TipoDocumento[] = [];
+  if (!c.pideSenasa || !c.empresa.pideSenasa) ocultos.push(TipoDocumento.SENASA);
+  if (!c.pideHomologacion) ocultos.push(TipoDocumento.HOMOLOGACION);
+  return ocultos;
 }
 
 router.get("/meta", authenticate, async (req, res) => {
@@ -167,7 +170,8 @@ router.get("/meta", authenticate, async (req, res) => {
       .findUnique({
         where: { id: camionetaId },
         select: {
-          pideSenasaHomologacion: true,
+          pideSenasa: true,
+          pideHomologacion: true,
           tipoTransporte: true,
           tipoServicio: { select: { nombre: true } },
           empresa: { select: { pideSenasa: true } },
@@ -287,7 +291,8 @@ router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
             where: { id: { in: camionetaIds } },
             select: {
               id: true,
-              pideSenasaHomologacion: true,
+              pideSenasa: true,
+              pideHomologacion: true,
               tipoTransporte: true,
               tipoServicio: { select: { nombre: true } },
               empresa: { select: { pideSenasa: true } },
