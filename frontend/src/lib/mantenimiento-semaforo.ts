@@ -1,4 +1,4 @@
-/** Reglas de semáforo de mantenimiento (reunión 23/09). */
+/** Reglas de semáforo de mantenimiento. */
 export type SemaforoLevel = "ok" | "warn" | "danger";
 
 export type MantItemKey = "aceite" | "correa" | "neumaticos" | "bateria";
@@ -9,11 +9,23 @@ const RULES: Record<
     label: string;
     kmMax: number | null;
     monthsMax: number;
+    /** Meses para amarillo (si no se define, ~85% de monthsMax). */
+    monthsWarn?: number;
+    /** Km antes del límite para amarillo (si no se define, ~85% de kmMax). */
+    kmWarnBefore?: number;
     /** Si false, solo se muestra la fecha (sin semáforo en la tarjeta). */
     alerta: boolean;
   }
 > = {
-  aceite: { label: "Aceite", kmMax: 10_000, monthsMax: 3, alerta: true },
+  /** Rojo: 10.000 km o 4 meses. Amarillo: 1.000 km antes del límite o 3 meses. */
+  aceite: {
+    label: "Aceite",
+    kmMax: 10_000,
+    monthsMax: 4,
+    monthsWarn: 3,
+    kmWarnBefore: 1_000,
+    alerta: true,
+  },
   correa: {
     label: "Distribución / correa",
     kmMax: 60_000,
@@ -85,20 +97,26 @@ export function levelForItem(
           ? data.kmCambioNeumaticos
           : data.kmCambioBateria;
 
-  if (!fechaIso) return key === "aceite" ? "warn" : "warn";
+  if (!fechaIso) return "warn";
 
   const fecha = new Date(fechaIso);
   if (Number.isNaN(fecha.getTime())) return "warn";
 
   let level: SemaforoLevel = "ok";
   const months = monthsBetween(fecha, now);
+  const monthsWarn =
+    rule.monthsWarn ?? Math.max(0, rule.monthsMax * 0.85);
   if (months >= rule.monthsMax) level = "danger";
-  else if (months >= rule.monthsMax * 0.85) level = "warn";
+  else if (months >= monthsWarn) level = "warn";
 
   if (rule.kmMax != null && kmAt != null && Number.isFinite(kmAt)) {
     const delta = data.km - kmAt;
+    const kmWarn =
+      rule.kmWarnBefore != null
+        ? Math.max(0, rule.kmMax - rule.kmWarnBefore)
+        : rule.kmMax * 0.85;
     if (delta >= rule.kmMax) level = worse(level, "danger");
-    else if (delta >= rule.kmMax * 0.85) level = worse(level, "warn");
+    else if (delta >= kmWarn) level = worse(level, "warn");
   }
 
   return level;
@@ -124,12 +142,24 @@ export function reglasLabels(): {
   return (Object.keys(RULES) as MantItemKey[]).map((key) => {
     const r = RULES[key];
     const km = r.kmMax ? `${r.kmMax.toLocaleString("es-AR")} km o ` : "";
+    if (!r.alerta) {
+      return {
+        key,
+        label: r.label,
+        regla: `solo fecha último cambio (${km}${r.monthsMax} meses ref.)`,
+      };
+    }
+    if (key === "aceite") {
+      return {
+        key,
+        label: r.label,
+        regla: `${r.kmMax!.toLocaleString("es-AR")} km o ${r.monthsMax} meses (rojo) · amarillo: ${(r.kmWarnBefore ?? 0).toLocaleString("es-AR")} km o ${r.monthsWarn} meses`,
+      };
+    }
     return {
       key,
       label: r.label,
-      regla: r.alerta
-        ? `${km}${r.monthsMax} meses`
-        : `solo fecha último cambio (${km}${r.monthsMax} meses ref.)`,
+      regla: `${km}${r.monthsMax} meses`,
     };
   });
 }
