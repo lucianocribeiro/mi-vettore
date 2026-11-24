@@ -361,7 +361,8 @@ export function M5FichaPage() {
   const [fVerTaller, setFVerTaller] = useState(false);
   const [fPideSenasaEmpresa, setFPideSenasaEmpresa] = useState(true);
   const [fPideManipulacion, setFPideManipulacion] = useState(true);
-  const [fPideSenasaHomol, setFPideSenasaHomol] = useState(true);
+  const [fPideSenasaUnidad, setFPideSenasaUnidad] = useState(true);
+  const [fPideHomologacion, setFPideHomologacion] = useState(true);
   const [fEstadoChofer, setFEstadoChofer] = useState<EstadoEntidad>("ACTIVO");
   const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
@@ -638,7 +639,8 @@ export function M5FichaPage() {
     setFModelo("");
     setFAnio("");
     setFEquipoFrio("");
-    setFPideSenasaHomol(true);
+    setFPideSenasaUnidad(true);
+    setFPideHomologacion(true);
     setFCapacidadValor("");
     setFCapacidadUnidad("");
     setFTipoServicioId("");
@@ -699,9 +701,14 @@ export function M5FichaPage() {
     setFModelo(item.modelo ?? "");
     setFAnio(item.anio != null ? String(item.anio) : "");
     setFEquipoFrio(item.equipoFrio ?? "");
-    setFPideSenasaHomol(
-      item.pideSenasa !== undefined || item.pideHomologacion !== undefined
-        ? item.pideSenasa !== false || item.pideHomologacion !== false
+    setFPideSenasaUnidad(
+      item.pideSenasa !== undefined
+        ? item.pideSenasa !== false
+        : item.pideSenasaHomologacion !== false
+    );
+    setFPideHomologacion(
+      item.pideHomologacion !== undefined
+        ? item.pideHomologacion !== false
         : item.pideSenasaHomologacion !== false
     );
     setFCapacidadValor(
@@ -893,8 +900,8 @@ export function M5FichaPage() {
           modelo: fModelo || null,
           anio: fAnio ? Number(fAnio) : null,
           equipoFrio: fEquipoFrio || null,
-          pideSenasa: fPideSenasaHomol,
-          pideHomologacion: fPideSenasaHomol,
+          pideSenasa: fPideSenasaUnidad,
+          pideHomologacion: fPideHomologacion,
           capacidadValor: fCapacidadValor ? Number(fCapacidadValor) : null,
           capacidadUnidad: fCapacidadUnidad || null,
           tipoServicioId: fTipoServicioId || null,
@@ -3220,20 +3227,6 @@ export function M5FichaPage() {
                   </p>
                 )}
               </Field>
-              <Field label="Documentación que se pide">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={fPideSenasaHomol}
-                    onChange={(e) => setFPideSenasaHomol(e.target.checked)}
-                  />
-                  SENASA y Homologación
-                </label>
-                <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                  Se sacan o ponen juntos. Si está desmarcado, no se piden ni se
-                  validan en Documentación (p. ej. unidades seco).
-                </p>
-              </Field>
               <Field label="Estado">
                 <select
                   className={inputClass}
@@ -3296,6 +3289,28 @@ export function M5FichaPage() {
                       </option>
                     ))}
                 </select>
+              </Field>
+              <Field label="Documentación que se pide">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fPideSenasaUnidad}
+                    onChange={(e) => setFPideSenasaUnidad(e.target.checked)}
+                  />
+                  SENASA
+                </label>
+                <label className="mt-2 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={fPideHomologacion}
+                    onChange={(e) => setFPideHomologacion(e.target.checked)}
+                  />
+                  Homologación
+                </label>
+                <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
+                  Se tildan por separado. Si está desmarcado, ese documento no se
+                  pide ni se valida en Documentación.
+                </p>
               </Field>
             </>
           )}
