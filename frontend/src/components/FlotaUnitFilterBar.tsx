@@ -113,6 +113,18 @@ function toggleInArray<T>(arr: T[], value: T): T[] {
   return arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value];
 }
 
+export type SemaforoFiltro = "ok" | "warn" | "danger";
+
+export const SEMAFORO_FILTROS: Array<{
+  value: SemaforoFiltro;
+  label: string;
+  dot: string;
+}> = [
+  { value: "ok", label: "Ok", dot: "bg-emerald-500" },
+  { value: "warn", label: "Por vencer", dot: "bg-amber-400" },
+  { value: "danger", label: "Vencido / taller", dot: "bg-red-500" },
+];
+
 type Props = {
   value: FlotaUnitFilters;
   onChange: (next: FlotaUnitFilters) => void;
@@ -128,6 +140,9 @@ type Props = {
   labelUnidad?: boolean;
   /** Oculta el campo de texto libre (cuando hay un buscador externo). */
   hideQuery?: boolean;
+  /** Filtro por semáforo de mantenimiento (Ok / Por vencer / Vencido). */
+  semaforo?: SemaforoFiltro[];
+  onSemaforoChange?: (next: SemaforoFiltro[]) => void;
 };
 
 export function FlotaUnitFilterBar({
@@ -142,7 +157,10 @@ export function FlotaUnitFilterBar({
   labelUnidad,
   empresas = [],
   unidades = [],
+  semaforo,
+  onSemaforoChange,
 }: Props) {
+  const showSemaforo = Array.isArray(semaforo) && !!onSemaforoChange;
   const active =
     !!value.query.trim() ||
     !!value.empresaId ||
@@ -150,7 +168,8 @@ export function FlotaUnitFilterBar({
     value.estado.length > 0 ||
     value.tipo.length > 0 ||
     !!value.modelo.trim() ||
-    !!value.capacidad.trim();
+    !!value.capacidad.trim() ||
+    (showSemaforo && semaforo.length > 0);
 
   const patentes = unidades.filter((c) => {
     if (!value.empresaId) return true;
@@ -200,8 +219,36 @@ export function FlotaUnitFilterBar({
           className="min-h-11 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
         />
       )}
-      {(!hideEstado || !hideDetalleUnidad) && (
+      {(!hideEstado || !hideDetalleUnidad || showSemaforo) && (
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {showSemaforo && (
+        <div
+          className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2"
+          aria-label="Filtrar por semáforo"
+        >
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--vl-text-muted)]">
+            Semáforo
+          </div>
+          <div className="flex flex-col gap-1">
+            {SEMAFORO_FILTROS.map((s) => (
+              <label
+                key={s.value}
+                className="flex items-center gap-2 text-xs text-[var(--vl-text)]"
+              >
+                <input
+                  type="checkbox"
+                  checked={semaforo.includes(s.value)}
+                  onChange={() =>
+                    onSemaforoChange(toggleInArray(semaforo, s.value))
+                  }
+                />
+                <span className={`h-2 w-2 shrink-0 rounded-full ${s.dot}`} />
+                {s.label}
+              </label>
+            ))}
+          </div>
+        </div>
+        )}
         {!hideEstado && (
         <div
           className="rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-2"
@@ -302,7 +349,10 @@ export function FlotaUnitFilterBar({
         {active && (
           <button
             type="button"
-            onClick={() => onChange(EMPTY_FLOTA_FILTERS)}
+            onClick={() => {
+              onChange(EMPTY_FLOTA_FILTERS);
+              if (showSemaforo) onSemaforoChange([]);
+            }}
             className="font-medium text-[var(--vl-heading)] underline-offset-2 hover:underline"
           >
             Limpiar filtros

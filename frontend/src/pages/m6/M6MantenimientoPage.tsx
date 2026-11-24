@@ -6,6 +6,7 @@ import {
   FlotaUnitFilterBar,
   filterCamionetas,
   type FlotaUnitFilters,
+  type SemaforoFiltro,
 } from "../../components/FlotaUnitFilterBar";
 import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import {
@@ -107,6 +108,7 @@ export function M6MantenimientoPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [unitFilters, setUnitFilters] =
     useState<FlotaUnitFilters>(EMPTY_FLOTA_FILTERS);
+  const [semaforoFiltro, setSemaforoFiltro] = useState<SemaforoFiltro[]>([]);
   const [km, setKm] = useState("");
   const [aceite, setAceite] = useState("");
   const [correa, setCorrea] = useState("");
@@ -233,14 +235,17 @@ export function M6MantenimientoPage() {
   );
 
   const filtradas = useMemo(() => {
-    const list = filterCamionetas(conModulo, unitFilters);
+    let list = filterCamionetas(conModulo, unitFilters);
+    if (semaforoFiltro.length > 0) {
+      list = list.filter((c) => semaforoFiltro.includes(alertLevelFor(c)));
+    }
     return [...list].sort((a, b) => {
       const ta = a.kmActualizadoAt ? new Date(a.kmActualizadoAt).getTime() : 0;
       const tb = b.kmActualizadoAt ? new Date(b.kmActualizadoAt).getTime() : 0;
       if (tb !== ta) return tb - ta; // más reciente primero; sin fecha al final
       return a.patente.localeCompare(b.patente, "es");
     });
-  }, [conModulo, unitFilters]);
+  }, [conModulo, unitFilters, semaforoFiltro]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -466,6 +471,8 @@ export function M6MantenimientoPage() {
             hideDetalleUnidad
             labelUnidad={esChoferRol || esDueno}
             placeholder="Buscar unidad o empresa…"
+            semaforo={semaforoFiltro}
+            onSemaforoChange={setSemaforoFiltro}
             empresas={[
               ...new Map(
                 conModulo
