@@ -52,6 +52,8 @@ export const FLOTA_COLUMNAS: Record<HojaFlota, Columna[]> = {
     { header: "Tipo servicio", key: "tipoServicio", width: 16 },
     { header: "Estado", key: "estado", width: 16 },
     { header: "Empresa", key: "empresa", width: 26 },
+    { header: "SENASA", key: "pideSenasa", width: 10 },
+    { header: "Homologación", key: "pideHomologacion", width: 14 },
   ],
 };
 
@@ -90,6 +92,8 @@ const EJEMPLO: Record<HojaFlota, Record<string, unknown>> = {
     tipoServicio: "Supercongelado",
     estado: "OPERATIVA",
     empresa: EMPRESA_EJEMPLO,
+    pideSenasa: "SI",
+    pideHomologacion: "SI",
   },
 };
 
@@ -110,6 +114,7 @@ const INSTRUCCIONES: Record<HojaFlota, string[]> = {
     "Capacidad: número y unidad (ej. 350 kg). Tipo servicio (tipo de frío): igual al catálogo (ej. Congelado, Seco).",
     "Equipo de frío: igual al ABM de equipos de frío; el tipo de frío tiene que ser uno de los que admite ese equipo.",
     "Estado: OPERATIVA, DE_VACACIONES, FUERA_SERVICIO o INACTIVA (EN_TALLER lo maneja Talleres).",
+    "SENASA y Homologación: SI o NO (si se pide ese documento en la unidad; vacío en import = no cambia).",
   ],
 };
 
@@ -196,6 +201,9 @@ export type FilaUnidad = {
   tipoServicio: string;
   estado: string;
   empresa: string;
+  /** null = columna vacía / ausente (no modificar al importar). */
+  pideSenasa: boolean | null;
+  pideHomologacion: boolean | null;
 };
 
 export type ParsedFlota = {
@@ -348,6 +356,8 @@ export async function parseFlotaWorkbook(
       error(n, `Año inválido: ${txt(row, "anio")}`);
       return;
     }
+    const senasaRaw = txt(row, "pideSenasa");
+    const homologRaw = txt(row, "pideHomologacion");
     data.unidades.push({
       fila: n,
       patente,
@@ -359,6 +369,8 @@ export async function parseFlotaWorkbook(
       tipoServicio: txt(row, "tipoServicio"),
       estado,
       empresa,
+      pideSenasa: senasaRaw ? parseSiNo(senasaRaw) : null,
+      pideHomologacion: homologRaw ? parseSiNo(homologRaw) : null,
     });
   });
 

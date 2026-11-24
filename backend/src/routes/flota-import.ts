@@ -223,6 +223,8 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
               datos.estado = u.estado as EstadoCamioneta;
             }
           }
+          if (u.pideSenasa != null) datos.pideSenasa = u.pideSenasa;
+          if (u.pideHomologacion != null) datos.pideHomologacion = u.pideHomologacion;
 
           const guardada = current
             ? await tx.camioneta.update({
@@ -235,6 +237,8 @@ router.post("/import", ...write, upload.single("file"), async (req: AuthedReques
                   patente: u.patente,
                   empresaId,
                   estado: (datos.estado as EstadoCamioneta | undefined) ?? EstadoCamioneta.OPERATIVA,
+                  ...(u.pideSenasa == null ? {} : { pideSenasa: u.pideSenasa }),
+                  ...(u.pideHomologacion == null ? {} : { pideHomologacion: u.pideHomologacion }),
                 },
               });
           const camionetaId = guardada.id;

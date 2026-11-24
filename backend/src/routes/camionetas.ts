@@ -177,6 +177,8 @@ router.get("/export", authenticate, async (req: AuthedRequest, res) => {
             tipoServicio: c.tipoServicio?.nombre ?? c.tipoTransporte ?? "",
             estado: c.estado,
             empresa: empresa?.nombre ?? "",
+            pideSenasa: c.pideSenasa !== false ? "SI" : "NO",
+            pideHomologacion: c.pideHomologacion !== false ? "SI" : "NO",
           };
         }),
         `unidades_${new Date().toISOString().slice(0, 10)}.xlsx`
