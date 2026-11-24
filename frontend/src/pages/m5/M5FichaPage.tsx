@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -125,9 +125,6 @@ function toggleStr(arr: string[], v: string) {
   return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
 }
 
-function toggleEstado(arr: EstadoEntidad[], v: EstadoEntidad): EstadoEntidad[] {
-  return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
-}
 
 /** Filtro avanzado de Choferes y Empresas (mismo criterio que Unidades: se guarda en el navegador). */
 type SiNo = "" | "si" | "no";
@@ -203,33 +200,143 @@ function AdvPanel({ open, onToggle, activo, onLimpiar, children }: { open: boole
 
 function AdvOpciones<V extends string>({ titulo, value, onChange, opciones }: { titulo: string; value: V; onChange: (v: V) => void; opciones: [V, string][] }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">{titulo}</p>
-      <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as V)}
+        className="min-h-9 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-bg)] px-2.5 py-1.5 text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
+      >
         {opciones.map(([v, l]) => (
-          <label key={v || "todos"} className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]">
-            <input type="radio" checked={value === v} onChange={() => onChange(v)} />
+          <option key={v || "todos"} value={v}>
             {l}
-          </label>
+          </option>
         ))}
-      </div>
+      </select>
     </div>
   );
 }
 
-function AdvEstados({ value, onChange }: { value: EstadoEntidad[]; onChange: (v: EstadoEntidad[]) => void }) {
+/** Multi-selección compacta en desplegable (con búsqueda si hay muchas opciones). */
+function AdvMultiSelect({
+  titulo,
+  options,
+  selected,
+  onChange,
+  emptyLabel = "Todas",
+}: {
+  titulo: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  emptyLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  useEffect(() => {
+    if (!open) setQ("");
+  }, [open]);
+  const filtered = useMemo(() => {
+    const n = q.trim().toLowerCase();
+    if (!n) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(n));
+  }, [options, q]);
+  const summary =
+    selected.length === 0
+      ? emptyLabel
+      : selected.length === 1
+        ? options.find((o) => o.value === selected[0])?.label ?? "1 elegida"
+        : `${selected.length} elegidas`;
   return (
-    <div>
-      <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">Estado</p>
-      <div className="flex flex-wrap gap-x-3 gap-y-1.5">
-        {ESTADOS_ENTIDAD.map((e) => (
-          <label key={e} className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]">
-            <input type="checkbox" checked={value.includes(e)} onChange={() => onChange(toggleEstado(value, e))} />
-            {estadoLabel(e)}
-          </label>
-        ))}
-      </div>
+    <div ref={ref} className="relative min-w-0">
+      <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">{titulo}</p>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex min-h-9 w-full items-center justify-between gap-2 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-bg)] px-2.5 py-1.5 text-left text-sm text-[var(--vl-text)] outline-none focus:border-[#1e4080]"
+      >
+        <span className={`truncate ${selected.length ? "" : "text-[var(--vl-text-muted)]"}`}>{summary}</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-[var(--vl-text-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 max-h-60 w-full min-w-[220px] overflow-hidden rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)] shadow-lg">
+          {options.length > 8 && (
+            <div className="border-b border-[var(--vl-card-border)] p-2">
+              <input
+                autoFocus
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar…"
+                className="min-h-8 w-full rounded border border-[var(--vl-card-border)] bg-[var(--vl-bg)] px-2 text-xs outline-none focus:border-[#1e4080]"
+              />
+            </div>
+          )}
+          <div className="max-h-44 overflow-y-auto p-1.5">
+            {filtered.length === 0 ? (
+              <p className="px-2 py-1.5 text-xs text-[var(--vl-text-muted)]">Sin coincidencias</p>
+            ) : (
+              filtered.map((o) => (
+                <label
+                  key={o.value}
+                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-[var(--vl-text)] hover:bg-[var(--vl-bg)]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(o.value)}
+                    onChange={() => onChange(toggleStr(selected, o.value))}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                </label>
+              ))
+            )}
+          </div>
+          {selected.length > 0 && (
+            <div className="border-t border-[var(--vl-card-border)] px-2 py-1.5">
+              <button
+                type="button"
+                className="text-xs text-[#1e4080] underline-offset-2 hover:underline"
+                onClick={() => onChange([])}
+              >
+                Limpiar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+function AdvEstados({
+  value,
+  onChange,
+  ocultarInactivo,
+}: {
+  value: EstadoEntidad[];
+  onChange: (v: EstadoEntidad[]) => void;
+  ocultarInactivo?: boolean;
+}) {
+  const opts = ESTADOS_ENTIDAD.filter((e) => !(ocultarInactivo && e === "INACTIVO")).map((e) => ({
+    value: e,
+    label: estadoLabel(e),
+  }));
+  return (
+    <AdvMultiSelect
+      titulo="Estado"
+      options={opts}
+      selected={value}
+      onChange={(next) => onChange(next as EstadoEntidad[])}
+      emptyLabel="Todos"
+    />
   );
 }
 
@@ -1778,121 +1885,49 @@ export function M5FichaPage() {
                 />
               </button>
               {advUnidadOpen && (
-                <div className="space-y-4 border-t border-[var(--vl-card-border)] px-3 py-3">
-                  <div>
-                    <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">
-                      Empresa de transporte
-                    </p>
-                    <div className="flex max-h-36 flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
-                      {[...empresas]
+                <div className="space-y-3 border-t border-[var(--vl-card-border)] px-3 py-3">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <AdvMultiSelect
+                      titulo="Empresa de transporte"
+                      options={[...empresas]
                         .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
-                        .map((e) => (
-                          <label
-                            key={e.id}
-                            className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={advUnidad.empresaIds.includes(e.id)}
-                              onChange={() =>
-                                setAdvUnidad((a) => ({
-                                  ...a,
-                                  empresaIds: toggleStr(a.empresaIds, e.id),
-                                }))
-                              }
-                            />
-                            {e.nombre}
-                          </label>
-                        ))}
-                    </div>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">
-                        Marca
-                      </p>
-                      <div className="flex max-h-28 flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
-                        {marcasUnidadOpts.length === 0 ? (
-                          <span className="text-xs text-[var(--vl-text-muted)]">
-                            Sin marcas
-                          </span>
-                        ) : (
-                          marcasUnidadOpts.map((m) => (
-                            <label
-                              key={m}
-                              className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={advUnidad.marcas.includes(m)}
-                                onChange={() =>
-                                  setAdvUnidad((a) => {
-                                    const marcas = toggleStr(a.marcas, m);
-                                    if (marcas.length === 0) {
-                                      return { ...a, marcas, modelos: a.modelos };
-                                    }
-                                    const allowed = new Set(
-                                      (Array.isArray(camionetas)
-                                        ? camionetas
-                                        : []
-                                      )
-                                        .filter((c) =>
-                                          marcas.includes((c.marca ?? "").trim())
-                                        )
-                                        .map((c) => (c.modelo ?? "").trim())
-                                        .filter(Boolean)
-                                    );
-                                    return {
-                                      ...a,
-                                      marcas,
-                                      modelos: a.modelos.filter((mod) =>
-                                        allowed.has(mod)
-                                      ),
-                                    };
-                                  })
-                                }
-                              />
-                              {m}
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">
-                        Modelo
-                      </p>
-                      <div className="flex max-h-28 flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
-                        {modelosUnidadOpts.length === 0 ? (
-                          <span className="text-xs text-[var(--vl-text-muted)]">
-                            Sin modelos
-                          </span>
-                        ) : (
-                          modelosUnidadOpts.map((m) => (
-                            <label
-                              key={m}
-                              className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={advUnidad.modelos.includes(m)}
-                                onChange={() =>
-                                  setAdvUnidad((a) => ({
-                                    ...a,
-                                    modelos: toggleStr(a.modelos, m),
-                                  }))
-                                }
-                              />
-                              {m}
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-end gap-3">
-                    <label className="text-xs text-[var(--vl-text)]">
-                      <span className="mb-1 block font-semibold text-[var(--vl-text-muted)]">
+                        .map((e) => ({ value: e.id, label: e.nombre }))}
+                      selected={advUnidad.empresaIds}
+                      onChange={(empresaIds) =>
+                        setAdvUnidad((a) => ({ ...a, empresaIds }))
+                      }
+                    />
+                    <AdvMultiSelect
+                      titulo="Marca"
+                      options={marcasUnidadOpts.map((m) => ({ value: m, label: m }))}
+                      selected={advUnidad.marcas}
+                      onChange={(marcas) =>
+                        setAdvUnidad((a) => {
+                          if (marcas.length === 0) {
+                            return { ...a, marcas, modelos: a.modelos };
+                          }
+                          const allowed = new Set(
+                            (Array.isArray(camionetas) ? camionetas : [])
+                              .filter((c) => marcas.includes((c.marca ?? "").trim()))
+                              .map((c) => (c.modelo ?? "").trim())
+                              .filter(Boolean)
+                          );
+                          return {
+                            ...a,
+                            marcas,
+                            modelos: a.modelos.filter((mod) => allowed.has(mod)),
+                          };
+                        })
+                      }
+                    />
+                    <AdvMultiSelect
+                      titulo="Modelo"
+                      options={modelosUnidadOpts.map((m) => ({ value: m, label: m }))}
+                      selected={advUnidad.modelos}
+                      onChange={(modelos) => setAdvUnidad((a) => ({ ...a, modelos }))}
+                    />
+                    <label className="min-w-0 text-xs text-[var(--vl-text)]">
+                      <span className="mb-1.5 block font-semibold text-[var(--vl-text-muted)]">
                         Año desde
                       </span>
                       <input
@@ -1906,11 +1941,11 @@ export function M5FichaPage() {
                             anioDesde: e.target.value,
                           }))
                         }
-                        className="min-h-9 w-28 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-bg)] px-2 py-1.5 text-sm outline-none focus:border-[#1e4080]"
+                        className="min-h-9 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-bg)] px-2.5 py-1.5 text-sm outline-none focus:border-[#1e4080]"
                       />
                     </label>
-                    <label className="text-xs text-[var(--vl-text)]">
-                      <span className="mb-1 block font-semibold text-[var(--vl-text-muted)]">
+                    <label className="min-w-0 text-xs text-[var(--vl-text)]">
+                      <span className="mb-1.5 block font-semibold text-[var(--vl-text-muted)]">
                         Año hasta
                       </span>
                       <input
@@ -1924,71 +1959,31 @@ export function M5FichaPage() {
                             anioHasta: e.target.value,
                           }))
                         }
-                        className="min-h-9 w-28 rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-bg)] px-2 py-1.5 text-sm outline-none focus:border-[#1e4080]"
+                        className="min-h-9 w-full rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-bg)] px-2.5 py-1.5 text-sm outline-none focus:border-[#1e4080]"
                       />
                     </label>
-                  </div>
-                  <div>
-                    <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">
-                      Tipo de frío
-                    </p>
-                    <div className="flex max-h-28 flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
-                      {(Array.isArray(tiposServicio) ? tiposServicio : [])
+                    <AdvMultiSelect
+                      titulo="Tipo de frío"
+                      options={(Array.isArray(tiposServicio) ? tiposServicio : [])
                         .filter((t) => t.activo !== false)
                         .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
-                        .map((t) => (
-                          <label
-                            key={t.id}
-                            className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={advUnidad.tipoServicioIds.includes(t.id)}
-                              onChange={() =>
-                                setAdvUnidad((a) => ({
-                                  ...a,
-                                  tipoServicioIds: toggleStr(
-                                    a.tipoServicioIds,
-                                    t.id
-                                  ),
-                                }))
-                              }
-                            />
-                            {t.nombre}
-                          </label>
-                        ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">
-                      Estado
-                    </p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1.5">
-                      {ESTADOS_ENTIDAD.filter(
-                        (e) => !(e === "INACTIVO" && unidadCounts.INACTIVO === 0)
-                      ).map((e) => (
-                        <label
-                          key={e}
-                          className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={advUnidad.estados.includes(e)}
-                            onChange={() => {
-                              setAdvUnidad((a) => ({
-                                ...a,
-                                estados: toggleEstado(a.estados, e),
-                              }));
-                              setEstadoFiltro((p) => ({
-                                ...p,
-                                camioneta: "TODOS",
-                              }));
-                            }}
-                          />
-                          {estadoLabel(e)}
-                        </label>
-                      ))}
-                    </div>
+                        .map((t) => ({ value: t.id, label: t.nombre }))}
+                      selected={advUnidad.tipoServicioIds}
+                      onChange={(tipoServicioIds) =>
+                        setAdvUnidad((a) => ({ ...a, tipoServicioIds }))
+                      }
+                    />
+                    <AdvEstados
+                      value={advUnidad.estados}
+                      ocultarInactivo={unidadCounts.INACTIVO === 0}
+                      onChange={(estados) => {
+                        setAdvUnidad((a) => ({ ...a, estados }));
+                        setEstadoFiltro((p) => ({
+                          ...p,
+                          camioneta: "TODOS",
+                        }));
+                      }}
+                    />
                   </div>
                   {advUnidadActivo && (
                     <button
@@ -2125,24 +2120,15 @@ export function M5FichaPage() {
               activo={advChoferActivo}
               onLimpiar={() => advChofer.setValue(EMPTY_ABM_CHOFER_ADV)}
             >
-              <div>
-                <p className="mb-1.5 text-xs font-semibold text-[var(--vl-text-muted)]">Empresa de transporte</p>
-                <div className="flex max-h-36 flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
-                  {[...empresas]
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <AdvMultiSelect
+                  titulo="Empresa de transporte"
+                  options={[...empresas]
                     .sort((x, y) => x.nombre.localeCompare(y.nombre, "es"))
-                    .map((e) => (
-                      <label key={e.id} className="flex items-center gap-1.5 text-xs text-[var(--vl-text)]">
-                        <input
-                          type="checkbox"
-                          checked={advChofer.value.empresaIds.includes(e.id)}
-                          onChange={() => advChofer.setValue((a) => ({ ...a, empresaIds: toggleStr(a.empresaIds, e.id) }))}
-                        />
-                        {e.nombre}
-                      </label>
-                    ))}
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+                    .map((e) => ({ value: e.id, label: e.nombre }))}
+                  selected={advChofer.value.empresaIds}
+                  onChange={(empresaIds) => advChofer.setValue((a) => ({ ...a, empresaIds }))}
+                />
                 <AdvOpciones
                   titulo="Unidad asignada"
                   value={advChofer.value.unidad}
@@ -2155,20 +2141,21 @@ export function M5FichaPage() {
                   onChange={(v) => advChofer.setValue((a) => ({ ...a, dueno: v }))}
                   opciones={[["", "Todos"], ["si", "Sí"], ["no", "No"]]}
                 />
+                <AdvOpciones
+                  titulo="Vencimiento de licencia"
+                  value={advChofer.value.licencia}
+                  onChange={(v) => advChofer.setValue((a) => ({ ...a, licencia: v }))}
+                  opciones={[["", "Todos"], ["vencida", "Vencida"], ["por_vencer", "Vence en 30 días"], ["vigente", "Vigente"], ["sin_fecha", "Sin fecha"]]}
+                />
+                <AdvEstados
+                  value={advChofer.value.estados}
+                  ocultarInactivo
+                  onChange={(estados) => {
+                    advChofer.setValue((a) => ({ ...a, estados }));
+                    setEstadoFiltro((p) => ({ ...p, chofer: "TODOS" }));
+                  }}
+                />
               </div>
-              <AdvOpciones
-                titulo="Vencimiento de licencia"
-                value={advChofer.value.licencia}
-                onChange={(v) => advChofer.setValue((a) => ({ ...a, licencia: v }))}
-                opciones={[["", "Todos"], ["vencida", "Vencida"], ["por_vencer", "Vence en 30 días"], ["vigente", "Vigente"], ["sin_fecha", "Sin fecha"]]}
-              />
-              <AdvEstados
-                value={advChofer.value.estados}
-                onChange={(estados) => {
-                  advChofer.setValue((a) => ({ ...a, estados }));
-                  setEstadoFiltro((p) => ({ ...p, chofer: "TODOS" }));
-                }}
-              />
             </AdvPanel>
             <p className="text-[11px] text-[var(--vl-text-muted)]">
               Mostrando {choferesFiltrados.length} de {choferCounts.TODOS}
@@ -2392,7 +2379,7 @@ export function M5FichaPage() {
             activo={advEmpresaActivo}
             onLimpiar={() => advEmpresa.setValue(EMPTY_ABM_EMPRESA_ADV)}
           >
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <AdvOpciones
                 titulo="Ve Mantenimiento"
                 value={advEmpresa.value.mantenimiento}
@@ -2423,14 +2410,14 @@ export function M5FichaPage() {
                 onChange={(v) => advEmpresa.setValue((a) => ({ ...a, multi: v }))}
                 opciones={[["", "Todas"], ["si", "Sí"], ["no", "No"]]}
               />
+              <AdvEstados
+                value={advEmpresa.value.estados}
+                onChange={(estados) => {
+                  advEmpresa.setValue((a) => ({ ...a, estados }));
+                  setEstadoFiltro((p) => ({ ...p, empresas: "TODOS" }));
+                }}
+              />
             </div>
-            <AdvEstados
-              value={advEmpresa.value.estados}
-              onChange={(estados) => {
-                advEmpresa.setValue((a) => ({ ...a, estados }));
-                setEstadoFiltro((p) => ({ ...p, empresas: "TODOS" }));
-              }}
-            />
           </AdvPanel>
           <p className="text-[11px] text-[var(--vl-text-muted)]">
             Mostrando {empresasFiltradas.length} de {empresaCounts.TODOS}
