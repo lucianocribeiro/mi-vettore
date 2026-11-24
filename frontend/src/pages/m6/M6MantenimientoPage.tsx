@@ -223,15 +223,24 @@ export function M6MantenimientoPage() {
     void load();
   }, [load]);
 
+  /** Solo unidades de empresas con Mantenimiento habilitado en el ABM. */
+  const conModulo = useMemo(
+    () =>
+      (Array.isArray(camionetas) ? camionetas : []).filter(
+        (c) => c.empresa?.verMantenimiento === true
+      ),
+    [camionetas]
+  );
+
   const filtradas = useMemo(() => {
-    const list = filterCamionetas(camionetas, unitFilters);
+    const list = filterCamionetas(conModulo, unitFilters);
     return [...list].sort((a, b) => {
       const ta = a.kmActualizadoAt ? new Date(a.kmActualizadoAt).getTime() : 0;
       const tb = b.kmActualizadoAt ? new Date(b.kmActualizadoAt).getTime() : 0;
       if (tb !== ta) return tb - ta; // más reciente primero; sin fecha al final
       return a.patente.localeCompare(b.patente, "es");
     });
-  }, [camionetas, unitFilters]);
+  }, [conModulo, unitFilters]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -440,12 +449,18 @@ export function M6MantenimientoPage() {
         </p>
       )}
 
-      {!loading && camionetas.length > 0 && (
+      {!loading && camionetas.length > 0 && conModulo.length === 0 && (
+        <p className="text-sm text-[var(--vl-text-muted)]">
+          No hay empresas con el módulo Mantenimiento habilitado en el ABM.
+        </p>
+      )}
+
+      {!loading && conModulo.length > 0 && (
         <>
           <FlotaUnitFilterBar
             value={unitFilters}
             onChange={setUnitFilters}
-            total={camionetas.length}
+            total={conModulo.length}
             shown={filtradas.length}
             hideEstado={!isInternalOps(user?.rol)}
             hideDetalleUnidad
@@ -453,13 +468,13 @@ export function M6MantenimientoPage() {
             placeholder="Buscar unidad o empresa…"
             empresas={[
               ...new Map(
-                camionetas
+                conModulo
                   .map((c) => c.empresa)
                   .filter((e): e is NonNullable<typeof e> => !!e)
                   .map((e) => [e.id, e])
               ).values(),
             ]}
-            unidades={camionetas}
+            unidades={conModulo}
           />
 
           {filtradas.length === 0 ? (

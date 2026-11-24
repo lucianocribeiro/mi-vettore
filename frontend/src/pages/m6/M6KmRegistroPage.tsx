@@ -45,9 +45,17 @@ export function M6KmRegistroPage() {
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [exportando, setExportando] = useState(false);
 
+  const camsConModulo = useMemo(
+    () =>
+      (Array.isArray(camionetas) ? camionetas : []).filter(
+        (c) => c.empresa?.verMantenimiento === true
+      ),
+    [camionetas]
+  );
+
   const selected = useMemo(
-    () => camionetas.find((c) => c.id === camionetaId) ?? null,
-    [camionetas, camionetaId]
+    () => camsConModulo.find((c) => c.id === camionetaId) ?? null,
+    [camsConModulo, camionetaId]
   );
 
   const load = useCallback(async () => {
@@ -65,9 +73,10 @@ export function M6KmRegistroPage() {
       ]);
       setCamionetas(cams);
       setRegistros(regs.registros);
+      const habilitadas = cams.filter((c) => c.empresa?.verMantenimiento === true);
       setCamionetaId((prev) => {
-        if (prev && cams.some((c) => c.id === prev)) return prev;
-        return cams[0]?.id ?? "";
+        if (prev && habilitadas.some((c) => c.id === prev)) return prev;
+        return habilitadas[0]?.id ?? "";
       });
     } catch (err) {
       setError(
@@ -210,13 +219,13 @@ export function M6KmRegistroPage() {
                 className="mt-1 w-full rounded-md border border-[var(--vl-card-border)] bg-transparent px-3 py-2 text-sm"
                 value={camionetaId}
                 onChange={(e) => setCamionetaId(e.target.value)}
-                disabled={!canWrite || camionetas.length === 0}
+                disabled={!canWrite || camsConModulo.length === 0}
                 required
               >
-                {camionetas.length === 0 && (
-                  <option value="">Sin unidades</option>
+                {camsConModulo.length === 0 && (
+                  <option value="">Sin unidades con mantenimiento</option>
                 )}
-                {camionetas.map((c) => (
+                {camsConModulo.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.patente}
                     {unidadTitulo(c) !== c.patente ? ` · ${unidadTitulo(c)}` : ""}

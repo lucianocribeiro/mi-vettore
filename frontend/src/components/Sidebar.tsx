@@ -187,9 +187,10 @@ export function Sidebar({ open, onClose }: Props) {
   const perfilExterno = rol === "EMPRESA" || rol === "CHOFER";
   const items = NAV.filter((n) => {
     if (n.roles && !(rol && n.roles.includes(rol))) return false;
-    if (rol === "CHOFER") {
-      if (n.to === "/m6" && user?.verMantenimiento === false) return false;
-      if (n.to === "/m7" && user?.verTaller === false) return false;
+    // Empresa/chofer: solo ven los módulos que el admin habilitó en el ABM de la empresa.
+    if (perfilExterno) {
+      if (n.to === "/m6" && user?.verMantenimiento !== true) return false;
+      if (n.to === "/m7" && user?.verTaller !== true) return false;
     }
     return true;
   }).map((n) => {

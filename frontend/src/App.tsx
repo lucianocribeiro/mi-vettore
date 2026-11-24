@@ -79,8 +79,8 @@ function ModuloEmpresaGate({
   }
   const ok =
     modulo === "taller"
-      ? user?.verTaller !== false
-      : user?.verMantenimiento !== false;
+      ? user?.verTaller === true
+      : user?.verMantenimiento === true;
   if (!ok) {
     return <Navigate to={user ? homePathForUser(user) : "/login"} replace />;
   }
