@@ -120,7 +120,7 @@ function parseTipo(raw: unknown): TipoDocumento | null {
   return s as TipoDocumento;
 }
 
-/** Documentos que Vettore desactivó: SENASA por empresa, carnet de manipulación de alimentos por chofer. */
+/** Documentos desactivados: SENASA/Homologación por unidad; manipulación por chofer. */
 async function tiposOcultos(
   choferId: string | null | undefined,
   camionetaId: string | null | undefined
@@ -138,7 +138,6 @@ async function tiposOcultos(
       select: {
         pideSenasa: true,
         pideHomologacion: true,
-        empresa: { select: { pideSenasa: true } },
       },
     });
     return cam ? ocultosUnidad(cam) : [];
@@ -149,10 +148,9 @@ async function tiposOcultos(
 function ocultosUnidad(c: {
   pideSenasa: boolean;
   pideHomologacion: boolean;
-  empresa: { pideSenasa: boolean };
 }): TipoDocumento[] {
   const ocultos: TipoDocumento[] = [];
-  if (!c.pideSenasa || !c.empresa.pideSenasa) ocultos.push(TipoDocumento.SENASA);
+  if (!c.pideSenasa) ocultos.push(TipoDocumento.SENASA);
   if (!c.pideHomologacion) ocultos.push(TipoDocumento.HOMOLOGACION);
   return ocultos;
 }
@@ -174,7 +172,6 @@ router.get("/meta", authenticate, async (req, res) => {
           pideHomologacion: true,
           tipoTransporte: true,
           tipoServicio: { select: { nombre: true } },
-          empresa: { select: { pideSenasa: true } },
         },
       })
       .catch(() => null);
@@ -295,7 +292,6 @@ router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
               pideHomologacion: true,
               tipoTransporte: true,
               tipoServicio: { select: { nombre: true } },
-              empresa: { select: { pideSenasa: true } },
             },
           })
         : Promise.resolve([]),

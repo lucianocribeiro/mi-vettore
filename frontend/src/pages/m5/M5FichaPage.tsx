@@ -466,7 +466,6 @@ export function M5FichaPage() {
   const [fEmailChofer, setFEmailChofer] = useState("");
   const [fVerMant, setFVerMant] = useState(false);
   const [fVerTaller, setFVerTaller] = useState(false);
-  const [fPideSenasaEmpresa, setFPideSenasaEmpresa] = useState(true);
   const [fPideManipulacion, setFPideManipulacion] = useState(true);
   const [fPideSenasaUnidad, setFPideSenasaUnidad] = useState(true);
   const [fPideHomologacion, setFPideHomologacion] = useState(true);
@@ -732,7 +731,6 @@ export function M5FichaPage() {
     setFEmailChofer("");
     setFVerMant(false);
     setFVerTaller(false);
-    setFPideSenasaEmpresa(true);
     setFPideManipulacion(true);
     setFEstadoChofer("ACTIVO");
     setFCuit("");
@@ -797,7 +795,6 @@ export function M5FichaPage() {
     setFPasswordEmpresa("");
     setFVerMant(!!item.verMantenimiento);
     setFVerTaller(!!item.verTaller);
-    setFPideSenasaEmpresa(item.pideSenasa !== false);
     setForm({ kind: "empresa", item });
   }
 
@@ -957,7 +954,6 @@ export function M5FichaPage() {
           password: fPasswordEmpresa || undefined,
           verMantenimiento: fVerMant,
           verTaller: fVerTaller,
-          pideSenasa: fPideSenasaEmpresa,
         };
         if (form.item) {
           const updated = await apiFetch<Empresa & { credencialTemporal?: string }>(
@@ -2996,20 +2992,6 @@ export function M5FichaPage() {
                   />
                   Taller
                 </label>
-              </Field>
-              <Field label="Documentación que se pide">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={fPideSenasaEmpresa}
-                    onChange={(e) => setFPideSenasaEmpresa(e.target.checked)}
-                  />
-                  SENASA en unidades de esta empresa
-                </label>
-                <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                  Si está desmarcado, las unidades de la empresa no piden SENASA
-                  (p. ej. flota seco). Homologación sigue según cada unidad.
-                </p>
               </Field>
               {!form.item && (
                 <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
