@@ -168,19 +168,15 @@ export function FichaDrawer({
                   }
                 />
                 <Row
-                  label="SENASA"
+                  label="SENASA y Homologación"
                   value={
-                    (cam.pideSenasa ?? cam.pideSenasaHomologacion) === false
-                      ? "No se pide"
-                      : "Obligatorio"
-                  }
-                />
-                <Row
-                  label="Homologación"
-                  value={
-                    (cam.pideHomologacion ?? cam.pideSenasaHomologacion) === false
-                      ? "No se pide"
-                      : "Obligatorio"
+                    cam.pideSenasa !== undefined || cam.pideHomologacion !== undefined
+                      ? cam.pideSenasa === false && cam.pideHomologacion === false
+                        ? "No se pide"
+                        : "Obligatorio"
+                      : cam.pideSenasaHomologacion === false
+                        ? "No se pide"
+                        : "Obligatorio"
                   }
                 />
                 <div className="flex items-center justify-between gap-3">

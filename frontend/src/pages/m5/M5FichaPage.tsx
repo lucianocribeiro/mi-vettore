@@ -361,8 +361,7 @@ export function M5FichaPage() {
   const [fVerTaller, setFVerTaller] = useState(false);
   const [fPideSenasaEmpresa, setFPideSenasaEmpresa] = useState(true);
   const [fPideManipulacion, setFPideManipulacion] = useState(true);
-  const [fPideSenasaUnidad, setFPideSenasaUnidad] = useState(true);
-  const [fPideHomologacion, setFPideHomologacion] = useState(true);
+  const [fPideSenasaHomol, setFPideSenasaHomol] = useState(true);
   const [fEstadoChofer, setFEstadoChofer] = useState<EstadoEntidad>("ACTIVO");
   const [fChoferEmpresaId, setFChoferEmpresaId] = useState("");
   const [fPasswordEmpresa, setFPasswordEmpresa] = useState("");
@@ -639,8 +638,7 @@ export function M5FichaPage() {
     setFModelo("");
     setFAnio("");
     setFEquipoFrio("");
-    setFPideSenasaUnidad(true);
-    setFPideHomologacion(true);
+    setFPideSenasaHomol(true);
     setFCapacidadValor("");
     setFCapacidadUnidad("");
     setFTipoServicioId("");
@@ -701,14 +699,9 @@ export function M5FichaPage() {
     setFModelo(item.modelo ?? "");
     setFAnio(item.anio != null ? String(item.anio) : "");
     setFEquipoFrio(item.equipoFrio ?? "");
-    setFPideSenasaUnidad(
-      item.pideSenasa !== undefined
-        ? item.pideSenasa !== false
-        : item.pideSenasaHomologacion !== false
-    );
-    setFPideHomologacion(
-      item.pideHomologacion !== undefined
-        ? item.pideHomologacion !== false
+    setFPideSenasaHomol(
+      item.pideSenasa !== undefined || item.pideHomologacion !== undefined
+        ? item.pideSenasa !== false || item.pideHomologacion !== false
         : item.pideSenasaHomologacion !== false
     );
     setFCapacidadValor(
@@ -900,8 +893,8 @@ export function M5FichaPage() {
           modelo: fModelo || null,
           anio: fAnio ? Number(fAnio) : null,
           equipoFrio: fEquipoFrio || null,
-          pideSenasa: fPideSenasaUnidad,
-          pideHomologacion: fPideHomologacion,
+          pideSenasa: fPideSenasaHomol,
+          pideHomologacion: fPideSenasaHomol,
           capacidadValor: fCapacidadValor ? Number(fCapacidadValor) : null,
           capacidadUnidad: fCapacidadUnidad || null,
           tipoServicioId: fTipoServicioId || null,
@@ -3231,22 +3224,14 @@ export function M5FichaPage() {
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={fPideSenasaUnidad}
-                    onChange={(e) => setFPideSenasaUnidad(e.target.checked)}
+                    checked={fPideSenasaHomol}
+                    onChange={(e) => setFPideSenasaHomol(e.target.checked)}
                   />
-                  SENASA
-                </label>
-                <label className="mt-2 flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={fPideHomologacion}
-                    onChange={(e) => setFPideHomologacion(e.target.checked)}
-                  />
-                  Homologación
+                  SENASA y Homologación
                 </label>
                 <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                  Se marcan o desmarcan por separado. Si están desmarcados, no se
-                  piden ni se validan en Documentación.
+                  Se sacan o ponen juntos. Si está desmarcado, no se piden ni se
+                  validan en Documentación (p. ej. unidades seco).
                 </p>
               </Field>
               <Field label="Estado">
