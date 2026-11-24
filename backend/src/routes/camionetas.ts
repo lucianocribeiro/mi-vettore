@@ -55,8 +55,22 @@ const includeAsignaciones = {
 
 const MANT_TIPOS = ["ACEITE", "CORREA", "NEUMATICOS", "BATERIA"] as const;
 
+function sameDayIso(a: Date | string | null | undefined, b: Date | string | null | undefined) {
+  if (!a || !b) return false;
+  const da = a instanceof Date ? a : new Date(a);
+  const db = b instanceof Date ? b : new Date(b);
+  if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return false;
+  return da.toISOString().slice(0, 10) === db.toISOString().slice(0, 10);
+}
+
 /** Enriquece unidades con km del último registro de mantenimiento (OT / import / carga). */
-async function withMantKm<T extends { id: string }>(items: T[]) {
+async function withMantKm<
+  T extends {
+    id: string;
+    fechaUltimoAceite?: Date | string | null;
+    fechaCambioCorrea?: Date | string | null;
+  },
+>(items: T[]) {
   if (!items.length) return items.map((i) => ({ ...i }));
   const ids = items.map((i) => i.id);
   const regs = await prisma.registroMantenimiento.findMany({
@@ -76,10 +90,19 @@ async function withMantKm<T extends { id: string }>(items: T[]) {
   }
   return items.map((item) => {
     const m = byUnit.get(item.id) ?? {};
+    let kmCorrea = m.CORREA ?? null;
+    // Si distribución no tiene km propio pero se hizo el mismo día que el aceite, usar esos km.
+    if (
+      kmCorrea == null &&
+      m.ACEITE != null &&
+      sameDayIso(item.fechaCambioCorrea, item.fechaUltimoAceite)
+    ) {
+      kmCorrea = m.ACEITE;
+    }
     return {
       ...item,
       kmUltimoAceite: m.ACEITE ?? null,
-      kmCambioCorrea: m.CORREA ?? null,
+      kmCambioCorrea: kmCorrea,
       kmCambioNeumaticos: m.NEUMATICOS ?? null,
       kmCambioBateria: m.BATERIA ?? null,
     };
