@@ -10,7 +10,6 @@ import {
 } from "../../components/icons";
 import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import {
-  currentAsignacion,
   isInternalOps,
   type Camioneta,
   type OtComentario,
