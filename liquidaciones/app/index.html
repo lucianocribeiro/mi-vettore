@@ -697,8 +697,9 @@ function vAdel(){
 const patsOf=(emp,f)=>B.patentes.filter(p=>norm(p.empresa)===norm(emp)&&(!p.hasta||!f||p.hasta>=f)).map(p=>p.patente).filter((v,i,a)=>a.indexOf(v)===i).sort();
 function adelForm(a){
   const isNew=!a;const d=a||{fecha:today(),empresa:'',tipo:'Adelanto',desc:'',importe:'',patente:'',cuotas:[]};
-  const locked=a?a.cuotas.filter(c=>cuotaState(a,c)).sort((x,y)=>x.periodo.localeCompare(y.periodo)):[];const lockedSum=sum(locked,'importe');
-  const pendC=a?a.cuotas.filter(c=>!cuotaState(a,c)).sort((x,y)=>x.periodo.localeCompare(y.periodo)||x.n-y.n):[];
+  if(!Array.isArray(d.cuotas))d.cuotas=[];
+  const locked=a?(d.cuotas||[]).filter(c=>cuotaState(a,c)).sort((x,y)=>String(x.periodo||'').localeCompare(String(y.periodo||''))):[];const lockedSum=sum(locked,'importe');
+  const pendC=a?(d.cuotas||[]).filter(c=>!cuotaState(a,c)).sort((x,y)=>String(x.periodo||'').localeCompare(String(y.periodo||''))||(+x.n||0)-(+y.n||0)):[];
   const floorFromFecha=f=>{
     const fromFecha=adelMinPer(f);
     const fromLocked=locked.length?pNext(locked[locked.length-1].periodo):fromFecha;
@@ -1095,17 +1096,16 @@ function addValor(d,v,desde){S.valores.filter(x=>x.division===d&&(!x.hasta||x.ha
 function vhForm(v){modal('Editar valor hora',fld('División',`<input type="text" name="division" required value="${esc(v.division)}">`,1)+fld('Valor $',`<input type="number" name="valor" step="0.01" required value="${v.valor}">`)+fld('Desde',`<input type="date" name="desde" required value="${v.desde||''}">`)+fld('Hasta',`<input type="date" name="hasta" value="${v.hasta||''}">`),fd=>{Object.assign(v,{division:fd.division.trim(),valor:+fd.valor,desde:fd.desde,hasta:fd.hasta||null});saveCfg('valores')})}
 
 /* ================= MODAL / TOAST ================= */
-/** En Mi Vettore el iframe es tan alto como el contenido y scrollea el <main> padre:
- *  position:fixed del modal queda arriba, fuera de vista. Anclar al tramo visible. */
+/** Iframe alto + scroll del <main> padre: fixed queda fuera de vista.
+ *  Anclamos el overlay alrededor del último clic (coordenada dentro del iframe). */
+let __vtPointerY=120;
+document.addEventListener('pointerdown',e=>{if(typeof e.clientY==='number')__vtPointerY=e.clientY},{capture:true,passive:true});
 function overlayView(){
-  try{
-    const f=window.frameElement;if(!f)return null;
-    const r=f.getBoundingClientRect();
-    const ph=window.parent.innerHeight||0;if(!ph)return null;
-    const top=Math.max(0,-r.top);
-    const vis=Math.min(r.bottom,ph)-Math.max(r.top,0);
-    return{top,height:Math.max(280,vis)};
-  }catch(e){return null}
+  let ph=640;
+  try{ph=Math.max(320,(window.parent&&window.parent.innerHeight)||window.innerHeight||640)}catch(e){}
+  const height=Math.min(Math.round(ph*0.88),920);
+  const top=Math.max(0,Math.round(__vtPointerY-height*0.28));
+  return{top,height};
 }
 function clearOverlayPin(el){
   if(!el)return;
@@ -1113,8 +1113,8 @@ function clearOverlayPin(el){
 }
 function pinOverlay(el,kind){
   if(!el)return;
+  if(!window.frameElement){clearOverlayPin(el);return}
   const v=overlayView();
-  if(!v){clearOverlayPin(el);return}
   el.style.position='absolute';
   el.style.zIndex=kind==='toast'?'60':(kind==='drawer'||kind==='ov'?'21':'40');
   if(kind==='toast'){
@@ -1126,6 +1126,7 @@ function pinOverlay(el,kind){
   el.style.top=v.top+'px';el.style.height=v.height+'px';el.style.bottom='auto';el.style.inset='auto';
   if(kind==='drawer'){el.style.left='auto';el.style.right='0';el.style.width='min(740px, 96vw)'}
   else{el.style.left='0';el.style.right='0';el.style.width='100%'}
+  try{el.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
 }
 function refreshOpenOverlays(){
   const M=document.getElementById('modal');if(M&&M.classList.contains('on'))pinOverlay(M,'modal');
@@ -1322,7 +1323,7 @@ document.addEventListener('click',e=>{
   switch(a){
     case 'mod':UI.mod=k;UI.search='';UI.det=null;closeDrawer();document.getElementById('modal').classList.remove('on');try{window.__vtNotifyLiqMod&&window.__vtNotifyLiqMod(k)}catch(e){}render();scrollTo(0,0);break;
     case 'role':UI.role=k;try{localStorage.setItem('vt_role',k)}catch(e){}render();break;
-    case 'mclose':document.getElementById('modal').classList.remove('on');break;
+    case 'mclose':{const M=document.getElementById('modal');M.classList.remove('on');clearOverlayPin(M);break}
     case 'reset':confirmBox('Restaurar datos de ejemplo','Se borran todos los datos guardados y se vuelve a la historia del Excel.',resetAll,'Restaurar');break;
     case 'newAdel':adelForm();break;
     case 'editAdel':adelForm(S.adel[id]);break;
@@ -1412,7 +1413,7 @@ document.getElementById('fileIn').addEventListener('change',async e=>{await hand
 document.addEventListener('dragover',e=>{const d=e.target.closest('.drop');if(d){e.preventDefault();d.classList.add('hov')}});
 document.addEventListener('dragleave',e=>{const d=e.target.closest('.drop');if(d)d.classList.remove('hov')});
 document.addEventListener('drop',async e=>{const d=e.target.closest('.drop');if(!d)return;e.preventDefault();d.classList.remove('hov');pickKind=d.dataset.kind;await handleFiles(e.dataTransfer.files);rebuild();render()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.getElementById('modal').classList.remove('on');closeDrawer()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const M=document.getElementById('modal');M.classList.remove('on');clearOverlayPin(M);closeDrawer()}});
 rebuild();render();loadDB();
 </script>
 </body>
