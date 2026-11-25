@@ -254,26 +254,6 @@ export function M6KmRegistroPage() {
       {okMsg && <p className="mb-3 text-sm text-emerald-700 dark:text-emerald-400">{okMsg}</p>}
 
       {!loading && (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
-            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
-              Empresa de transporte
-              <select
-                className="mt-1 min-h-11 w-full max-w-md rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
-                value={empresaId}
-                onChange={(e) => setEmpresaId(e.target.value)}
-                aria-label="Empresa de transporte"
-              >
-                <option value="">Todas</option>
-                {empresas.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
         <div className="grid gap-5 lg:grid-cols-[minmax(0,22rem)_1fr]">
           <form
             onSubmit={(e) => void onSubmit(e)}
@@ -288,6 +268,22 @@ export function M6KmRegistroPage() {
                 choferes u operaciones.
               </p>
             )}
+            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+              Empresa de transporte
+              <select
+                className="mt-1 w-full rounded-md border border-[var(--vl-card-border)] bg-transparent px-3 py-2 text-sm"
+                value={empresaId}
+                onChange={(e) => setEmpresaId(e.target.value)}
+                aria-label="Empresa de transporte"
+              >
+                <option value="">Todas</option>
+                {empresas.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
               Patente
               <select
@@ -368,7 +364,7 @@ export function M6KmRegistroPage() {
           </form>
 
           <section className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] overflow-hidden">
-            <div className="border-b border-[var(--vl-card-border)] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--vl-card-border)] px-4 py-3">
               <h2 className="text-sm font-semibold text-[var(--vl-heading)]">
                 Últimas cargas
                 {empresaId ? (
@@ -377,6 +373,19 @@ export function M6KmRegistroPage() {
                   </span>
                 ) : null}
               </h2>
+              <select
+                className="min-h-9 max-w-full rounded-md border border-[var(--vl-card-border)] bg-transparent px-2 py-1.5 text-xs"
+                value={empresaId}
+                onChange={(e) => setEmpresaId(e.target.value)}
+                aria-label="Filtrar por empresa de transporte"
+              >
+                <option value="">Todas las empresas</option>
+                {empresas.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nombre}
+                  </option>
+                ))}
+              </select>
             </div>
             {registrosFiltrados.length === 0 ? (
               <p className="p-4 text-sm text-[var(--vl-text-muted)]">
@@ -428,7 +437,6 @@ export function M6KmRegistroPage() {
               </div>
             )}
           </section>
-        </div>
         </div>
       )}
     </div>
