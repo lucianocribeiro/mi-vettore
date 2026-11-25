@@ -453,16 +453,15 @@ export function currentAsignacion(camioneta: Camioneta): AsignacionFlota | null 
   return list[0] ?? null;
 }
 
-/** Todas las asignaciones abiertas (varios choferes por patente). */
+/** Solo asignaciones abiertas (nunca historial cerrado: evita filtros “fantasma”). */
 export function currentAsignaciones(camioneta: Camioneta): AsignacionFlota[] {
   const list = camioneta.asignaciones ?? [];
-  const abiertas = list.filter((a) => !a.periodoHasta);
-  return abiertas.length ? abiertas : list.slice(0, 1);
+  return list.filter((a) => !a.periodoHasta);
 }
 
 export function currentChoferAsignacion(chofer: Chofer): AsignacionFlota | null {
   const list = chofer.asignaciones ?? [];
-  return list.find((a) => !a.periodoHasta) ?? list[0] ?? null;
+  return list.find((a) => !a.periodoHasta) ?? null;
 }
 
 /** Nombre visible de la unidad (marca/modelo, equipo, etc.) — no patente. */
@@ -478,10 +477,14 @@ export function unidadTitulo(c: Camioneta): string {
   );
 }
 
-/** Propietario / empresa de transporte de la unidad. */
+/** Propietario = empresa dueña de la unidad (no la asignación abierta). */
 export function unidadPropietario(c: Camioneta): string {
-  const asg = currentAsignacion(c);
-  return c.empresa?.nombre ?? asg?.empresa?.nombre ?? "Sin propietario";
+  return c.empresa?.nombre ?? "Sin propietario";
+}
+
+/** Id de la empresa dueña (ABM), no la de una asignación vieja. */
+export function empresaPropietariaId(c: Camioneta): string | null {
+  return c.empresaId ?? c.empresa?.id ?? null;
 }
 
 export function formatDate(iso: string | null | undefined): string {

@@ -3219,9 +3219,9 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
   const empresasOpts = useMemo(() => {
     const map = new Map<string, string>();
     for (const c of camionetas) {
-      const a = currentAsignacion(c);
-      const id = a?.empresaId || a?.empresa?.id || c.empresaId || c.empresa?.id;
-      const nombre = a?.empresa?.nombre || c.empresa?.nombre;
+      if (c.estado === "INACTIVA") continue;
+      const id = c.empresaId || c.empresa?.id;
+      const nombre = c.empresa?.nombre;
       if (id && nombre) map.set(id, nombre);
     }
     return [...map.entries()]
@@ -3231,15 +3231,11 @@ function NuevaSolicitudForm({ onClose, onCreated }: { onClose: () => void; onCre
 
   const unidadesDeEmpresa = useMemo(() => {
     if (!empresaId) return [];
-    return camionetas.filter((c) => {
-      const a = currentAsignacion(c);
-      return (
-        a?.empresaId === empresaId ||
-        a?.empresa?.id === empresaId ||
-        c.empresaId === empresaId ||
-        c.empresa?.id === empresaId
-      );
-    });
+    return camionetas.filter(
+      (c) =>
+        c.estado !== "INACTIVA" &&
+        (c.empresaId === empresaId || c.empresa?.id === empresaId)
+    );
   }, [camionetas, empresaId]);
 
   useEffect(() => {

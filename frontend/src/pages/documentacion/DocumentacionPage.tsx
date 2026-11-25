@@ -519,11 +519,12 @@ export function DocumentacionPage() {
     const empresaQ = adv.empresa.trim().toLowerCase();
     return choferes.filter((ch) => {
       const asg = currentChoferAsignacion(ch);
+      const empresaNombre =
+        ch.empresa?.nombre ??
+        asg?.camioneta?.empresa?.nombre ??
+        "";
       if (adv.sinUnidad && asg?.camioneta) return false;
-      if (
-        empresaQ &&
-        !(asg?.empresa?.nombre ?? "").toLowerCase().includes(empresaQ)
-      ) {
+      if (empresaQ && !empresaNombre.toLowerCase().includes(empresaQ)) {
         return false;
       }
       if (
@@ -549,7 +550,7 @@ export function DocumentacionPage() {
           ch.telefono,
           ch.email,
           asg?.camioneta?.patente,
-          asg?.empresa?.nombre,
+          empresaNombre,
         ],
         query
       );

@@ -1,7 +1,60 @@
 import { EstadoCamioneta, type Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
-type Tx = Prisma.TransactionClient;
+type Tx = Prisma.TransactionClient | typeof prisma;
+
+/**
+ * Cierra todas las asignaciones abiertas de una unidad
+ * (venta, baja definitiva o cambio de empresa dueña).
+ */
+export async function cerrarAsignacionesAbiertas(
+  camionetaId: string,
+  tx: Tx = prisma
+) {
+  return tx.asignacionFlota.updateMany({
+    where: { camionetaId, periodoHasta: null },
+    data: { periodoHasta: new Date() },
+  });
+}
+
+/**
+ * Asignaciones abiertas cuya empresa ≠ dueño de la unidad:
+ * se cierran (evita que una patente “vendida” siga en la flota anterior).
+ * Si se pasa camionetaId, solo esa unidad; si no, toda la flota.
+ */
+export async function repararAsignacionesDesfasadasDelDueno(
+  camionetaId?: string,
+  tx: Tx = prisma
+) {
+  const abiertas = await tx.asignacionFlota.findMany({
+    where: {
+      periodoHasta: null,
+      ...(camionetaId ? { camionetaId } : {}),
+    },
+    select: {
+      id: true,
+      empresaId: true,
+      camioneta: { select: { empresaId: true, patente: true } },
+    },
+    take: 5000,
+  });
+  const ids = abiertas
+    .filter((a) => a.empresaId !== a.camioneta.empresaId)
+    .map((a) => a.id);
+  if (!ids.length) return { closed: 0, patentes: [] as string[] };
+  await tx.asignacionFlota.updateMany({
+    where: { id: { in: ids } },
+    data: { periodoHasta: new Date() },
+  });
+  const patentes = [
+    ...new Set(
+      abiertas
+        .filter((a) => a.empresaId !== a.camioneta.empresaId)
+        .map((a) => a.camioneta.patente)
+    ),
+  ];
+  return { closed: ids.length, patentes };
+}
 
 export async function reasignarChoferUnidad(
   input: {

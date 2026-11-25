@@ -1509,9 +1509,8 @@ export function M5FichaPage() {
     return (Array.isArray(camionetas) ? camionetas : [])
       .filter((c) => {
         if (c.estado === "INACTIVA" || c.estado === "FUERA_SERVICIO") return false;
-        if (c.empresaId === asigEmpresaId) return true;
-        const a = currentAsignacion(c);
-        return a?.empresaId === asigEmpresaId;
+        // Solo unidades cuyo dueño es la empresa (no asignaciones fantasma post-venta).
+        return c.empresaId === asigEmpresaId || c.empresa?.id === asigEmpresaId;
       })
       .filter((c) => {
         if (!q) return true;

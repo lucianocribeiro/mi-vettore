@@ -21,7 +21,10 @@ import {
 import { canAdminCorregir } from "../lib/correccion-admin.js";
 import { parseDateOnly } from "../lib/date-only.js";
 import { applyKmUpdate, isKmAnomalia } from "../lib/km.js";
-import { reasignarChoferUnidad } from "../lib/asignacion-flota.js";
+import {
+  cerrarAsignacionesAbiertas,
+  reasignarChoferUnidad,
+} from "../lib/asignacion-flota.js";
 import { uploadDocumento } from "../lib/supabase-storage.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
 import { estadoEntidadFrom, MOTIVOS_INHABILITAR_UNIDAD } from "../lib/estado-entidad.js";
@@ -1341,21 +1344,14 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
       data.empresaId = nextEmpresaId;
     }
     const item = await prisma.$transaction(async (tx) => {
-      if (data.estado === EstadoCamioneta.INACTIVA) {
-        await tx.asignacionFlota.updateMany({
-          where: { camionetaId: req.params.id, periodoHasta: null },
-          data: { periodoHasta: new Date() },
-        });
-      } else if (
-        typeof data.empresaId === "string" &&
-        data.empresaId &&
-        data.empresaId !== existing.empresaId
+      // Venta / baja / cambio de dueño: no dejar choferes ni empresa vieja en Asignación.
+      if (
+        data.estado === EstadoCamioneta.INACTIVA ||
+        (typeof data.empresaId === "string" &&
+          data.empresaId &&
+          data.empresaId !== existing.empresaId)
       ) {
-        // Cambio de dueño: la asignación abierta sigue a la empresa propietaria.
-        await tx.asignacionFlota.updateMany({
-          where: { camionetaId: req.params.id, periodoHasta: null },
-          data: { empresaId: data.empresaId },
-        });
+        await cerrarAsignacionesAbiertas(req.params.id, tx);
       }
       return tx.camioneta.update({
         where: { id: req.params.id },
@@ -1679,11 +1675,7 @@ router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
 
     const item = await prisma.$transaction(async (tx) => {
       if (destino === EstadoCamioneta.INACTIVA) {
-        // Vendida / baja definitiva: cierra asignación abierta para que no figure en flota.
-        await tx.asignacionFlota.updateMany({
-          where: { camionetaId: req.params.id, periodoHasta: null },
-          data: { periodoHasta: new Date() },
-        });
+        await cerrarAsignacionesAbiertas(req.params.id, tx);
       }
       const updated = await tx.camioneta.update({
         where: { id: req.params.id },

@@ -1,4 +1,11 @@
-import { type Camioneta, type EstadoCamioneta, type TipoTransporte, unidadPropietario, unidadTitulo } from "../types";
+import {
+  type Camioneta,
+  type EstadoCamioneta,
+  type TipoTransporte,
+  empresaPropietariaId,
+  unidadPropietario,
+  unidadTitulo,
+} from "../types";
 
 export type TipoFiltroTransporte = TipoTransporte | "SIN_TIPO";
 
@@ -43,11 +50,6 @@ export const TIPOS_TRANSPORTE: Array<{ value: TipoTransporte; label: string }> =
     { value: "REFRIGERADO", label: "Refrigerado" },
     { value: "SECO", label: "Seco" },
   ];
-
-/** Empresa dueña de la unidad (no la de la asignación del chofer). */
-function empresaPropietariaId(c: Camioneta): string | null {
-  return c.empresaId ?? c.empresa?.id ?? null;
-}
 
 export function filterCamionetas(
   items: Camioneta[],
