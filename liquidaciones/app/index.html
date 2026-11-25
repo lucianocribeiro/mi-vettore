@@ -427,7 +427,7 @@ const closedRec=(p,k)=>D.rec[p+'|'+k];
     const d=ev&&ev.data;if(!d||d.type!=='vt-liq-mod'||!d.mod)return;
     if(!MODS.some(x=>x[0]===d.mod)||UI.mod===d.mod)return;
     UI.mod=d.mod;UI.search='';UI.det=null;
-    try{closeDrawer();document.getElementById('modal').classList.remove('on')}catch(e){}
+    try{closeDrawer();closeModal()}catch(e){}
     render();scrollTo(0,0);
   });
   window.__vtNotifyLiqMod=notifyParentMod;
@@ -734,15 +734,15 @@ function adelForm(a){
      else{const x={id:uid('n'),fecha:fd.fecha,empresa:e.nombre,tipo:fd.tipo,desc:fd.desc.trim(),patente:pat,importe:+fd.importe,cuotas};S.adel[x.id]=x;saveAdel(x)}
      rebuild();toast(a?'Adelanto actualizado':'Adelanto registrado');
    },'Guardar',true);
-  const F=document.getElementById('mform');
+  const F=$liq('mform');
   const rest=()=>(locked.length?+a.importe:(+F.importe.value||0))-lockedSum;
   const resplit=()=>{const n=plan.length,r=rest(),b=Math.floor(r/n*100)/100;plan.forEach((c,i)=>c.v=i===n-1?Math.round((r-b*(n-1))*100)/100:b)};
-  const refreshMin=()=>{minP=floorFromFecha(locked.length?a.fecha:F.fecha.value);const lbl=document.getElementById('adelMinLbl');if(lbl)lbl.textContent=pLabel(minP);clampPlan()};
+  const refreshMin=()=>{minP=floorFromFecha(locked.length?a.fecha:F.fecha.value);const lbl=$liq('adelMinLbl');if(lbl)lbl.textContent=pLabel(minP);clampPlan()};
   const pats=()=>{const emp=a&&locked.length?a.empresa:F.empresa.value,f=a&&locked.length?a.fecha:F.fecha.value,L=patsOf(emp,f),cur=F.patente.value||d.patente||'';
     const opts=L.concat(cur&&!L.includes(cur)?[cur]:[]);F.patente.innerHTML=`<option value="">— Sin patente —</option>`+opts.map(p=>`<option ${p===cur?'selected':''}>${esc(p)}</option>`).join('');F.patente.disabled=!EI()[norm(emp)]};
-  const msg=()=>{const s=sum(plan,'v'),r=rest();document.getElementById('planMsg').innerHTML=Math.abs(s-r)>0.5?`<span class="ded">Las cuotas pendientes suman ${fm(s)} y deben sumar ${fm(r)}</span>`:`Cuotas pendientes: ${fm(s)} ✓ · mínimo debitable ${pLabel(minP)}`};
+  const msg=()=>{const s=sum(plan,'v'),r=rest();(($liq('planMsg')||{})).innerHTML=Math.abs(s-r)>0.5?`<span class="ded">Las cuotas pendientes suman ${fm(s)} y deben sumar ${fm(r)}</span>`:`Cuotas pendientes: ${fm(s)} ✓ · mínimo debitable ${pLabel(minP)}`};
   const draw=()=>{refreshMin();const tot=locked.length+plan.length;
-    document.getElementById('plan').innerHTML=`<table class="plan"><thead><tr><th>Cuota</th><th>Período a debitar</th><th class="n">Importe</th><th>Estado</th></tr></thead><tbody>
+    $liq('plan').innerHTML=`<table class="plan"><thead><tr><th>Cuota</th><th>Período a debitar</th><th class="n">Importe</th><th>Estado</th></tr></thead><tbody>
     ${locked.map(c=>`<tr style="opacity:.45"><td>${c.n} de ${tot}</td><td><select disabled><option>${pLabel(c.periodo)}</option></select></td><td class="n"><input class="money" disabled value="${c.importe}"></td><td><span class="chip g">Debitada ${pLabel(cuotaState(a,c))}</span></td></tr>`).join('')}
     ${plan.map((c,i)=>{const mn=i?pNext(plan[i-1].p):minP;return `<tr><td>${locked.length+i+1} de ${tot}</td><td><select data-ci="${i}">${PERIODS.filter(p=>p>=mn).map(p=>`<option value="${p}" ${p===c.p?'selected':''}>${pLabel(p)}</option>`).join('')}</select></td><td class="n"><input class="money" type="number" step="0.01" min="0.01" data-vi="${i}" value="${c.v}"></td><td><span class="chip w">Pendiente</span></td></tr>`}).join('')}</tbody></table>`;msg()};
   pats();draw();
@@ -797,9 +797,9 @@ function loanForm(l){
      const est=fd.estado==='Refinanciado'?'Refinanciado':'Activo';
      const rec={fecha,empresa:e.nombre,concepto:fd.concepto.trim(),desc:'',totalHs:hs,vhSol:vs,monto:hs*vs,cuotaHs:+fd.cuotaHs,estado:est};
      if(l){Object.assign(l,rec);savePrest(l)}else{const x={id:uid('L'),acum0:0,...rec};S.prest[x.id]=x;savePrest(x)}rebuild();toast('Préstamo guardado')},'Guardar');
-  const F=document.getElementById('mform');
+  const F=$liq('mform');
   const calc=()=>{const e=EI()[norm(F.empresa.value)],f=F.fecha.value,vs=e?valorHora(e.division,f):0,vn=e?valorHora(e.division,today()):0,h=+F.horas.value||0,c=+F.cuotaHs.value||0;
-    document.getElementById('lcalc').innerHTML=e&&vs?`<div class="alert info" style="margin:0">División <b>${esc(e.division)}</b>. <b>${fn(h,1)} horas</b> equivalen a <b>${fm(h*vs)}</b> al valor hora de la solicitud (${fm(vs)}) y a <b>${fm(h*vn)}</b> al valor hora actual (${fm(vn)}).<br>Cuota: <b>${fn(c,1)} hs</b> = <b>${fm(c*vn)}</b> hoy · ${c?Math.ceil(Math.max(0,h-ac)/c):'—'} quincenas aprox.</div>`:'<div class="hint">Elegí empresa y fecha para ver la equivalencia en pesos.</div>'};
+    (($liq('lcalc')||{})).innerHTML=e&&vs?`<div class="alert info" style="margin:0">División <b>${esc(e.division)}</b>. <b>${fn(h,1)} horas</b> equivalen a <b>${fm(h*vs)}</b> al valor hora de la solicitud (${fm(vs)}) y a <b>${fm(h*vn)}</b> al valor hora actual (${fm(vn)}).<br>Cuota: <b>${fn(c,1)} hs</b> = <b>${fm(c*vn)}</b> hoy · ${c?Math.ceil(Math.max(0,h-ac)/c):'—'} quincenas aprox.</div>`:'<div class="hint">Elegí empresa y fecha para ver la equivalencia en pesos.</div>'};
   F.addEventListener('input',e=>{if(e.target.dataset.lc)calc()});F.addEventListener('change',calc);calc();
 }
 function loanHist(l){const rs=Object.values(D.rec).filter(r=>r.prest.some(x=>x.id===l.id)).sort((a,b)=>a.periodo.localeCompare(b.periodo));let ac=+l.acum0||0;
@@ -1015,9 +1015,8 @@ function renderDrawer(){
    <div class="sec"><div class="sh">Adelantos <span class="ded">− ${fm(r.adelT)}</span></div>${tb([['Fecha'],['Tipo'],['Descripción'],['Cuota'],['Importe','n']],r.adel.map(a=>`<tr><td>${fD(a.fecha)}</td><td>${esc(a.tipo)}</td><td>${esc(a.desc)}</td><td>${a.n}/${a.de}</td><td class="n">${fm(a.importe)}</td></tr>`))}</div>
    <div class="sec"><div class="sh">Préstamos <span class="ded">− ${fm(r.prestT)}</span></div>${tb([['Concepto'],['Horas','n'],['Valor hora','n'],['Importe','n']],r.prest.map(x=>`<tr><td>${esc(x.concepto)}</td><td class="n">${fn(x.horas,2)}</td><td class="n">${fm(x.vh)}</td><td class="n">${fm(x.importe)}</td></tr>`))}</div>
    <div class="tot"><span class="big">Saldo</span><span class="big ${r.saldo<0?'neg':'pos'}">${fm(r.saldo)}</span><span>Efectivo</span><span>${fm(r.ef)}</span><span>Transferencia</span><span>${fm(r.tr)}</span></div></div>`;
-  Dw.classList.add('on');document.getElementById('ov').classList.add('on');
-  pinOverlay(Dw,'drawer');pinOverlay(document.getElementById('ov'),'ov')}
-function closeDrawer(){UI.drawer=null;const Dw=document.getElementById('drawer'),Ov=document.getElementById('ov');Dw.classList.remove('on');Ov.classList.remove('on');clearOverlayPin(Dw);clearOverlayPin(Ov)}
+  Dw.classList.add('on');document.getElementById('ov').classList.add('on')}
+function closeDrawer(){UI.drawer=null;document.getElementById('drawer').classList.remove('on');document.getElementById('ov').classList.remove('on')}
 
 /* ================= CATALOGOS (división + tipo transferencia) ================= */
 function vCat(){
@@ -1096,59 +1095,101 @@ function addValor(d,v,desde){S.valores.filter(x=>x.division===d&&(!x.hasta||x.ha
 function vhForm(v){modal('Editar valor hora',fld('División',`<input type="text" name="division" required value="${esc(v.division)}">`,1)+fld('Valor $',`<input type="number" name="valor" step="0.01" required value="${v.valor}">`)+fld('Desde',`<input type="date" name="desde" required value="${v.desde||''}">`)+fld('Hasta',`<input type="date" name="hasta" value="${v.hasta||''}">`),fd=>{Object.assign(v,{division:fd.division.trim(),valor:+fd.valor,desde:fd.desde,hasta:fd.hasta||null});saveCfg('valores')})}
 
 /* ================= MODAL / TOAST ================= */
-/** Iframe alto + scroll del <main> padre: fixed queda fuera de vista.
- *  Anclamos el overlay alrededor del último clic (coordenada dentro del iframe). */
-let __vtPointerY=120;
-document.addEventListener('pointerdown',e=>{if(typeof e.clientY==='number')__vtPointerY=e.clientY},{capture:true,passive:true});
-function overlayView(){
-  let ph=640;
-  try{ph=Math.max(320,(window.parent&&window.parent.innerHeight)||window.innerHeight||640)}catch(e){}
-  const height=Math.min(Math.round(ph*0.88),920);
-  const top=Math.max(0,Math.round(__vtPointerY-height*0.28));
-  return{top,height};
+/** Modal en el document padre (Mi Vettore): el iframe es alto y scrollea afuera;
+ *  un modal fixed adentro queda “abajo de todo”. En el padre queda centrado en pantalla. */
+function liqDoc(){
+  try{if(window.frameElement&&window.parent&&window.parent.document)return window.parent.document}catch(e){}
+  return document;
 }
-function clearOverlayPin(el){
-  if(!el)return;
-  ['position','left','right','top','bottom','width','height','inset','transform','zIndex'].forEach(k=>{el.style[k]=''});
+function $liq(id){return liqDoc().getElementById(id)}
+function isModalOpen(){
+  const host=$liq('vt-liq-modal-host');
+  if(host&&host.style.display!=='none'&&host.innerHTML)return true;
+  return document.getElementById('modal')?.classList.contains('on');
 }
-function pinOverlay(el,kind){
-  if(!el)return;
-  if(!window.frameElement){clearOverlayPin(el);return}
-  const v=overlayView();
-  el.style.position='absolute';
-  el.style.zIndex=kind==='toast'?'60':(kind==='drawer'||kind==='ov'?'21':'40');
-  if(kind==='toast'){
-    el.style.left='50%';el.style.transform='translateX(-50%)';
-    el.style.top=(v.top+v.height-72)+'px';el.style.bottom='auto';
-    el.style.right='auto';el.style.width='';el.style.height='';
-    return;
+function closeModal(){
+  const host=$liq('vt-liq-modal-host');
+  if(host){host.style.display='none';host.innerHTML=''}
+  const M=document.getElementById('modal');
+  if(M)M.classList.remove('on');
+}
+function ensureModalHost(){
+  const doc=liqDoc();
+  let host=doc.getElementById('vt-liq-modal-host');
+  if(!host){
+    host=doc.createElement('div');
+    host.id='vt-liq-modal-host';
+    doc.body.appendChild(host);
   }
-  el.style.top=v.top+'px';el.style.height=v.height+'px';el.style.bottom='auto';el.style.inset='auto';
-  if(kind==='drawer'){el.style.left='auto';el.style.right='0';el.style.width='min(740px, 96vw)'}
-  else{el.style.left='0';el.style.right='0';el.style.width='100%'}
-  try{el.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
+  if(!doc.getElementById('vt-liq-modal-css')){
+    const st=doc.createElement('style');
+    st.id='vt-liq-modal-css';
+    st.textContent=`
+#vt-liq-modal-host{position:fixed;inset:0;z-index:10050;display:none}
+#vt-liq-modal-host .vt-liq-back{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(2,6,14,.72);overflow:auto}
+#vt-liq-modal-host .vt-liq-mbox{background:#0b1222;border:1px solid #2a3850;border-radius:14px;width:min(560px,100%);max-height:min(92vh,920px);overflow:auto;color:#e5e9f2;font-family:Inter,system-ui,sans-serif;font-size:14px;box-shadow:0 20px 50px rgba(0,0,0,.45)}
+#vt-liq-modal-host .vt-liq-mbox.wide{width:min(860px,100%)}
+#vt-liq-modal-host .mh{padding:16px 18px;border-bottom:1px solid #1e293b;font-weight:700;display:flex;align-items:center}
+#vt-liq-modal-host .x{background:none;border:0;color:#8b96ab;font-size:22px;cursor:pointer;line-height:1;margin-left:auto}
+#vt-liq-modal-host .mb{padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#vt-liq-modal-host .mb .full{grid-column:1/-1}
+#vt-liq-modal-host .mb label.f{display:block;color:#8b96ab;font-size:12px;margin-bottom:5px}
+#vt-liq-modal-host .mb .full>input,#vt-liq-modal-host .mb .full>select,#vt-liq-modal-host .mb>div>input,#vt-liq-modal-host .mb>div>select{width:100%;box-sizing:border-box;background:#0a101d;border:1px solid #2a3850;border-radius:8px;padding:9px 10px;color:#e5e9f2}
+#vt-liq-modal-host .mf{padding:14px 18px;border-top:1px solid #1e293b;display:flex;justify-content:flex-end;gap:10px}
+#vt-liq-modal-host .btn{display:inline-flex;align-items:center;gap:7px;background:#0b1120;border:1px solid #2a3850;border-radius:9px;padding:9px 14px;cursor:pointer;font-weight:600;font-size:13px;color:#e5e9f2}
+#vt-liq-modal-host .btn.primary{background:#2563eb;border-color:#2563eb;color:#fff}
+#vt-liq-modal-host .hint{font-size:12px;color:#8b96ab;margin-top:6px;line-height:1.45}
+#vt-liq-modal-host .hint b{color:#e5e9f2}
+#vt-liq-modal-host table.plan{width:100%;border-collapse:collapse}
+#vt-liq-modal-host table.plan th,#vt-liq-modal-host table.plan td{padding:6px 8px;border-bottom:1px solid #1e293b;text-align:left}
+#vt-liq-modal-host table.plan .n{text-align:right}
+#vt-liq-modal-host .chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600}
+#vt-liq-modal-host .chip.w{background:#3b2f14;color:#fcd68a}
+#vt-liq-modal-host .chip.g{background:#052e1a;color:#86efac}
+#vt-liq-modal-host .ded{color:#fca5a5}
+#vt-liq-modal-host .alert{padding:10px 12px;border-radius:10px;border:1px solid #2a3850;background:#0d1426}
+#vt-liq-modal-host .alert.info{border-color:#1d4ed8;background:#0c1a3a}
+#vt-liq-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#111c33;border:1px solid #2a3850;padding:11px 16px;border-radius:10px;z-index:10060;display:none;max-width:90vw;color:#e5e9f2;font-family:Inter,system-ui,sans-serif;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+#vt-liq-toast.on{display:block}`;
+    doc.head.appendChild(st);
+  }
+  return host;
 }
-function refreshOpenOverlays(){
-  const M=document.getElementById('modal');if(M&&M.classList.contains('on'))pinOverlay(M,'modal');
-  const Dw=document.getElementById('drawer');
-  if(Dw&&Dw.classList.contains('on')){pinOverlay(Dw,'drawer');pinOverlay(document.getElementById('ov'),'ov')}
-  const T=document.getElementById('toast');if(T&&T.classList.contains('on'))pinOverlay(T,'toast');
+const fld=(l,h,full)=>`<div class="${full?'full':''}"><label class="f">${l}</label>${h}</div>`;
+function modal(title,body,onOk,ok='Guardar',wide){
+  const host=ensureModalHost();
+  host.innerHTML=`<div class="vt-liq-back"><div class="vt-liq-mbox${wide?' wide':''}"><div class="mh">${title}<button type="button" class="x" data-a="mclose">×</button></div><form id="mform"><div class="mb">${body}</div><div class="mf"><button type="button" class="btn" data-a="mclose">Cancelar</button><button class="btn primary" type="submit">${ok}</button></div></form></div></div>`;
+  host.style.display='block';
+  document.getElementById('modal')?.classList.remove('on');
+  const form=host.querySelector('#mform');
+  form.onsubmit=e=>{
+    e.preventDefault();
+    const btn=e.target.querySelector('button[type=submit]');
+    if(btn.disabled)return;
+    btn.disabled=true;
+    const fd={};new FormData(e.target).forEach((v,k)=>fd[k]=v);
+    let err;try{err=onOk(fd)}catch(x){console.error(x);err='Error inesperado: '+(x&&x.message||x)}
+    if(err){btn.disabled=false;toast(err);return}
+    closeModal();
+    try{rebuild();render()}catch(x){console.error(x);toast('Error al refrescar la vista')}
+  };
+  host.querySelectorAll('[data-a="mclose"]').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();closeModal()}));
 }
-(function bindParentScrollPin(){
+const confirmBox=(t,txt,f,ok='Confirmar')=>modal(t,`<div class="full">${txt}</div>`,()=>{f()},ok);
+let tT;function toast(m){
+  const doc=liqDoc();
+  let t=doc.getElementById('vt-liq-toast');
+  if(!t){t=doc.createElement('div');t.id='vt-liq-toast';doc.body.appendChild(t)}
+  t.innerHTML=m;t.classList.add('on');t.style.display='block';
+  clearTimeout(tT);tT=setTimeout(()=>{t.classList.remove('on');t.style.display='none'},4000);
+}
+(function bindParentEsc(){
   try{
-    const main=window.parent.document.querySelector('main');
-    if(!main||main.__vtLiqPin)return;
-    main.__vtLiqPin=1;
-    main.addEventListener('scroll',()=>refreshOpenOverlays(),{passive:true});
-    window.parent.addEventListener('resize',()=>refreshOpenOverlays());
+    const doc=liqDoc();
+    if(doc.__vtLiqEsc)return;doc.__vtLiqEsc=1;
+    doc.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
   }catch(e){}
 })();
-const fld=(l,h,full)=>`<div class="${full?'full':''}"><label class="f">${l}</label>${h}</div>`;
-function modal(title,body,onOk,ok='Guardar',wide){const M=document.getElementById('modal'),Bx=document.getElementById('mbox');Bx.className='mbox'+(wide?' wide':'');
-  Bx.innerHTML=`<div class="mh">${title}<button class="x" data-a="mclose">×</button></div><form id="mform"><div class="mb">${body}</div><div class="mf"><button type="button" class="btn" data-a="mclose">Cancelar</button><button class="btn primary" type="submit">${ok}</button></div></form>`;M.classList.add('on');pinOverlay(M,'modal');
-  document.getElementById('mform').onsubmit=e=>{e.preventDefault();const btn=e.target.querySelector('button[type=submit]');if(btn.disabled)return;btn.disabled=true;const fd={};new FormData(e.target).forEach((v,k)=>fd[k]=v);let err;try{err=onOk(fd)}catch(x){console.error(x);err='Error inesperado: '+(x&&x.message||x)}if(err){btn.disabled=false;toast(err);return}M.classList.remove('on');clearOverlayPin(M);try{rebuild();render()}catch(x){console.error(x);toast('Error al refrescar la vista')}}}
-const confirmBox=(t,txt,f,ok='Confirmar')=>modal(t,`<div class="full">${txt}</div>`,()=>{f()},ok);
-let tT;function toast(m){const t=document.getElementById('toast');t.innerHTML=m;t.classList.add('on');pinOverlay(t,'toast');clearTimeout(tT);tT=setTimeout(()=>{t.classList.remove('on');clearOverlayPin(t)},4000)}
 
 /* ================= IMPORT ================= */
 function serialToISO(v){if(v==null||v==='')return null;if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return d?`${d.y}-${pad(d.m)}-${pad(d.d)}`:null}const s=String(v).trim();let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);if(m){let y=+m[3];if(y<100)y+=2000;return `${y}-${pad(m[2])}-${pad(m[1])}`}return null}
@@ -1157,7 +1198,7 @@ const num=v=>{if(typeof v==='number')return v;if(v==null)return 0;let s=String(v
 function findHeader(rows,test){for(let i=0;i<Math.min(rows.length,60);i++){if(test((rows[i]||[]).map(norm)))return i}return -1}
 let pickKind=null;
 async function readBook(file,pref){const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false});return wb.SheetNames.slice().sort((a,b)=>(pref.test(b)?1:0)-(pref.test(a)?1:0)).map(n=>({n,rows:XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null,blankrows:false})}))}
-const waitModal=()=>new Promise(r=>{const iv=setInterval(()=>{if(!document.getElementById('modal').classList.contains('on')){clearInterval(iv);r()}},150)});
+const waitModal=()=>new Promise(r=>{const iv=setInterval(()=>{if(!isModalOpen()){clearInterval(iv);r()}},150)});
 async function handleFiles(files){for(const f of [...files]){try{if(pickKind==='fact')await importFact(f);else await importNafta(f)}catch(e){console.error(e);toast('No se pudo leer '+esc(f.name))}}}
 const stamp=()=>new Date().toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'});
 const who=()=>UI.role==='admin'?'Administrador':'Operador';
@@ -1189,7 +1230,7 @@ async function importFact(file){
      // Conservar adicionales/ajustes manuales al sobrescribir Rukas. No tocar cerradas.
      S.fact[p]=(S.fact[p]||[]).filter(f=>f.manual||!keys.has(norm(f.empresa))||!!closedRec(p,norm(f.empresa))).concat(ok.map(r=>({...r,archivo:file.name,cargado:st,manual:false})));
      (S.factLog[p]=S.factLog[p]||[]).push({archivo:file.name,fecha:st,ts:Date.now(),usuario:who(),res:`${ok.length-ow.length} nuevas · ${ow.length} sobrescritas`});saveFact(p);UI.factP=p;UI.upFact=p;toast(`Facturación imputada a ${pLabel(p)}`)},'Importar',true);
-  document.querySelector('#mform [name=per]').addEventListener('change',e=>{const i=info(e.target.value);document.getElementById('ipv').innerHTML=i.html;document.querySelector('#mform button[type=submit]').textContent=i.ow.length?'Sobrescribir e importar':'Importar'});
+  $liq('mform').querySelector('[name=per]').addEventListener('change',e=>{const i=info(e.target.value);$liq('ipv').innerHTML=i.html;$liq('mform').querySelector('button[type=submit]').textContent=i.ow.length?'Sobrescribir e importar':'Importar'});
   await waitModal();
 }
 async function importNafta(file){
@@ -1321,12 +1362,12 @@ document.addEventListener('click',e=>{
   const el=e.target.closest('[data-a]');if(!el||el.dataset.ch||el.dataset.in||el.disabled)return;
   const a=el.dataset.a,k=el.dataset.k,id=el.dataset.id;
   switch(a){
-    case 'mod':UI.mod=k;UI.search='';UI.det=null;closeDrawer();document.getElementById('modal').classList.remove('on');try{window.__vtNotifyLiqMod&&window.__vtNotifyLiqMod(k)}catch(e){}render();scrollTo(0,0);break;
+    case 'mod':UI.mod=k;UI.search='';UI.det=null;closeDrawer();closeModal();try{window.__vtNotifyLiqMod&&window.__vtNotifyLiqMod(k)}catch(e){}render();scrollTo(0,0);break;
     case 'role':UI.role=k;try{localStorage.setItem('vt_role',k)}catch(e){}render();break;
-    case 'mclose':{const M=document.getElementById('modal');M.classList.remove('on');clearOverlayPin(M);break}
+    case 'mclose':closeModal();break;
     case 'reset':confirmBox('Restaurar datos de ejemplo','Se borran todos los datos guardados y se vuelve a la historia del Excel.',resetAll,'Restaurar');break;
-    case 'newAdel':adelForm();break;
-    case 'editAdel':adelForm(S.adel[id]);break;
+    case 'newAdel':try{adelForm()}catch(err){console.error(err);toast('No se pudo abrir el alta de adelanto')}break;
+    case 'editAdel':{const a=S.adel[id];if(!a){toast('No se encontró el adelanto');break}try{adelForm(a)}catch(err){console.error(err);toast('No se pudo abrir la edición')}break}
     case 'delAdel':confirmBox('Eliminar adelanto','¿Eliminar este adelanto?',()=>{const x=S.adel[id];x.deleted=true;saveAdel(x)},'Eliminar');break;
     case 'adelF':UI.adelF=k;render();break;
     case 'newLoan':loanForm();break;
@@ -1413,7 +1454,7 @@ document.getElementById('fileIn').addEventListener('change',async e=>{await hand
 document.addEventListener('dragover',e=>{const d=e.target.closest('.drop');if(d){e.preventDefault();d.classList.add('hov')}});
 document.addEventListener('dragleave',e=>{const d=e.target.closest('.drop');if(d)d.classList.remove('hov')});
 document.addEventListener('drop',async e=>{const d=e.target.closest('.drop');if(!d)return;e.preventDefault();d.classList.remove('hov');pickKind=d.dataset.kind;await handleFiles(e.dataTransfer.files);rebuild();render()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){const M=document.getElementById('modal');M.classList.remove('on');clearOverlayPin(M);closeDrawer()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeDrawer()}});
 rebuild();render();loadDB();
 </script>
 </body>
