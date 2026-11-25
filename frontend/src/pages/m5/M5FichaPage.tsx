@@ -1009,8 +1009,14 @@ export function M5FichaPage() {
           capacidadUnidad: fCapacidadUnidad || null,
           tipoServicioId: fTipoServicioId || null,
           estado: fEstadoCam,
-          estadoDesde: fEstadoCam === "OPERATIVA" ? null : fEstadoDesde || null,
-          estadoHasta: fEstadoCam === "OPERATIVA" ? null : fEstadoHasta || null,
+          estadoDesde:
+            fEstadoCam === "OPERATIVA" || fEstadoCam === "INACTIVA"
+              ? null
+              : fEstadoDesde || null,
+          estadoHasta:
+            fEstadoCam === "OPERATIVA" || fEstadoCam === "INACTIVA"
+              ? null
+              : fEstadoHasta || null,
           empresaId: fEmpresaId || null,
         };
         if (form.item) {
@@ -1173,7 +1179,10 @@ export function M5FichaPage() {
       INHABILITADO:
         "¿Inhabilitar este chofer? Sigue viendo la app, pero no se le asignan unidades ni puede pedir taller.",
     },
-    camioneta: {},
+    camioneta: {
+      INACTIVO:
+        "¿Inactivar esta unidad (vendida / baja definitiva)? Deja de figurar en Asignación flota; se conserva el historial.",
+    },
   };
 
   async function cambiarEstado(
@@ -1858,7 +1867,6 @@ export function M5FichaPage() {
                 setAdvUnidad((a) => ({ ...a, estados: [] }));
               }}
               counts={unidadCounts}
-              sinInactivar
             />
             <div className="overflow-hidden rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-card)]">
               <button
@@ -2080,7 +2088,6 @@ export function M5FichaPage() {
                               onEliminar={() =>
                                 void eliminarEntidad("camioneta", c.id)
                               }
-                              sinInactivar
                             />
                           )}
                         </div>
@@ -3207,6 +3214,7 @@ export function M5FichaPage() {
                         | "EN_TALLER"
                         | "DE_VACACIONES"
                         | "FUERA_SERVICIO"
+                        | "INACTIVA"
                     )
                   }
                 >
@@ -3214,10 +3222,10 @@ export function M5FichaPage() {
                   <option value="EN_TALLER">Inhabilitado (en taller)</option>
                   <option value="DE_VACACIONES">Inhabilitado (de vacaciones)</option>
                   <option value="FUERA_SERVICIO">Inhabilitado (fuera de servicio)</option>
-                  {fEstadoCam === "INACTIVA" && <option value="INACTIVA">Inactivo</option>}
+                  <option value="INACTIVA">Inactivo (vendida / baja)</option>
                 </select>
               </Field>
-              {fEstadoCam !== "OPERATIVA" && (
+              {fEstadoCam !== "OPERATIVA" && fEstadoCam !== "INACTIVA" && (
                 <>
                   <Field label="Estado desde">
                     <input

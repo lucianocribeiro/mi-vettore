@@ -1301,15 +1301,15 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
         return;
       }
       data.estado = s as EstadoCamioneta;
-      if (s === "OPERATIVA") {
+      if (s === "OPERATIVA" || s === "INACTIVA") {
         data.estadoDesde = null;
         data.estadoHasta = null;
       }
     }
-    if (req.body?.estadoDesde !== undefined) {
+    if (req.body?.estadoDesde !== undefined && data.estado !== "INACTIVA") {
       data.estadoDesde = parseDate(req.body.estadoDesde);
     }
-    if (req.body?.estadoHasta !== undefined) {
+    if (req.body?.estadoHasta !== undefined && data.estado !== "INACTIVA") {
       data.estadoHasta = parseDate(req.body.estadoHasta);
     }
     if (req.body?.empresaId !== undefined) {
@@ -1325,10 +1325,18 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
       }
       data.empresaId = nextEmpresaId;
     }
-    const item = await prisma.camioneta.update({
-      where: { id: req.params.id },
-      data,
-      include: includeAsignaciones,
+    const item = await prisma.$transaction(async (tx) => {
+      if (data.estado === EstadoCamioneta.INACTIVA) {
+        await tx.asignacionFlota.updateMany({
+          where: { camionetaId: req.params.id, periodoHasta: null },
+          data: { periodoHasta: new Date() },
+        });
+      }
+      return tx.camioneta.update({
+        where: { id: req.params.id },
+        data,
+        include: includeAsignaciones,
+      });
     });
     if ("estado" in data || "estadoDesde" in data || "estadoHasta" in data) {
       await sincronizarInhabilitacionUnidad(prisma, item, req.body, req.user?.id);
@@ -1644,14 +1652,24 @@ router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
       return;
     }
 
-    const item = await prisma.camioneta.update({
-      where: { id: req.params.id },
-      data: {
-        estado: destino,
-        estadoDesde: inhabilitar ? desde : null,
-        estadoHasta: inhabilitar ? parseDate(req.body?.hasta) : null,
-      },
-      include: includeAsignaciones,
+    const item = await prisma.$transaction(async (tx) => {
+      if (destino === EstadoCamioneta.INACTIVA) {
+        // Vendida / baja definitiva: cierra asignación abierta para que no figure en flota.
+        await tx.asignacionFlota.updateMany({
+          where: { camionetaId: req.params.id, periodoHasta: null },
+          data: { periodoHasta: new Date() },
+        });
+      }
+      const updated = await tx.camioneta.update({
+        where: { id: req.params.id },
+        data: {
+          estado: destino,
+          estadoDesde: inhabilitar ? desde : null,
+          estadoHasta: inhabilitar ? parseDate(req.body?.hasta) : null,
+        },
+        include: includeAsignaciones,
+      });
+      return updated;
     });
     await sincronizarInhabilitacionUnidad(prisma, item, req.body, req.user?.id);
     res.json(item);
