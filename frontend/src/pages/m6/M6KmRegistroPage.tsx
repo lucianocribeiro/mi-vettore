@@ -408,7 +408,6 @@ export function M6KmRegistroPage() {
                           {r.camioneta.patente}
                         </td>
                         <td className="px-3 py-2">
-                          {r.kmAnterior.toLocaleString("es-AR")} →{" "}
                           {r.kmNuevo.toLocaleString("es-AR")}
                         </td>
                         <td

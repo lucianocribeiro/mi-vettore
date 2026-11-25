@@ -20,7 +20,7 @@ import {
 } from "../lib/camioneta-fields.js";
 import { canAdminCorregir } from "../lib/correccion-admin.js";
 import { parseDateOnly } from "../lib/date-only.js";
-import { applyKmUpdate } from "../lib/km.js";
+import { applyKmUpdate, isKmAnomalia } from "../lib/km.js";
 import { reasignarChoferUnidad } from "../lib/asignacion-flota.js";
 import { uploadDocumento } from "../lib/supabase-storage.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
@@ -638,7 +638,15 @@ router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
           ? { camioneta: { patente: { contains: patente, mode: "insensitive" } } }
           : {}),
       },
-      include: { camioneta: { select: { patente: true, id: true } } },
+      include: {
+        camioneta: {
+          select: {
+            patente: true,
+            id: true,
+            empresa: { select: { nombre: true } },
+          },
+        },
+      },
       orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
     });
 
@@ -646,22 +654,24 @@ router.get("/km-reporte", authenticate, async (req: AuthedRequest, res) => {
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet("Km");
       sheet.columns = [
-        { header: "Fecha", key: "fecha", width: 20 },
+        { header: "Fecha", key: "fecha", width: 12 },
+        { header: "Empresa de transporte", key: "empresa", width: 28 },
         { header: "Patente", key: "patente", width: 12 },
-        { header: "Km anterior", key: "kmAnterior", width: 12 },
-        { header: "Km nuevo", key: "kmNuevo", width: 12 },
+        { header: "Km", key: "kmNuevo", width: 12 },
         { header: "Delta", key: "delta", width: 10 },
         { header: "Anomalía", key: "anomalia", width: 10 },
       ];
       sheet.getRow(1).font = { bold: true };
       for (const r of rows) {
+        const fechaRef = r.fecha ?? r.createdAt;
+        const anomalia = isKmAnomalia(r.kmAnterior, r.kmNuevo, r.delta);
         sheet.addRow({
-          fecha: (r.fecha ?? r.createdAt).toISOString(),
+          fecha: isoDay(fechaRef),
+          empresa: r.camioneta.empresa?.nombre ?? "",
           patente: r.camioneta.patente,
-          kmAnterior: r.kmAnterior,
           kmNuevo: r.kmNuevo,
           delta: r.delta,
-          anomalia: r.anomalia ? "Sí" : "No",
+          anomalia: anomalia ? "Sí" : "No",
         });
       }
       const filename = `km_reporte_${new Date().toISOString().slice(0, 10)}.xlsx`;
@@ -736,7 +746,12 @@ router.get("/km-registros", authenticate, async (req: AuthedRequest, res) => {
       orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
       take,
     });
-    res.json({ registros });
+    res.json({
+      registros: registros.map((r) => ({
+        ...r,
+        anomalia: isKmAnomalia(r.kmAnterior, r.kmNuevo, r.delta),
+      })),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al listar registros de km" });

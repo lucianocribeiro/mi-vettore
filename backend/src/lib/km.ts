@@ -5,6 +5,25 @@ import { registrarCorreccionAdmin } from "./correccion-admin.js";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
+/**
+ * Anomalía de odómetro:
+ * - Primera carga (km anterior 0): no se marca.
+ * - Salto hacia arriba > umbral: sí.
+ * - Baja grande (|delta| > umbral) o km nuevo en 0 con historial: sí.
+ */
+export function isKmAnomalia(
+  existingKm: number,
+  nextKm: number,
+  delta = nextKm - existingKm
+): boolean {
+  const max = kmAnomaliaMaxDelta();
+  if (!(existingKm > 0)) return false;
+  if (delta > max) return true;
+  if (delta < 0 && Math.abs(delta) > max) return true;
+  if (nextKm === 0) return true;
+  return false;
+}
+
 export async function applyKmUpdate(
   db: Db,
   opts: {
@@ -42,7 +61,7 @@ export async function applyKmUpdate(
     if (!reg.ok) return reg;
   }
   const delta = next - opts.existingKm;
-  const anomalia = delta > kmAnomaliaMaxDelta();
+  const anomalia = isKmAnomalia(opts.existingKm, next, delta);
   const fecha = opts.fecha ?? new Date();
   await db.kmRegistro.create({
     data: {
