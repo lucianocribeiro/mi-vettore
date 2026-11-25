@@ -177,7 +177,7 @@ tr.off td:first-child{opacity:1;text-decoration:none}
    Sin scroll interno: el panel de Mi Vettore scrollea una sola vez. */
 .side{display:none!important}
 .tabs,#tabs{display:none!important}
-html,body{margin:0;height:auto!important;min-height:0;overflow:visible!important;background:var(--bg)}
+html,body{margin:0;height:auto!important;min-height:0;overflow:visible!important;background:var(--bg);position:relative}
 .app{display:block;min-height:0;height:auto!important}
 .main{display:block;min-width:0;min-height:0;height:auto!important}
 .topbar{height:36px;padding:0 12px}
@@ -1014,8 +1014,9 @@ function renderDrawer(){
    <div class="sec"><div class="sh">Adelantos <span class="ded">− ${fm(r.adelT)}</span></div>${tb([['Fecha'],['Tipo'],['Descripción'],['Cuota'],['Importe','n']],r.adel.map(a=>`<tr><td>${fD(a.fecha)}</td><td>${esc(a.tipo)}</td><td>${esc(a.desc)}</td><td>${a.n}/${a.de}</td><td class="n">${fm(a.importe)}</td></tr>`))}</div>
    <div class="sec"><div class="sh">Préstamos <span class="ded">− ${fm(r.prestT)}</span></div>${tb([['Concepto'],['Horas','n'],['Valor hora','n'],['Importe','n']],r.prest.map(x=>`<tr><td>${esc(x.concepto)}</td><td class="n">${fn(x.horas,2)}</td><td class="n">${fm(x.vh)}</td><td class="n">${fm(x.importe)}</td></tr>`))}</div>
    <div class="tot"><span class="big">Saldo</span><span class="big ${r.saldo<0?'neg':'pos'}">${fm(r.saldo)}</span><span>Efectivo</span><span>${fm(r.ef)}</span><span>Transferencia</span><span>${fm(r.tr)}</span></div></div>`;
-  Dw.classList.add('on');document.getElementById('ov').classList.add('on')}
-function closeDrawer(){UI.drawer=null;document.getElementById('drawer').classList.remove('on');document.getElementById('ov').classList.remove('on')}
+  Dw.classList.add('on');document.getElementById('ov').classList.add('on');
+  pinOverlay(Dw,'drawer');pinOverlay(document.getElementById('ov'),'ov')}
+function closeDrawer(){UI.drawer=null;const Dw=document.getElementById('drawer'),Ov=document.getElementById('ov');Dw.classList.remove('on');Ov.classList.remove('on');clearOverlayPin(Dw);clearOverlayPin(Ov)}
 
 /* ================= CATALOGOS (división + tipo transferencia) ================= */
 function vCat(){
@@ -1094,12 +1095,59 @@ function addValor(d,v,desde){S.valores.filter(x=>x.division===d&&(!x.hasta||x.ha
 function vhForm(v){modal('Editar valor hora',fld('División',`<input type="text" name="division" required value="${esc(v.division)}">`,1)+fld('Valor $',`<input type="number" name="valor" step="0.01" required value="${v.valor}">`)+fld('Desde',`<input type="date" name="desde" required value="${v.desde||''}">`)+fld('Hasta',`<input type="date" name="hasta" value="${v.hasta||''}">`),fd=>{Object.assign(v,{division:fd.division.trim(),valor:+fd.valor,desde:fd.desde,hasta:fd.hasta||null});saveCfg('valores')})}
 
 /* ================= MODAL / TOAST ================= */
+/** En Mi Vettore el iframe es tan alto como el contenido y scrollea el <main> padre:
+ *  position:fixed del modal queda arriba, fuera de vista. Anclar al tramo visible. */
+function overlayView(){
+  try{
+    const f=window.frameElement;if(!f)return null;
+    const r=f.getBoundingClientRect();
+    const ph=window.parent.innerHeight||0;if(!ph)return null;
+    const top=Math.max(0,-r.top);
+    const vis=Math.min(r.bottom,ph)-Math.max(r.top,0);
+    return{top,height:Math.max(280,vis)};
+  }catch(e){return null}
+}
+function clearOverlayPin(el){
+  if(!el)return;
+  ['position','left','right','top','bottom','width','height','inset','transform','zIndex'].forEach(k=>{el.style[k]=''});
+}
+function pinOverlay(el,kind){
+  if(!el)return;
+  const v=overlayView();
+  if(!v){clearOverlayPin(el);return}
+  el.style.position='absolute';
+  el.style.zIndex=kind==='toast'?'60':(kind==='drawer'||kind==='ov'?'21':'40');
+  if(kind==='toast'){
+    el.style.left='50%';el.style.transform='translateX(-50%)';
+    el.style.top=(v.top+v.height-72)+'px';el.style.bottom='auto';
+    el.style.right='auto';el.style.width='';el.style.height='';
+    return;
+  }
+  el.style.top=v.top+'px';el.style.height=v.height+'px';el.style.bottom='auto';el.style.inset='auto';
+  if(kind==='drawer'){el.style.left='auto';el.style.right='0';el.style.width='min(740px, 96vw)'}
+  else{el.style.left='0';el.style.right='0';el.style.width='100%'}
+}
+function refreshOpenOverlays(){
+  const M=document.getElementById('modal');if(M&&M.classList.contains('on'))pinOverlay(M,'modal');
+  const Dw=document.getElementById('drawer');
+  if(Dw&&Dw.classList.contains('on')){pinOverlay(Dw,'drawer');pinOverlay(document.getElementById('ov'),'ov')}
+  const T=document.getElementById('toast');if(T&&T.classList.contains('on'))pinOverlay(T,'toast');
+}
+(function bindParentScrollPin(){
+  try{
+    const main=window.parent.document.querySelector('main');
+    if(!main||main.__vtLiqPin)return;
+    main.__vtLiqPin=1;
+    main.addEventListener('scroll',()=>refreshOpenOverlays(),{passive:true});
+    window.parent.addEventListener('resize',()=>refreshOpenOverlays());
+  }catch(e){}
+})();
 const fld=(l,h,full)=>`<div class="${full?'full':''}"><label class="f">${l}</label>${h}</div>`;
 function modal(title,body,onOk,ok='Guardar',wide){const M=document.getElementById('modal'),Bx=document.getElementById('mbox');Bx.className='mbox'+(wide?' wide':'');
-  Bx.innerHTML=`<div class="mh">${title}<button class="x" data-a="mclose">×</button></div><form id="mform"><div class="mb">${body}</div><div class="mf"><button type="button" class="btn" data-a="mclose">Cancelar</button><button class="btn primary" type="submit">${ok}</button></div></form>`;M.classList.add('on');
-  document.getElementById('mform').onsubmit=e=>{e.preventDefault();const btn=e.target.querySelector('button[type=submit]');if(btn.disabled)return;btn.disabled=true;const fd={};new FormData(e.target).forEach((v,k)=>fd[k]=v);let err;try{err=onOk(fd)}catch(x){console.error(x);err='Error inesperado: '+(x&&x.message||x)}if(err){btn.disabled=false;toast(err);return}M.classList.remove('on');try{rebuild();render()}catch(x){console.error(x);toast('Error al refrescar la vista')}}}
+  Bx.innerHTML=`<div class="mh">${title}<button class="x" data-a="mclose">×</button></div><form id="mform"><div class="mb">${body}</div><div class="mf"><button type="button" class="btn" data-a="mclose">Cancelar</button><button class="btn primary" type="submit">${ok}</button></div></form>`;M.classList.add('on');pinOverlay(M,'modal');
+  document.getElementById('mform').onsubmit=e=>{e.preventDefault();const btn=e.target.querySelector('button[type=submit]');if(btn.disabled)return;btn.disabled=true;const fd={};new FormData(e.target).forEach((v,k)=>fd[k]=v);let err;try{err=onOk(fd)}catch(x){console.error(x);err='Error inesperado: '+(x&&x.message||x)}if(err){btn.disabled=false;toast(err);return}M.classList.remove('on');clearOverlayPin(M);try{rebuild();render()}catch(x){console.error(x);toast('Error al refrescar la vista')}}}
 const confirmBox=(t,txt,f,ok='Confirmar')=>modal(t,`<div class="full">${txt}</div>`,()=>{f()},ok);
-let tT;function toast(m){const t=document.getElementById('toast');t.innerHTML=m;t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),4000)}
+let tT;function toast(m){const t=document.getElementById('toast');t.innerHTML=m;t.classList.add('on');pinOverlay(t,'toast');clearTimeout(tT);tT=setTimeout(()=>{t.classList.remove('on');clearOverlayPin(t)},4000)}
 
 /* ================= IMPORT ================= */
 function serialToISO(v){if(v==null||v==='')return null;if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return d?`${d.y}-${pad(d.m)}-${pad(d.d)}`:null}const s=String(v).trim();let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);if(m){let y=+m[3];if(y<100)y+=2000;return `${y}-${pad(m[2])}-${pad(m[1])}`}return null}
@@ -1274,7 +1322,7 @@ document.addEventListener('click',e=>{
   switch(a){
     case 'mod':UI.mod=k;UI.search='';UI.det=null;closeDrawer();document.getElementById('modal').classList.remove('on');try{window.__vtNotifyLiqMod&&window.__vtNotifyLiqMod(k)}catch(e){}render();scrollTo(0,0);break;
     case 'role':UI.role=k;try{localStorage.setItem('vt_role',k)}catch(e){}render();break;
-    case 'mclose':document.getElementById('modal').classList.remove('on');break;
+    case 'mclose':{const M=document.getElementById('modal');M.classList.remove('on');clearOverlayPin(M);break}
     case 'reset':confirmBox('Restaurar datos de ejemplo','Se borran todos los datos guardados y se vuelve a la historia del Excel.',resetAll,'Restaurar');break;
     case 'newAdel':adelForm();break;
     case 'editAdel':adelForm(S.adel[id]);break;
@@ -1364,7 +1412,7 @@ document.getElementById('fileIn').addEventListener('change',async e=>{await hand
 document.addEventListener('dragover',e=>{const d=e.target.closest('.drop');if(d){e.preventDefault();d.classList.add('hov')}});
 document.addEventListener('dragleave',e=>{const d=e.target.closest('.drop');if(d)d.classList.remove('hov')});
 document.addEventListener('drop',async e=>{const d=e.target.closest('.drop');if(!d)return;e.preventDefault();d.classList.remove('hov');pickKind=d.dataset.kind;await handleFiles(e.dataTransfer.files);rebuild();render()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.getElementById('modal').classList.remove('on');closeDrawer()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const M=document.getElementById('modal');M.classList.remove('on');clearOverlayPin(M);closeDrawer()}});
 rebuild();render();loadDB();
 </script>
 </body>
