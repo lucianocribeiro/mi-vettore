@@ -35,19 +35,20 @@ const FOTO_HINT: Partial<Record<TipoDocumento, string>> = {
   FOTO_CARGA: "Caja / zona de carga por dentro.",
 };
 
-/** Comprime la imagen y la rota. Si `rotacion` es 0 y viene vertical, la pone horizontal. */
+/**
+ * Comprime la imagen y aplica la rotación pedida (de la previa).
+ * Respeta EXIF al leer; no inventa un giro extra (eso deshacía lo guardado al reabrir).
+ */
 export async function compressImageIfNeeded(file: File, rotacion = 0): Promise<File | Blob> {
   if (!file.type.startsWith("image/")) return file;
   const maxWidth = 1600;
   const quality = 0.7;
 
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
   const scale = bitmap.width > maxWidth ? maxWidth / bitmap.width : 1;
   const w = Math.round(bitmap.width * scale);
   const h = Math.round(bitmap.height * scale);
-  let rot = ((rotacion % 360) + 360) % 360;
-  // Documentos (cédula, DNI…): preferir horizontal al subir.
-  if (rot === 0 && bitmap.height > bitmap.width) rot = 90;
+  const rot = ((rotacion % 360) + 360) % 360;
   const girada = rot === 90 || rot === 270;
   const canvas = document.createElement("canvas");
   canvas.width = girada ? h : w;
@@ -166,8 +167,9 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
     if (file.type.startsWith("image/") && !TIPOS_FOTO_VEHICULO.includes(tipoDoc)) {
       setError(null);
       const url = URL.createObjectURL(file);
-      void createImageBitmap(file)
+      void createImageBitmap(file, { imageOrientation: "from-image" })
         .then((bmp) => {
+          // Sugerencia inicial: si viene vertical, ofrecer horizontal. El usuario puede corregir.
           const rot = bmp.height > bmp.width ? 90 : 0;
           bmp.close();
           setPrevia({ tipo: tipoDoc, file, url, rot });
@@ -480,13 +482,8 @@ export function DocumentUpload({ choferId, camionetaId, onChange }: Props) {
           documentoId={visor.id}
           token={token}
           canSaveOrientacion={canValidate}
-          // Fotos de vehículo: no auto-girar (deja al usuario rotar y guardar).
-          autoHorizontal={
-            !visor.tipo || !TIPOS_FOTO_VEHICULO.includes(visor.tipo)
-          }
           onClose={() => setVisor(null)}
           onSaved={() => {
-            // No reabrir: eso volvía a aplicar el auto-giro y “deshacía” el guardado.
             void load();
           }}
         />

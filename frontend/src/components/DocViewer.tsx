@@ -14,7 +14,10 @@ type Props = {
   documentoId?: string;
   token?: string | null;
   canSaveOrientacion?: boolean;
-  /** Sugerir giro a horizontal si viene vertical (cédula/DNI). No usar en fotos de vehículo. */
+  /**
+   * @deprecated No auto-girar al abrir: deshacía «Guardar orientación» al volver a ver el archivo.
+   * Se ignora; la rotación solo la aplica el usuario (o la previa al subir).
+   */
   autoHorizontal?: boolean;
   onSaved?: () => void;
 };
@@ -73,7 +76,6 @@ export function DocViewer({
   documentoId,
   token,
   canSaveOrientacion,
-  autoHorizontal = true,
   onSaved,
 }: Props) {
   const [rot, setRot] = useState(0);
@@ -82,8 +84,6 @@ export function DocViewer({
   const [cargando, setCargando] = useState(true);
   const [descargando, setDescargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  /** Evita que un reload vuelva a auto-girar después de guardar. */
-  const saltarAutoRef = useRef(false);
   const rotInicialRef = useRef(0);
 
   useEffect(() => {
@@ -104,18 +104,6 @@ export function DocViewer({
         creado = URL.createObjectURL(bb);
         setBlob(bb);
         setBlobUrl(creado);
-        if (
-          !saltarAutoRef.current &&
-          autoHorizontal &&
-          esImagen(tipo || bb.type, nombre)
-        ) {
-          const auto = await rotacionParaHorizontal(bb);
-          if (vivo && auto) {
-            setRot(auto);
-            rotInicialRef.current = auto;
-          }
-        }
-        saltarAutoRef.current = false;
       })
       .catch(() => {
         /* sin CORS u otro error: se muestra con la URL directa */
@@ -125,7 +113,7 @@ export function DocViewer({
       vivo = false;
       if (creado) URL.revokeObjectURL(creado);
     };
-  }, [url, mimeType, nombre, autoHorizontal]);
+  }, [url, mimeType, nombre]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -178,7 +166,7 @@ export function DocViewer({
     if (!puedeGuardar || !blob || !token || !documentoId) return;
     setGuardando(true);
     try {
-      // Siempre re-encodear con la rotación actual (incluye 0 si volvieron del auto-giro).
+      // Bakea la rotación en los píxeles (JPEG sin EXIF) para que al reabrir quede igual.
       const rotated = await rotarImagen(blob, rot);
       const fd = new FormData();
       const fileName = (nombre.replace(/\.\w+$/, "") || "documento") + ".jpg";
@@ -190,8 +178,6 @@ export function DocViewer({
       );
       const nuevoUrl = URL.createObjectURL(rotated);
       if (blobUrl) URL.revokeObjectURL(blobUrl);
-      // Quedarse con el archivo ya girado; no reabrir (evita auto-giro otra vez).
-      saltarAutoRef.current = true;
       setBlob(rotated);
       setBlobUrl(nuevoUrl);
       setRot(0);
