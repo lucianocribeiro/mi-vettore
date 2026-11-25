@@ -262,11 +262,11 @@ const pNext=(p,n=1)=>{let [y,m,h]=p.split('-').map(Number);for(let i=0;i<n;i++){
 const pPrev=(p,n=1)=>{let [y,m,h]=p.split('-').map(Number);for(let i=0;i<n;i++){if(h===2)h=1;else{h=2;m--;if(m<1){m=12;y--}}}return `${y}-${pad(m)}-${h}`};
 /** Adelantos: la 1ª cuota no puede ir más atrás que 1 quincena antes de la fecha de carga. */
 const adelMinPer=f=>pPrev(perOf(String(f||today()).slice(0,10)),1);
-/** Solo períodos de meses ya cerrados (no mes actual ni futuros). */
+/** Hasta el mes en curso inclusive (no meses futuros). */
 const ymOf=p=>String(p).slice(0,7);
 const ymNow=()=>today().slice(0,7);
-const isLiqPeriodAllowed=p=>ymOf(p)<ymNow();
-const lastLiqPeriod=()=>{const [y,m]=ymNow().split('-').map(Number);let py=y,pm=m-1;if(pm<1){pm=12;py--}return `${py}-${pad(pm)}-2`};
+const isLiqPeriodAllowed=p=>ymOf(p)<=ymNow();
+const lastLiqPeriod=()=>{const [y,m]=ymNow().split('-').map(Number);return `${y}-${pad(m)}-2`};
 const clampLiqPeriod=p=>isLiqPeriodAllowed(p)?p:lastLiqPeriod();
 function liqYearOptions(selY){
   const maxY=+lastLiqPeriod().split('-')[0];
@@ -893,7 +893,7 @@ function vLiq(){
     <select data-a="pp" data-f="y" data-ch="1">${liqYearOptions(y)}</select>
     <select data-a="pp" data-f="m" data-ch="1">${liqMonthOptions(y,m)}</select>
     <select data-a="pp" data-f="h" data-ch="1"><option value="1" ${h==1?'selected':''}>1ra quincena (1 al 15)</option><option value="2" ${h==2?'selected':''}>2da quincena (16 a fin de mes)</option></select>
-    <b style="margin-left:6px">${pLabel(p)}</b><span class="mut small" style="margin-left:8px">Solo meses anteriores (no el mes en curso)</span></div>
+    <b style="margin-left:6px">${pLabel(p)}</b><span class="mut small" style="margin-left:8px">Hasta el mes en curso (no meses futuros)</span></div>
    <div class="cb"><div class="status">
     <div class="it">${fc?'<span class="chip g">✓</span>':'<span class="chip r">✗</span>'} Facturación: ${fc?`${fc} empresas`:'sin cargar'} ${fc||hist?'':'<a class="lnk" data-a="mod" data-k="fact">cargar</a>'}</div>
     <div class="it">${hist||nfC?'<span class="chip g">✓</span>':'<span class="chip w">!</span>'} Nafta: ${hist?'histórico':nfC?`${fn(nfC)} cargas pendientes (fecha de carga ≤ este período)${nfAnt?` · ${nfAnt} de quincenas anteriores`:''}`:'sin cargas pendientes (se puede liquidar igual)'} ${hist?'':'<a class="lnk" data-a="mod" data-k="nafta">subir</a>'}</div>
