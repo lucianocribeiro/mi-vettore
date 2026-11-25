@@ -44,6 +44,7 @@ export function M6KmRegistroPage() {
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [exportando, setExportando] = useState(false);
+  const [empresaId, setEmpresaId] = useState("");
 
   const camsConModulo = useMemo(
     () =>
@@ -53,9 +54,49 @@ export function M6KmRegistroPage() {
     [camionetas]
   );
 
+  const empresas = useMemo(() => {
+    const map = new Map<string, { id: string; nombre: string }>();
+    for (const c of camsConModulo) {
+      const e = c.empresa;
+      if (e?.id) map.set(e.id, { id: e.id, nombre: e.nombre });
+    }
+    return [...map.values()].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, "es")
+    );
+  }, [camsConModulo]);
+
+  const camsFiltradas = useMemo(
+    () =>
+      empresaId
+        ? camsConModulo.filter(
+            (c) => c.empresaId === empresaId || c.empresa?.id === empresaId
+          )
+        : camsConModulo,
+    [camsConModulo, empresaId]
+  );
+
   const selected = useMemo(
-    () => camsConModulo.find((c) => c.id === camionetaId) ?? null,
-    [camsConModulo, camionetaId]
+    () => camsFiltradas.find((c) => c.id === camionetaId) ?? null,
+    [camsFiltradas, camionetaId]
+  );
+
+  const empresaPorCamioneta = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of camsConModulo) {
+      const id = c.empresaId ?? c.empresa?.id;
+      if (id) m.set(c.id, id);
+    }
+    return m;
+  }, [camsConModulo]);
+
+  const registrosFiltrados = useMemo(
+    () =>
+      empresaId
+        ? registros.filter(
+            (r) => empresaPorCamioneta.get(r.camionetaId) === empresaId
+          )
+        : registros,
+    [registros, empresaId, empresaPorCamioneta]
   );
 
   const load = useCallback(async () => {
@@ -78,6 +119,14 @@ export function M6KmRegistroPage() {
         if (prev && habilitadas.some((c) => c.id === prev)) return prev;
         return habilitadas[0]?.id ?? "";
       });
+      setEmpresaId((prev) => {
+        if (!prev) return prev;
+        return habilitadas.some(
+          (c) => c.empresaId === prev || c.empresa?.id === prev
+        )
+          ? prev
+          : "";
+      });
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Error al cargar kilometrajes"
@@ -94,6 +143,12 @@ export function M6KmRegistroPage() {
   useEffect(() => {
     if (selected) setKm(String(selected.km ?? ""));
   }, [selected?.id]);
+
+  useEffect(() => {
+    if (!camionetaId) return;
+    if (camsFiltradas.some((c) => c.id === camionetaId)) return;
+    setCamionetaId(camsFiltradas[0]?.id ?? "");
+  }, [empresaId, camsFiltradas, camionetaId]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -199,6 +254,26 @@ export function M6KmRegistroPage() {
       {okMsg && <p className="mb-3 text-sm text-emerald-700 dark:text-emerald-400">{okMsg}</p>}
 
       {!loading && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-[var(--vl-card-border)] bg-[var(--vl-card)] p-3">
+            <label className="block text-xs font-medium text-[var(--vl-text-muted)]">
+              Empresa de transporte
+              <select
+                className="mt-1 min-h-11 w-full max-w-md rounded-md border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-3 py-2 text-sm text-[var(--vl-text)]"
+                value={empresaId}
+                onChange={(e) => setEmpresaId(e.target.value)}
+                aria-label="Empresa de transporte"
+              >
+                <option value="">Todas</option>
+                {empresas.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
         <div className="grid gap-5 lg:grid-cols-[minmax(0,22rem)_1fr]">
           <form
             onSubmit={(e) => void onSubmit(e)}
@@ -219,13 +294,17 @@ export function M6KmRegistroPage() {
                 className="mt-1 w-full rounded-md border border-[var(--vl-card-border)] bg-transparent px-3 py-2 text-sm"
                 value={camionetaId}
                 onChange={(e) => setCamionetaId(e.target.value)}
-                disabled={!canWrite || camsConModulo.length === 0}
+                disabled={!canWrite || camsFiltradas.length === 0}
                 required
               >
-                {camsConModulo.length === 0 && (
-                  <option value="">Sin unidades con mantenimiento</option>
+                {camsFiltradas.length === 0 && (
+                  <option value="">
+                    {empresaId
+                      ? "Sin unidades de esta empresa"
+                      : "Sin unidades con mantenimiento"}
+                  </option>
                 )}
-                {camsConModulo.map((c) => (
+                {camsFiltradas.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.patente}
                     {unidadTitulo(c) !== c.patente ? ` · ${unidadTitulo(c)}` : ""}
@@ -292,11 +371,18 @@ export function M6KmRegistroPage() {
             <div className="border-b border-[var(--vl-card-border)] px-4 py-3">
               <h2 className="text-sm font-semibold text-[var(--vl-heading)]">
                 Últimas cargas
+                {empresaId ? (
+                  <span className="ml-2 text-xs font-normal text-[var(--vl-text-muted)]">
+                    ({registrosFiltrados.length})
+                  </span>
+                ) : null}
               </h2>
             </div>
-            {registros.length === 0 ? (
+            {registrosFiltrados.length === 0 ? (
               <p className="p-4 text-sm text-[var(--vl-text-muted)]">
-                Todavía no hay registros de km.
+                {empresaId
+                  ? "No hay cargas de km para esta empresa."
+                  : "Todavía no hay registros de km."}
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -310,7 +396,7 @@ export function M6KmRegistroPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {registros.map((r) => (
+                    {registrosFiltrados.map((r) => (
                       <tr
                         key={r.id}
                         className="border-t border-[var(--vl-card-border)]"
@@ -343,6 +429,7 @@ export function M6KmRegistroPage() {
               </div>
             )}
           </section>
+        </div>
         </div>
       )}
     </div>
