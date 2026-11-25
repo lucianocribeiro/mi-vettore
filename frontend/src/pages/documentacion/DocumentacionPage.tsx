@@ -468,7 +468,6 @@ export function DocumentacionPage() {
     const empresaQ = adv.empresa.trim().toLowerCase();
     return camionetas.filter((c) => {
       const asgs = currentAsignaciones(c).filter((a) => !a.periodoHasta);
-      const asg = asgs[0] ?? null;
       const propietario = unidadPropietario(c);
       if (adv.estados.length > 0 && !adv.estados.includes(c.estado)) return false;
       if (adv.tipos.length > 0) {
