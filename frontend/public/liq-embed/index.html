@@ -497,6 +497,20 @@ async function syncEmpresasAbm(){
     }catch(e2){}
   }catch(e){}
 }
+/** OT cerradas de Talleres → adelantos tipo Taller (idempotente en el backend). */
+async function syncTalleresOts(){
+  if(!DB)return;
+  const TOKEN_KEY='mi-vettore-token';
+  let token='';try{token=localStorage.getItem(TOKEN_KEY)||''}catch(e){}
+  if(!token)return;
+  try{
+    const res=await fetch('/api/liquidaciones/sync-talleres',{method:'POST',headers:{Authorization:'Bearer '+token}});
+    if(!res.ok)return;
+    const ad=await DB.collection('adel').limit(1000).get();
+    ad.docs.forEach(d=>S.adel[d.id]=JSON.parse(JSON.stringify(d.data())));
+    if(!S.tipos.some(t=>t.nombre==='Taller'))S.tipos.push({nombre:'Taller',activo:true});
+  }catch(e){}
+}
 async function loadDB(){
   let db=null;try{if(window.claude&&claude.use)db=await Promise.race([claude.use('db'),new Promise(r=>setTimeout(()=>r(null),10000))])}catch(e){}
   if(!db){dbState='off';await syncEmpresasAbm();rebuild();render();return}
@@ -518,6 +532,7 @@ async function loadDB(){
   await syncEmpresasAbm();
   // Legado: rellenar división solo si el ABM no la trajo.
   try{if(DB){const cd=await DB.doc('cfg/divisiones').get();if(cd.exists){const m=cd.data().map;S.empresas.forEach(e=>{if(!e.division&&m[norm(e.nombre)]!==undefined)e.division=m[norm(e.nombre)]});EI.c=null}}}catch(e){}
+  await syncTalleresOts();
   rebuild();render();
 }
 async function resetAll(){

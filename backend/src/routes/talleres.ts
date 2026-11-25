@@ -36,6 +36,7 @@ import {
   resyncMantenimientoDeOt,
   syncMantenimientoDesdeOt,
 } from "../lib/sync-mantenimiento-ot.js";
+import { syncAdelantoTallerDesdeOt } from "../lib/sync-adelanto-taller-ot.js";
 import {
   canAdvanceFromStep,
   canCerrarOt,
@@ -3221,7 +3222,7 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         fecha: ot.fechaSiniestro ?? new Date(),
       });
 
-      return tx.ordenTrabajo.update({
+      const closed = await tx.ordenTrabajo.update({
         where: { id: ot.id },
         data: {
           cerradaAt: new Date(),
@@ -3230,6 +3231,13 @@ router.post("/:id/cerrar", authenticate, async (req: AuthedRequest, res) => {
         },
         include: includeOTFor(req.user!.id),
       });
+      // Liquidaciones: OT cerrada → adelanto tipo Taller (1 cuota).
+      try {
+        await syncAdelantoTallerDesdeOt(tx, ot.id, req.user!.id);
+      } catch (e) {
+        console.error("sync adelanto taller desde OT:", e);
+      }
+      return closed;
     });
 
     // Mail a Silvina y Carla al cerrar la OT (reunión 05/8)

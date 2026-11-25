@@ -3,6 +3,7 @@ import { Role, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
 import { isInternalOpsRole } from "../lib/roles.js";
+import { syncAllAdelantosTallerDesdeOts } from "../lib/sync-adelanto-taller-ot.js";
 
 const router = Router();
 
@@ -219,6 +220,21 @@ router.put("/catalogos", authenticate, async (req: AuthedRequest, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al guardar catálogos" });
+  }
+});
+
+/**
+ * Sincroniza OT cerradas de Talleres → adelantos tipo Taller en liquidaciones.
+ * Idempotente: no duplica si ya existe por id u OT en la descripción.
+ */
+router.post("/sync-talleres", authenticate, async (req: AuthedRequest, res) => {
+  try {
+    if (!requireOps(req, res)) return;
+    const result = await syncAllAdelantosTallerDesdeOts(req.user!.id);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al sincronizar OT de talleres" });
   }
 });
 
