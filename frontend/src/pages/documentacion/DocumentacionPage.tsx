@@ -12,6 +12,7 @@ import { ChevronDown, Search, X } from "../../components/icons";
 import { apiFetch, ApiError } from "../../lib/api";
 import {
   currentAsignacion,
+  currentAsignaciones,
   currentChoferAsignacion,
   formatDate,
   isInternalOps,
@@ -466,7 +467,9 @@ export function DocumentacionPage() {
   const filteredCams = useMemo(() => {
     const empresaQ = adv.empresa.trim().toLowerCase();
     return camionetas.filter((c) => {
-      const asg = currentAsignacion(c);
+      const asgs = currentAsignaciones(c).filter((a) => !a.periodoHasta);
+      const asg = asgs[0] ?? null;
+      const propietario = unidadPropietario(c);
       if (adv.estados.length > 0 && !adv.estados.includes(c.estado)) return false;
       if (adv.tipos.length > 0) {
         const matchTipo = adv.tipos.some((t) =>
@@ -474,15 +477,17 @@ export function DocumentacionPage() {
         );
         if (!matchTipo) return false;
       }
-      if (adv.sinChofer && asg?.chofer) return false;
-      if (adv.empresaId && asg?.empresa?.id !== adv.empresaId && asg?.empresaId !== adv.empresaId) {
+      if (adv.sinChofer && asgs.some((a) => a.chofer)) return false;
+      // Empresa = propietaria de la unidad (como en la tarjeta), no una asignación vieja.
+      if (
+        adv.empresaId &&
+        c.empresaId !== adv.empresaId &&
+        c.empresa?.id !== adv.empresaId
+      ) {
         return false;
       }
       if (adv.patenteId && c.id !== adv.patenteId) return false;
-      if (
-        empresaQ &&
-        !(asg?.empresa?.nombre ?? "").toLowerCase().includes(empresaQ)
-      ) {
+      if (empresaQ && !propietario.toLowerCase().includes(empresaQ)) {
         return false;
       }
       if (
@@ -503,7 +508,8 @@ export function DocumentacionPage() {
           c.estado,
           c.tipoTransporte,
           c.tipoServicio?.nombre,
-          asg?.empresa?.nombre,
+          propietario,
+          ...asgs.map((a) => a.chofer?.nombre),
         ],
         query
       );

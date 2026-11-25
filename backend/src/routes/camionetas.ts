@@ -1331,6 +1331,16 @@ router.put("/:id", ...write, async (req: AuthedRequest, res) => {
           where: { camionetaId: req.params.id, periodoHasta: null },
           data: { periodoHasta: new Date() },
         });
+      } else if (
+        typeof data.empresaId === "string" &&
+        data.empresaId &&
+        data.empresaId !== existing.empresaId
+      ) {
+        // Cambio de dueño: la asignación abierta sigue a la empresa propietaria.
+        await tx.asignacionFlota.updateMany({
+          where: { camionetaId: req.params.id, periodoHasta: null },
+          data: { empresaId: data.empresaId },
+        });
       }
       return tx.camioneta.update({
         where: { id: req.params.id },
