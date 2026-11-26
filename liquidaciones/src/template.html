@@ -420,7 +420,7 @@ function calcEmp(p,k,ov,cache){
   Object.values(S.tal).forEach(t=>{if(norm(t.empresa)===k&&t.fecha<=pEnd(p)&&!D.talLiq[t.id])r.tal.push({...t,inc:!exT.has(t.id)})});
   const vh=vhEmp(k,pStart(p));
   Object.values(S.prest).forEach(l=>{if(norm(l.empresa)!==k||loanEstado(l)!=='Activo'||l.fecha>pEnd(p))return;const ac=loanAcum(l),saldo=Math.max(0,l.totalHs-ac);if(saldo<=0.0001)return;
-    const h=ov.hs&&ov.hs[l.id]!=null?+ov.hs[l.id]:Math.min(l.cuotaHs,saldo);r.prest.push({id:l.id,concepto:l.concepto,horas:h,vh,importe:h*vh,acum:ac,total:l.totalHs,inc:!exL.has(l.id)})});
+    const h=ov.hs&&ov.hs[l.id]!=null?+ov.hs[l.id]:Math.min(l.cuotaHs,saldo);r.prest.push({id:l.id,concepto:l.concepto,horas:h,vh,importe:h*vh,acum:ac,total:l.totalHs,estado:loanEstado(l),inc:!exL.has(l.id)})});
   const inc=x=>x.filter(i=>i.inc);
   const nI=inc(r.nafta);r.naftaT=sum(nI,'importe');r.gnc=sum(nI.filter(n=>n.tipo==='GNC'),'importe');r.naf=r.naftaT-r.gnc;
   r.adelT=sum(inc(r.adel),'importe');r.talT=sum(inc(r.tal),'importe');r.prestT=sum(inc(r.prest),'importe');r.desc=r.naftaT+r.adelT+r.talT+r.prestT;r.saldo=r.fact-r.desc;r.vh=vh;r.horas=vh?factRukas/vh:0;
@@ -638,25 +638,47 @@ function loanForm(l){
   if(l&&loanEstado(l)==='Finalizado'){toast('Préstamo finalizado: no se puede editar');loanHist(l);return}
   const st0=l?loanEstado(l):'Activo';
   const d=l||{fecha:today(),empresa:'',concepto:'',totalHs:'',cuotaHs:35,estado:'Activo'};const ac=l?loanAcum(l):0;
+  const hsMin=l?(+l.totalHs||0):0;
+  const hsLockedInit=!!l&&st0==='Activo';
   modal(l?'Editar préstamo':'Registrar préstamo',
-   fld('Fecha de solicitud',`<input type="date" name="fecha" required value="${d.fecha}" data-lc="1" ${ac?'disabled':''}>`)+fld('Estado',`<select name="estado"><option value="Activo" ${st0==='Activo'?'selected':''}>Activo</option><option value="Refinanciado" ${st0==='Refinanciado'?'selected':''}>Refinanciado</option></select><div class="hint">Finalizado se asigna solo al completar las horas (última cuota liquidada).</div>`)+
+   fld('Fecha de solicitud',`<input type="date" name="fecha" required value="${d.fecha}" data-lc="1" ${ac?'disabled':''}>`)+fld('Estado',`<select name="estado" data-le="1"><option value="Activo" ${st0==='Activo'?'selected':''}>Activo</option><option value="Refinanciado" ${st0==='Refinanciado'?'selected':''}>Refinanciado</option></select><div class="hint">En <b>Activo</b> las horas quedan fijas. En <b>Refinanciado</b> podés aumentarlas (nunca bajar). Finalizado se asigna solo al completar las horas.</div>`)+
    fld('Empresa de transporte',`<input type="text" name="empresa" list="dlE" required value="${esc(d.empresa)}" data-lc="1" ${ac?'disabled':''}>${dlE()}`,1)+
    fld('Concepto',`<input type="text" name="concepto" required value="${esc(d.concepto)}" placeholder="Ej.: Partner – compra de camioneta">`,1)+
-   fld('Horas solicitadas',`<input type="number" name="horas" step="0.5" min="0.5" required value="${d.totalHs?Math.round(d.totalHs*100)/100:''}" data-lc="1" ${ac?'disabled':''}>`)+fld('Cuota por quincena (horas)',`<input type="number" name="cuotaHs" step="0.5" min="0" required value="${d.cuotaHs?Math.round(d.cuotaHs*100)/100:''}" data-lc="1">`)+
+   fld('Horas solicitadas',`<input type="number" name="horas" step="0.5" min="${l?hsMin||0.5:0.5}" required value="${d.totalHs?Math.round(d.totalHs*100)/100:''}" data-lc="1" ${hsLockedInit?'readonly style="opacity:.65;cursor:not-allowed"':''}>`)+fld('Cuota por quincena (horas)',`<input type="number" name="cuotaHs" step="0.5" min="0" required value="${d.cuotaHs?Math.round(d.cuotaHs*100)/100:''}" data-lc="1">`)+
    `<div class="full" id="lcalc"></div>`,
    fd=>{const emp=l&&ac?l.empresa:fd.empresa;const e=EI()[norm(emp)];if(!e)return 'Solo se permiten empresas habilitadas o inhabilitadas del ABM (no inactivas).';
      if(l&&loanEstado(l)==='Finalizado')return 'Préstamo finalizado: no se puede editar.';
-     const fecha=l&&ac?l.fecha:fd.fecha,hs=l&&ac?l.totalHs:+fd.horas,vs=l&&ac?l.vhSol:valorHora(e.division,fecha);if(!vs)return 'La división de la empresa no tiene valor hora a esa fecha.';if(!(hs>0))return 'Indicá las horas solicitadas.';
      const est=fd.estado==='Refinanciado'?'Refinanciado':'Activo';
+     const fecha=l&&ac?l.fecha:fd.fecha;
+     let hs;
+     if(!l)hs=+fd.horas;
+     else if(est==='Activo')hs=+l.totalHs;
+     else{
+       hs=+fd.horas;
+       if(hs+1e-9<hsMin)return `En Refinanciado solo se pueden aumentar las horas (mín. ${fn(hsMin,1)} hs).`;
+     }
+     const vs=l&&ac?l.vhSol:valorHora(e.division,fecha);if(!vs)return 'La división de la empresa no tiene valor hora a esa fecha.';if(!(hs>0))return 'Indicá las horas solicitadas.';
      const rec={fecha,empresa:e.nombre,concepto:fd.concepto.trim(),desc:'',totalHs:hs,vhSol:vs,monto:hs*vs,cuotaHs:+fd.cuotaHs,estado:est};
      if(l){Object.assign(l,rec);savePrest(l)}else{const x={id:uid('L'),acum0:0,...rec};S.prest[x.id]=x;savePrest(x)}rebuild();toast('Préstamo guardado')},'Guardar');
   const F=$liq('mform');
+  const syncHsLock=()=>{
+    if(!l||!F.horas)return;
+    const refin=F.estado.value==='Refinanciado';
+    if(refin){
+      F.horas.readOnly=false;F.horas.style.opacity='';F.horas.style.cursor='';
+      F.horas.min=String(hsMin||0.5);
+      if(+F.horas.value<hsMin)F.horas.value=Math.round(hsMin*100)/100;
+    }else{
+      F.horas.readOnly=true;F.horas.style.opacity='.65';F.horas.style.cursor='not-allowed';
+      F.horas.value=Math.round((+l.totalHs||0)*100)/100;
+    }
+  };
   const calc=()=>{const e=EI()[norm(F.empresa.value)],f=F.fecha.value,vs=e?valorHora(e.division,f):0,vn=e?valorHora(e.division,today()):0,h=+F.horas.value||0,c=+F.cuotaHs.value||0;
     (($liq('lcalc')||{})).innerHTML=e&&vs?`<div class="alert info" style="margin:0">División <b>${esc(e.division)}</b>. <b>${fn(h,1)} horas</b> equivalen a <b>${fm(h*vs)}</b> al valor hora de la solicitud (${fm(vs)}) y a <b>${fm(h*vn)}</b> al valor hora actual (${fm(vn)}).<br>Cuota: <b>${fn(c,1)} hs</b> = <b>${fm(c*vn)}</b> hoy · ${c?Math.ceil(Math.max(0,h-ac)/c):'—'} quincenas aprox.</div>`:'<div class="hint">Elegí empresa y fecha para ver la equivalencia en pesos.</div>'};
-  F.addEventListener('input',e=>{if(e.target.dataset.lc)calc()});F.addEventListener('change',calc);calc();
+  F.addEventListener('input',e=>{if(e.target.dataset.lc)calc()});F.addEventListener('change',e=>{if(e.target.dataset.le){syncHsLock();calc()}else calc()});syncHsLock();calc();
 }
 function loanHist(l){const rs=Object.values(D.rec).filter(r=>r.prest.some(x=>x.id===l.id)).sort((a,b)=>a.periodo.localeCompare(b.periodo));let ac=+l.acum0||0;
-  modal('Historial · '+esc(l.empresa)+' · '+esc(l.concepto),`<div class="full"><div class="mut small" style="margin-bottom:8px">Acumulado previo a 2026: ${fn(l.acum0||0,1)} hs</div><table><thead><tr><th>Período</th><th class="n">Horas</th><th class="n">Valor hora</th><th class="n">Importe</th><th class="n">Acumulado</th></tr></thead><tbody>${rs.map(r=>{const x=r.prest.find(y=>y.id===l.id);ac+=+x.horas;return `<tr><td>${pLabel(r.periodo)}</td><td class="n">${fn(x.horas,2)}</td><td class="n">${fm(x.vh)}</td><td class="n">${fm(x.importe)}</td><td class="n">${fn(ac,1)} / ${fn(l.totalHs,1)}</td></tr>`}).join('')||'<tr><td colspan="5" class="empty">Sin cuotas liquidadas.</td></tr>'}</tbody></table></div>`,()=>{},'Cerrar',true)}
+  modal('Historial · '+esc(l.empresa)+' · '+esc(l.concepto),`<div class="full"><div class="mut small" style="margin-bottom:8px">Acumulado previo a 2026: ${fn(l.acum0||0,1)} hs · Estado actual: <b>${esc(loanEstado(l))}</b></div><table><thead><tr><th>Período</th><th>Estado</th><th class="n">Horas</th><th class="n">Valor hora</th><th class="n">Importe</th><th class="n">Acumulado</th></tr></thead><tbody>${rs.map(r=>{const x=r.prest.find(y=>y.id===l.id);ac+=+x.horas;const st=x.estado||'Activo';return `<tr><td>${pLabel(r.periodo)}</td><td><span class="chip ${st==='Refinanciado'?'w':st==='Finalizado'?'g':''}">${esc(st)}</span></td><td class="n">${fn(x.horas,2)}</td><td class="n">${fm(x.vh)}</td><td class="n">${fm(x.importe)}</td><td class="n">${fn(ac,1)} / ${fn(l.totalHs,1)}</td></tr>`}).join('')||'<tr><td colspan="6" class="empty">Sin cuotas liquidadas.</td></tr>'}</tbody></table></div>`,()=>{},'Cerrar',true)}
 
 /* ================= 3 · FACTURACION ================= */
 const upBox=(kind,title,body)=>{const cur=kind==='fact'?UI.upFact:UI.upNafta;return `<div class="card" style="margin:0"><div class="cb">
