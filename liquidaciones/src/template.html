@@ -669,34 +669,49 @@ function vFact(){
   const rukas=rows.filter(r=>!r.manual),ajustes=rows.filter(r=>r.manual);
   return `<div class="grid2" style="margin-bottom:16px">${upBox('fact','Subir sábana de facturación','.xlsx / .csv · columnas <code>Empresa</code> <code># Transporte</code> <code>Importe</code> (sin fecha). Acumulable: si una empresa ya tiene facturación en el período, se avisa que se sobrescribe. Los <b>adicionales y ajustes</b> manuales se conservan.')}
    <div class="card" style="margin:0"><div class="ch"><h3>Historial de subidas</h3><span class="mut small">${hist.length}</span></div><div style="max-height:150px;overflow:auto" class="cb">${hist.length?hist.map(x=>`<div class="small" style="margin-bottom:6px">• <b>${pLabel(x.p)}</b> · ${esc(x.archivo)} · ${x.fecha} · ${esc(x.usuario||'')} · ${esc(x.res)}</div>`).join(''):'<div class="small mut">Todavía no hay subidas desde el módulo (la historia ene–1ra oct viene del Excel).</div>'}</div></div></div>
-  <div class="toolbar"><span class="mut small">Período</span><select data-a="factP" data-ch="1">${PERIODS.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${(S.fact[x]||[]).length?' • '+(S.fact[x]||[]).length+' líneas':''}</option>`).join('')}</select><div class="sp"></div><button class="btn" data-a="export">⤓ Excel</button><button class="btn primary" data-a="newFactAjuste" ${p<B.PEND?'disabled':''}>+ Adicional / ajuste</button></div>
+  <div class="toolbar"><span class="mut small">Período</span><select data-a="factP" data-ch="1">${PERIODS.map(x=>`<option value="${x}" ${x===p?'selected':''}>${pLabel(x)}${(S.fact[x]||[]).length?' • '+(S.fact[x]||[]).length+' líneas':''}</option>`).join('')}</select><div class="sp"></div><button class="btn" data-a="export">⤓ Excel</button><button class="btn primary" data-a="newFactAjuste">+ Adicional / ajuste</button></div>
   <div class="tw"><table><thead><tr><th>Empresa de transporte</th><th>Tipo</th><th>Concepto / archivo</th><th class="n">Viajes</th><th class="n">Horas</th><th class="n">Importe</th><th>Estado</th><th></th></tr></thead><tbody>
   ${rows.map(r=>`<tr><td class="name">${esc(r.empresa)}${r.abm?'':' <span class="chip w">no está en ABM</span>'}</td><td>${r.manual?'<span class="chip b">Adicional / ajuste</span>':'<span class="chip">Rukas</span>'}</td><td>${r.manual?esc(r.concepto||'—'):`<span class="mut small">${esc(r.archivo||'')}<div class="subt">${esc(r.cargado||'')}</div></span>`}</td><td class="n">${r.manual?'—':fn(r.viajes)}</td><td class="n">${r.manual?'—':(r.vh?fn(r.horas,1):'—')}</td><td class="n"><b>${fm(r.importe)}</b></td><td>${r.liq?'<span class="chip g">Liquidada</span>':'<span class="chip w">Pendiente</span>'}</td><td>${r.manual&&!r.liq?`<button class="lnk" data-a="editFactAjuste" data-id="${esc(r.id)}">Editar</button> · <button class="lnk r" data-a="delFactAjuste" data-id="${esc(r.id)}">Eliminar</button>`:''}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">Sin facturación ni adicionales para este período.</td></tr>'}
   </tbody><tfoot><tr><td>Total (${rows.length} · Rukas ${rukas.length} · ajustes ${ajustes.length})</td><td></td><td></td><td class="n">${fn(sum(rukas,'viajes'))}</td><td class="n">${fn(sum(rukas,'horas'),1)}</td><td class="n">${fm(sum(rows,'importe'))}</td><td></td><td></td></tr></tfoot></table></div>
   <p class="legend">Los <b>adicionales y ajustes</b> son líneas aparte (solo monto y concepto). No piden viajes/horas y <b>se conservan</b> si volvés a subir la sábana de Rukas.</p>`;
 }
 function factAjusteForm(row){
-  const p=UI.factP;if(p<B.PEND){toast('Período histórico: no se edita');return}
-  if(row&&closedRec(p,norm(row.empresa))){toast('Empresa ya liquidada en este período');return}
+  const fromP=UI.factP;
+  if(row&&fromP<B.PEND){toast('Período histórico: no se edita');return}
+  if(row&&closedRec(fromP,norm(row.empresa))){toast('Empresa ya liquidada en este período');return}
+  const p0=(fromP&&fromP>=B.PEND)?fromP:B.PEND;
   const d=row||{empresa:'',concepto:'',importe:''};
+  const perOptsAjuste=PERIODS.filter(x=>x>=B.PEND).map(x=>`<option value="${x}" ${x===p0?'selected':''}>${pLabel(x)}</option>`).join('');
   modal(row?'Editar adicional / ajuste':'Adicional / ajuste',
+    fld('Período en el que se carga',`<select name="per" required>${perOptsAjuste}</select><div class="hint">Quincena a la que imputa este adicional / ajuste.</div>`,1)+
     fld('Empresa de transporte',`<input type="text" name="empresa" list="dlE" required value="${esc(d.empresa)}" ${row?'disabled':''}>${dlE()}`,1)+
     fld('Concepto',`<input type="text" name="concepto" required value="${esc(d.concepto||'')}" placeholder="Ej.: ajuste por diferencia de liquidación">`,1)+
     fld('Monto $',`<input type="number" name="importe" step="0.01" required value="${d.importe!==''&&d.importe!=null?d.importe:''}">`),
     fd=>{
+      const p=String(fd.per||'');
+      if(!p||p<B.PEND)return 'Elegí el período en el que se está cargando el adicional.';
       const emp=canon(row?d.empresa:fd.empresa),concepto=String(fd.concepto||'').trim(),importe=+fd.importe;
       if(!emp)return 'Indicá la empresa.';
       if(!EI()[norm(emp)])return 'Solo se permiten empresas habilitadas o inhabilitadas del ABM (no inactivas).';
       if(!concepto)return 'Indicá el concepto.';
       if(!(importe>0||importe<0))return 'Indicá un monto distinto de 0.';
-      if(closedRec(p,norm(emp)))return 'Esa empresa ya está liquidada en este período.';
+      if(closedRec(p,norm(emp)))return 'Esa empresa ya está liquidada en ese período.';
       if(row){
-        const x=(S.fact[p]||[]).find(f=>f.id===row.id&&f.manual);if(!x)return 'No se encontró el ajuste.';
-        Object.assign(x,{concepto,importe,cargado:stamp()});
+        const x=(S.fact[fromP]||[]).find(f=>f.id===row.id&&f.manual);if(!x)return 'No se encontró el ajuste.';
+        if(p===fromP){
+          Object.assign(x,{concepto,importe,cargado:stamp()});
+          saveFact(p);
+        }else{
+          S.fact[fromP]=(S.fact[fromP]||[]).filter(f=>f.id!==row.id);
+          (S.fact[p]=S.fact[p]||[]).push({...x,concepto,importe,cargado:stamp()});
+          saveFact(fromP);saveFact(p);
+        }
       }else{
         (S.fact[p]=S.fact[p]||[]).push({id:uid('fa'),manual:true,empresa:emp,concepto,importe,viajes:0,archivo:'Adicionales y ajustes',cargado:stamp()});
+        saveFact(p);
       }
-      saveFact(p);toast(row?'Ajuste actualizado':'Adicional / ajuste cargado');
+      UI.factP=p;UI.upFact=p;
+      toast(row?'Ajuste actualizado':'Adicional / ajuste cargado');
     },'Guardar');
 }
 /* ================= 4 · NAFTA ================= */
