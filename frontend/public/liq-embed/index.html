@@ -782,13 +782,14 @@ function vPrest(){
   const s=norm(UI.search),hoy=today();
   let L=Object.values(S.prest).filter(l=>!l.deleted).map(l=>{const vh=vhEmp(norm(l.empresa),hoy),ac=loanAcum(l),saldo=Math.max(0,l.totalHs-ac),st=loanEstado(l);return {...l,vh,ac,saldo,fin:st==='Finalizado',st}});
   if(s)L=L.filter(x=>norm(x.empresa).includes(s)||norm(x.concepto).includes(s));
-  if(!UI.prestF)UI.prestF='Activo';
-  if(UI.prestF!=='all')L=L.filter(x=>x.st===UI.prestF);
+  if(!UI.prestF||UI.prestF==='Activo'||UI.prestF==='Refinanciado')UI.prestF='Activos';
+  const prestFiltro=(st,f)=>!f||f==='all'?true:f==='Activos'?st==='Activo'||st==='Refinanciado':st===f;
+  if(UI.prestF!=='all')L=L.filter(x=>prestFiltro(x.st,UI.prestF));
   L.sort((a,b)=>(a.st==='Finalizado')-(b.st==='Finalizado')||a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'}));
-  const act=Object.values(S.prest).filter(l=>!l.deleted&&loanEstado(l)==='Activo');
+  const act=Object.values(S.prest).filter(l=>{if(l.deleted)return false;const st=loanEstado(l);return st==='Activo'||st==='Refinanciado'});
   const pill=(k,l)=>`<button class="pill ${UI.prestF===k?'on':''}" data-a="prestF" data-k="${k}">${l}</button>`;
   return `<div class="kpis"><div class="kpi"><div class="l">Préstamos activos</div><div class="v">${act.length}</div></div><div class="kpi"><div class="l">Saldo total en horas</div><div class="v">${fn(sum(act,l=>l.totalHs-loanAcum(l)),1)} hs</div></div><div class="kpi"><div class="l">Saldo total a valor hora actual</div><div class="v">${fm(sum(act,l=>(l.totalHs-loanAcum(l))*vhEmp(norm(l.empresa),hoy)))}</div><div class="s">valor hora vigente al ${fD(hoy)}</div></div></div>
-  <div class="toolbar"><button class="btn primary" data-a="newLoan">+ Registrar préstamo</button>${pill('Activo','Activo')}${pill('Refinanciado','Refinanciado')}${pill('Finalizado','Finalizado')}${pill('all','Todos')}${searchBox('Buscar empresa o concepto...')}<div class="sp"></div><button class="btn" data-a="export">⤓ Excel</button></div>
+  <div class="toolbar"><button class="btn primary" data-a="newLoan">+ Registrar préstamo</button>${pill('Activos','Activos')}${pill('Finalizado','Finalizado')}${pill('all','Todos')}${searchBox('Buscar empresa o concepto...')}<div class="sp"></div><button class="btn" data-a="export">⤓ Excel</button></div>
   <div class="tw"><table><thead><tr><th>Empresa de transporte</th><th>Concepto</th><th>Solicitud</th><th class="n">Horas solicitadas</th><th class="n">Equiv. $ a la solicitud</th><th class="n">Valor hora actual</th><th class="n">Cuota actual</th><th class="n">Acum. / total hs</th><th>Avance</th><th class="n">Saldo</th><th>Estado</th><th></th></tr></thead><tbody>
   ${L.map(x=>`<tr><td class="name">${esc(x.empresa)}</td><td>${esc(x.concepto)}</td><td>${fD(x.fecha)}<div class="subt">VH ${fm(x.vhSol)}</div></td><td class="n"><b>${fn(x.totalHs,1)} hs</b></td><td class="n">${fm(x.totalHs*x.vhSol)}</td><td class="n">${fm(x.vh)}</td>
    <td class="n">${fn(Math.min(x.cuotaHs,x.saldo),1)} hs<div class="subt">${fm(Math.min(x.cuotaHs,x.saldo)*x.vh)}</div></td><td class="n">${fn(x.ac,1)} / ${fn(x.totalHs,1)}</td><td><div class="bar"><i style="width:${Math.min(100,x.ac/(x.totalHs||1)*100)}%"></i></div><div class="subt">${fn(x.ac/(x.totalHs||1)*100,0)}%</div></td>
@@ -1362,7 +1363,7 @@ async function exportCurrent(arg){
   if(mod==='prest'){
     const hoy=today();
     let L=Object.values(S.prest).filter(l=>!l.deleted).map(l=>{const vh=vhEmp(norm(l.empresa),hoy),ac=loanAcum(l),saldo=Math.max(0,l.totalHs-ac),st=loanEstado(l);return {...l,vh,ac,saldo,st}});
-    if(UI.prestF&&UI.prestF!=='all')L=L.filter(x=>x.st===UI.prestF);
+    if(UI.prestF&&UI.prestF!=='all'){const f=UI.prestF==='Activo'||UI.prestF==='Refinanciado'?'Activos':UI.prestF;L=L.filter(x=>f==='Activos'?x.st==='Activo'||x.st==='Refinanciado':x.st===f)}
     const s=norm(UI.search);if(s)L=L.filter(x=>norm(x.empresa).includes(s)||norm(x.concepto).includes(s));
     L.sort((a,b)=>(a.st==='Finalizado')-(b.st==='Finalizado')||a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'}));
     const out=L.map(x=>({'Empresa':x.empresa,'Concepto':x.concepto,'Solicitud':x.fecha,'Horas solicitadas':Math.round(x.totalHs*10)/10,'Equiv $ solicitud':Math.round(x.totalHs*x.vhSol),'Valor hora actual':Math.round(x.vh),'Cuota hs':Math.round(Math.min(x.cuotaHs,x.saldo)*10)/10,'Acumulado hs':Math.round(x.ac*10)/10,'Saldo hs':Math.round(x.saldo*10)/10,'Saldo $':Math.round(x.saldo*x.vh),'Estado':x.st}));
