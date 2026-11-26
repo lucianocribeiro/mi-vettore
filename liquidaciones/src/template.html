@@ -686,6 +686,7 @@ function factAjusteForm(row){
     fd=>{
       const emp=canon(row?d.empresa:fd.empresa),concepto=String(fd.concepto||'').trim(),importe=+fd.importe;
       if(!emp)return 'Indicá la empresa.';
+      if(!EI()[norm(emp)])return 'Solo se permiten empresas habilitadas o inhabilitadas del ABM (no inactivas).';
       if(!concepto)return 'Indicá el concepto.';
       if(!(importe>0||importe<0))return 'Indicá un monto distinto de 0.';
       if(closedRec(p,norm(emp)))return 'Esa empresa ya está liquidada en este período.';
@@ -1065,19 +1066,25 @@ async function importFact(file){
   sh.rows.slice(h+1).forEach(r=>{const e=r[iE],imp=num(r[iI]);if(!e||!imp){vac++;return}const n=canon(e),k=norm(n);if(g[k]){rep++;g[k].viajes+=iV>=0?num(r[iV]):0;g[k].importe+=imp}else g[k]={empresa:n,viajes:iV>=0?num(r[iV]):0,importe:imp}});
   const recs=Object.values(g);if(!recs.length){toast(`${esc(file.name)}: sin filas válidas.`);return}
   const rukasOf=(p,emp)=>(S.fact[p]||[]).find(f=>!f.manual&&norm(f.empresa)===norm(emp));
-  const info=p=>{const bloq=recs.filter(r=>closedRec(p,norm(r.empresa))),ok=recs.filter(r=>!closedRec(p,norm(r.empresa))),ow=ok.filter(r=>!!rukasOf(p,r.empresa));
-    return {bloq,ok,ow,html:`${p<B.PEND?'<div class="alert err" style="margin-top:10px">Período histórico (Excel): no se puede cargar facturación.</div>':''}
+  const enAbm=r=>!!EI()[norm(r.empresa)];
+  const info=p=>{
+    const inact=recs.filter(r=>!enAbm(r));
+    const bloq=recs.filter(r=>enAbm(r)&&closedRec(p,norm(r.empresa)));
+    const ok=recs.filter(r=>enAbm(r)&&!closedRec(p,norm(r.empresa)));
+    const ow=ok.filter(r=>!!rukasOf(p,r.empresa));
+    return {bloq,ok,ow,inact,html:`${p<B.PEND?'<div class="alert err" style="margin-top:10px">Período histórico (Excel): no se puede cargar facturación.</div>':''}
      <div style="margin-top:10px">Se imputarán <b>${ok.length}</b> empresas por <b>${fm(sum(ok,'importe'))}</b> a la <b>${pLabel(p)}</b>. Los adicionales/ajustes manuales se conservan.</div>
      ${ow.length?`<div class="alert" style="margin-top:10px"><b>Atención: este registro ya fue procesado.</b> ${ow.length} empresa(s) ya tienen facturación Rukas en ${pLabel(p)}. Si confirmás, se <b>sobrescribe solo Rukas</b> (los adicionales/ajustes se mantienen):</div><div class="tw" style="max-height:220px"><table><thead><tr><th>Empresa</th><th class="n">Registro anterior</th><th class="n">Nuevo</th></tr></thead><tbody>${ow.map(r=>{const o=rukasOf(p,r.empresa);return `<tr><td>${esc(r.empresa)}</td><td class="n">${fn(o.viajes)} viajes · ${fm(o.importe)}<div class="subt">${esc(o.archivo)} · ${esc(o.cargado||'')}</div></td><td class="n">${fn(r.viajes)} viajes · ${fm(r.importe)}</td></tr>`}).join('')}</tbody></table></div><label style="display:flex;gap:8px;align-items:center;margin-top:10px;color:#fcd68a"><input type="checkbox" name="confOw"> Sí, confirmo que quiero sobrescribir los ${ow.length} registro(s) Rukas</label>`:''}
+     ${inact.length?`<div class="alert err" style="margin-top:10px">${inact.length} empresa(s) inactivas o fuera del ABM <b>no se importan</b>: ${inact.slice(0,8).map(r=>esc(r.empresa)).join(', ')}${inact.length>8?'…':''}</div>`:''}
      ${bloq.length?`<div class="alert err" style="margin-top:10px">${bloq.length} empresa(s) ya están liquidadas en ${pLabel(p)} y <b>no se importan</b>: ${bloq.slice(0,8).map(r=>esc(r.empresa)).join(', ')}${bloq.length>8?'…':''}</div>`:''}`}};
   const p0=UI.upFact;
   modal('Importar '+esc(file.name),`<div class="full"><div>Se leyeron <b>${recs.length}</b> empresas (${fn(sum(recs,'viajes'))} viajes · ${fm(sum(recs,'importe'))})${rep?` · ${rep} filas repetidas sumadas`:''}${vac?` · ${vac} filas vacías`:''}.</div>
    <div style="margin-top:12px"><label class="f">Período que se está cargando (podés corregirlo)</label>${perPick('per',p0)}</div><div id="ipv">${info(p0).html}</div></div>`,
    fd=>{const p=fd.per;if(p<B.PEND)return 'No se puede cargar en un período histórico.';
-     // Revalidar: nunca tocar empresas con liquidación cerrada.
-     const ok=recs.filter(r=>!closedRec(p,norm(r.empresa)));
+     // Revalidar: nunca tocar inactivas ni empresas con liquidación cerrada.
+     const ok=recs.filter(r=>enAbm(r)&&!closedRec(p,norm(r.empresa)));
      const ow=ok.filter(r=>!!rukasOf(p,r.empresa));
-     if(!ok.length)return 'No hay empresas para importar (las liquidadas no se sobrescriben).';
+     if(!ok.length)return 'No hay empresas para importar (inactivas / fuera ABM o ya liquidadas).';
      if(ow.length&&!fd.confOw)return `Hay ${ow.length} registro(s) ya procesado(s) en ${pLabel(p)}: tildá la confirmación para sobrescribirlos.`;
      const keys=new Set(ok.map(r=>norm(r.empresa))),st=stamp();
      // Conservar adicionales/ajustes manuales al sobrescribir Rukas. No tocar cerradas.

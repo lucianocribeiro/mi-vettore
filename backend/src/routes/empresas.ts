@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { MASTER_WRITE_ROLES, isInternalOpsRole } from "../lib/roles.js";
 import { sendFlotaExcel } from "../lib/flota-import.js";
 import { estadoEntidadFrom } from "../lib/estado-entidad.js";
+import { descuentosPendientesEmpresa } from "../lib/descuentos-pendientes-liq.js";
 import {
   cerrarInhabilitacionesDeEmpresa,
   datosInhabilitacionDe,
@@ -416,6 +417,19 @@ router.post("/:id/estado", ...write, async (req: AuthedRequest, res) => {
     const datos = datosInhabilitacionDe(req.body, req.user?.id);
     const programada =
       estado === "INHABILITADO" && esInhabilitacionFutura(datos.desde);
+
+    if (estado === "INACTIVO") {
+      const check = await descuentosPendientesEmpresa(actual.nombre);
+      if (!check.ok) {
+        const preview = check.detalle.slice(0, 3).join("; ");
+        const more =
+          check.detalle.length > 3 ? ` (+${check.detalle.length - 3} más)` : "";
+        res.status(400).json({
+          error: `No se puede inactivar: hay descuentos pendientes (${preview}${more}). Liquidá o cancelá adelantos/préstamos antes.`,
+        });
+        return;
+      }
+    }
 
     if (programada) {
       await prisma.$transaction(async (tx) => {
