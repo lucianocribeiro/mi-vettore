@@ -1348,7 +1348,7 @@ async function exportCurrent(arg){
   if(mod==='prest'){
     const hoy=today();
     let L=Object.values(S.prest).filter(l=>!l.deleted).map(l=>{const vh=vhEmp(norm(l.empresa),hoy),ac=loanAcum(l),saldo=Math.max(0,l.totalHs-ac),st=loanEstado(l);return {...l,vh,ac,saldo,st}});
-    if(UI.prestF&&UI.prestF!=='all')L=L.filter(x=>x.st===UI.prestF);
+    if(UI.prestF&&UI.prestF!=='all'){const f=UI.prestF==='Activo'||UI.prestF==='Refinanciado'?'Activos':UI.prestF;L=L.filter(x=>f==='Activos'?x.st==='Activo'||x.st==='Refinanciado':x.st===f)}
     const s=norm(UI.search);if(s)L=L.filter(x=>norm(x.empresa).includes(s)||norm(x.concepto).includes(s));
     L.sort((a,b)=>(a.st==='Finalizado')-(b.st==='Finalizado')||a.empresa.localeCompare(b.empresa,'es',{sensitivity:'base'}));
     const out=L.map(x=>({'Empresa':x.empresa,'Concepto':x.concepto,'Solicitud':x.fecha,'Horas solicitadas':Math.round(x.totalHs*10)/10,'Equiv $ solicitud':Math.round(x.totalHs*x.vhSol),'Valor hora actual':Math.round(x.vh),'Cuota hs':Math.round(Math.min(x.cuotaHs,x.saldo)*10)/10,'Acumulado hs':Math.round(x.ac*10)/10,'Saldo hs':Math.round(x.saldo*10)/10,'Saldo $':Math.round(x.saldo*x.vh),'Estado':x.st}));
