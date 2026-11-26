@@ -1345,7 +1345,7 @@ document.addEventListener('change',e=>{
     case 'paySel':el.checked?UI.paySel.add(el.dataset.k):UI.paySel.delete(el.dataset.k);break;
     case 'efIn':{const r=D.rec[el.dataset.k],raw=String(el.value||'').trim(),v=pm(raw);if(raw===''||!(v>=0)||v>r.saldo+0.5){UI.efDraft[el.dataset.k]=raw===''?-1:(Number.isFinite(v)?v:-1);toast(`El efectivo debe estar entre $ 0 y ${fm(r.saldo)}.`)}else UI.efDraft[el.dataset.k]=Math.round(v);break}
     case 'fpIn':UI.fpDraft[el.dataset.k]=el.value;break;
-    case 'payFecha':UI.payFecha=el.value;break;
+    case 'payFecha':{UI.payFecha=el.value;const f=el.value||today();Object.keys(D.rec||{}).forEach(k=>{const r=D.rec[k];if(r&&!r.pagado&&r.modo!=='historico')UI.fpDraft[k]=f});break}
     case 'upP':if(el.dataset.k==='fact'){UI.upFact=el.value;UI.factP=el.value}else{UI.upNafta=el.value;UI.naftaP=el.value}break;
     case 'hsL':ov.hs[el.dataset.id]=Math.max(0,+el.value||0);break;
     case 'vhRef':UI.vhRef=el.value;break;
