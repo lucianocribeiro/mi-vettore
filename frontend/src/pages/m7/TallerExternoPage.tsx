@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
+import { MoneyInput } from "../../components/MoneyInput";
 import { Download, Plus, X } from "../../components/icons";
 import { apiDownload, apiFetch, ApiError } from "../../lib/api";
 import { currentAsignacion, isInternalOps, type Camioneta } from "../../types";
@@ -584,14 +585,11 @@ function NuevaSolicitudExternaForm({
 
         <label className="text-xs text-[var(--vl-text-muted)]">
           Importe $ <span className="font-normal">(opcional)</span>
-          <input
-            type="number"
+          <MoneyInput
             min={0}
-            step="0.01"
-            inputMode="decimal"
             className={inputCls}
-            value={importe}
-            onChange={(e) => setImporte(e.target.value)}
+            value={importe.trim() === "" ? null : Number(importe)}
+            onChange={(n) => setImporte(n == null ? "" : String(n))}
             placeholder="Dejá vacío si no aplica"
           />
         </label>

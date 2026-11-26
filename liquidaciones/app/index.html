@@ -251,6 +251,13 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const fm=n=>{n=Math.round(+n||0);return (n<0?'-$ ':'$ ')+Math.abs(n).toLocaleString('es-AR')};
 const fmz=n=>Math.round(+n||0)===0?'<span class="zero">—</span>':fm(n);
 const fn=(n,d=0)=>(+n||0).toLocaleString('es-AR',{maximumFractionDigits:d});
+/** Parse monto tipado es-AR (miles `.`, decimales `,`). */
+const pm=s=>{let t=String(s??'').trim();if(!t||t==='-'||t===','||t==='.')return NaN;const neg=t.startsWith('-');if(neg)t=t.slice(1).trim();t=t.replace(/\s/g,'');if(t.includes(',')&&t.includes('.'))t=t.replace(/\./g,'').replace(',','.');else if(t.includes(','))t=t.replace(/\./g,'').replace(',','.');else if((t.match(/\./g)||[]).length>1)t=t.replace(/\./g,'');else if(/^\d{1,3}(\.\d{3})+$/.test(t))t=t.replace(/\./g,'');const n=Number(t);return Number.isFinite(n)?(neg?-n:n):NaN};
+/** Valor numérico para mostrar en input money (sin $). */
+const fmi=n=>{if(n==null||n===''||!Number.isFinite(+n))return '';return (+n).toLocaleString('es-AR',{maximumFractionDigits:2,minimumFractionDigits:0})};
+/** Reformatea mientras se tipea (separador de miles). */
+const fmtMoneyTyping=raw=>{const neg=/^\s*-/.test(String(raw));let s=String(raw).replace(/[^\d.,]/g,'');let intPart='',decPart=null,trailingComma=false;if(s.includes(',')){const i=s.lastIndexOf(',');intPart=s.slice(0,i).replace(/\D/g,'');const rest=s.slice(i+1).replace(/\D/g,'');trailingComma=rest.length===0&&s.endsWith(',');decPart=rest.slice(0,2)}else if(s.includes('.')){const parts=s.split('.');const allDigits=s.replace(/\D/g,'');const last=parts[parts.length-1]||'';const looksDecimal=parts.length===2&&last.length>0&&last.length<=2&&(parts[0]||'').replace(/\D/g,'').length<=3&&!/^\d{1,3}(\.\d{3})+$/.test(s);if(looksDecimal){intPart=(parts[0]||'').replace(/\D/g,'');decPart=last.replace(/\D/g,'').slice(0,2)}else intPart=allDigits}else intPart=s.replace(/\D/g,'');let out=intPart.replace(/\B(?=(\d{3})+(?!\d))/g,'.');if(decPart!=null)out+=','+decPart;else if(trailingComma)out+=',';if(neg&&(out||trailingComma))out='-'+out;return out};
+const isMoneyInput=el=>el&&el.tagName==='INPUT'&&(el.classList.contains('money')||el.name==='importe'||el.name==='valor'||el.name==='vnew'||/^v\d+$/.test(el.name||''));
 const pad=n=>String(n).padStart(2,'0');
 const isoD=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const today=()=>isoD(new Date());
@@ -715,7 +722,7 @@ function adelForm(a){
    fld('Empresa de transporte',`<input type="text" name="empresa" list="dlE" required value="${esc(d.empresa)}" autocomplete="off" ${locked.length?'disabled':''}>${dlE()}`)+
    fld('Patente (opcional)',`<select name="patente" id="patSel"></select><div class="hint">Solo patentes habilitadas para la empresa.</div>`)+
    fld('Descripción',`<input type="text" name="desc" value="${esc(d.desc)}" placeholder="Ej.: EF 09/1 · Ref. 1206 VTV">`,1)+
-   fld('Monto $',`<input type="number" name="importe" step="0.01" min="0.01" required value="${d.importe}" ${locked.length?'disabled':''}>`)+
+   fld('Monto $',`<input class="money" type="text" inputmode="decimal" name="importe" required value="${fmi(d.importe)}" ${locked.length?'disabled':''}>`)+
    fld(locked.length?'Cuotas pendientes (sobre el saldo)':'Cantidad de cuotas',`<input type="number" name="ncuotas" min="1" max="36" step="1" value="${plan.length}">`)+
    `<div class="full"><label class="f">Plan de cuotas</label><div id="plan"></div><div class="hint" id="planMsg"></div><div class="hint">Si cambiás el período de una cuota, las siguientes se corren automáticamente. No se puede debitar antes que la anterior ni más de 1 quincena atrás de la fecha de carga.</div></div>`,
    fd=>{const e=EI()[norm(a?a.empresa:fd.empresa)];if(!e)return 'Solo se permiten empresas habilitadas o inhabilitadas del ABM (no inactivas).';
@@ -729,13 +736,14 @@ function adelForm(a){
        if(plan[i].p<mn)return `La cuota ${locked.length+i+1} no puede debitarse antes de ${pLabel(mn)}${i?'':' (máx. 1 quincena atrás de la fecha de carga)'}.`;
      }
      if(Math.abs(sum(plan,'v')-rs)>0.5)return `Las cuotas pendientes suman ${fm(sum(plan,'v'))} y deben sumar ${fm(rs)}.`;
+     const importe=pm(fd.importe);if(!(importe>0)&&!locked.length)return 'Monto inválido.';
      const cuotas=locked.map(c=>({...c}));const nB=Math.max(0,...locked.map(c=>+c.n||0));plan.forEach((c,i)=>cuotas.push({n:nB+i+1,periodo:c.p,importe:Math.round(c.v*100)/100}));
-     if(a){Object.assign(a,{tipo:fd.tipo,desc:fd.desc.trim(),patente:pat,cuotas});if(!locked.length)Object.assign(a,{fecha:fd.fecha,empresa:e.nombre,importe:+fd.importe});saveAdel(a)}
-     else{const x={id:uid('n'),fecha:fd.fecha,empresa:e.nombre,tipo:fd.tipo,desc:fd.desc.trim(),patente:pat,importe:+fd.importe,cuotas};S.adel[x.id]=x;saveAdel(x)}
+     if(a){Object.assign(a,{tipo:fd.tipo,desc:fd.desc.trim(),patente:pat,cuotas});if(!locked.length)Object.assign(a,{fecha:fd.fecha,empresa:e.nombre,importe});saveAdel(a)}
+     else{const x={id:uid('n'),fecha:fd.fecha,empresa:e.nombre,tipo:fd.tipo,desc:fd.desc.trim(),patente:pat,importe,cuotas};S.adel[x.id]=x;saveAdel(x)}
      rebuild();toast(a?'Adelanto actualizado':'Adelanto registrado');
    },'Guardar',true);
   const F=$liq('mform');
-  const rest=()=>(locked.length?+a.importe:(+F.importe.value||0))-lockedSum;
+  const rest=()=>(locked.length?+a.importe:(pm(F.importe.value)||0))-lockedSum;
   const resplit=()=>{const n=plan.length,r=rest(),b=Math.floor(r/n*100)/100;plan.forEach((c,i)=>c.v=i===n-1?Math.round((r-b*(n-1))*100)/100:b)};
   const refreshMin=()=>{minP=floorFromFecha(locked.length?a.fecha:F.fecha.value);const lbl=$liq('adelMinLbl');if(lbl)lbl.textContent=pLabel(minP);clampPlan()};
   const pats=()=>{const emp=a&&locked.length?a.empresa:F.empresa.value,f=a&&locked.length?a.fecha:F.fecha.value,L=patsOf(emp,f),cur=F.patente.value||d.patente||'';
@@ -743,8 +751,8 @@ function adelForm(a){
   const msg=()=>{const s=sum(plan,'v'),r=rest();(($liq('planMsg')||{})).innerHTML=Math.abs(s-r)>0.5?`<span class="ded">Las cuotas pendientes suman ${fm(s)} y deben sumar ${fm(r)}</span>`:`Cuotas pendientes: ${fm(s)} ✓ · mínimo debitable ${pLabel(minP)}`};
   const draw=()=>{refreshMin();const tot=locked.length+plan.length;
     $liq('plan').innerHTML=`<table class="plan"><thead><tr><th>Cuota</th><th>Período a debitar</th><th class="n">Importe</th><th>Estado</th></tr></thead><tbody>
-    ${locked.map(c=>`<tr style="opacity:.45"><td>${c.n} de ${tot}</td><td><select disabled><option>${pLabel(c.periodo)}</option></select></td><td class="n"><input class="money" disabled value="${c.importe}"></td><td><span class="chip g">Debitada ${pLabel(cuotaState(a,c))}</span></td></tr>`).join('')}
-    ${plan.map((c,i)=>{const mn=i?pNext(plan[i-1].p):minP;return `<tr><td>${locked.length+i+1} de ${tot}</td><td><select data-ci="${i}">${PERIODS.filter(p=>p>=mn).map(p=>`<option value="${p}" ${p===c.p?'selected':''}>${pLabel(p)}</option>`).join('')}</select></td><td class="n"><input class="money" type="number" step="0.01" min="0.01" data-vi="${i}" value="${c.v}"></td><td><span class="chip w">Pendiente</span></td></tr>`}).join('')}</tbody></table>`;msg()};
+    ${locked.map(c=>`<tr style="opacity:.45"><td>${c.n} de ${tot}</td><td><select disabled><option>${pLabel(c.periodo)}</option></select></td><td class="n"><input class="money" type="text" disabled value="${fmi(c.importe)}"></td><td><span class="chip g">Debitada ${pLabel(cuotaState(a,c))}</span></td></tr>`).join('')}
+    ${plan.map((c,i)=>{const mn=i?pNext(plan[i-1].p):minP;return `<tr><td>${locked.length+i+1} de ${tot}</td><td><select data-ci="${i}">${PERIODS.filter(p=>p>=mn).map(p=>`<option value="${p}" ${p===c.p?'selected':''}>${pLabel(p)}</option>`).join('')}</select></td><td class="n"><input class="money" type="text" inputmode="decimal" data-vi="${i}" value="${fmi(c.v)}"></td><td><span class="chip w">Pendiente</span></td></tr>`}).join('')}</tbody></table>`;msg()};
   pats();draw();
   F.addEventListener('change',e=>{const t=e.target;
     if(t.dataset.ci!=null){const i=+t.dataset.ci;plan[i].p=t.value;for(let j=i+1;j<plan.length;j++)plan[j].p=pNext(plan[i].p,j-i);draw()}
@@ -752,7 +760,7 @@ function adelForm(a){
     if(t.name==='empresa'||t.name==='fecha')pats();
     if(t.name==='fecha'&&!locked.length&&plan.length){refreshMin();const p0=perOf(t.value)<minP?minP:perOf(t.value);plan.forEach((c,j)=>c.p=pNext(p0,j));draw()}
     if(t.dataset.tipo)F.tipoNuevo.style.display=t.value==='__new'?'block':'none'});
-  F.addEventListener('input',e=>{const t=e.target;if(t.dataset.vi!=null){plan[+t.dataset.vi].v=+t.value||0;msg()}if(t.name==='importe'){resplit();draw()}if(t.name==='empresa')pats()});
+  F.addEventListener('input',e=>{const t=e.target;if(t.dataset.vi!=null){plan[+t.dataset.vi].v=pm(t.value)||0;msg()}if(t.name==='importe'){resplit();draw()}if(t.name==='empresa')pats()});
 }
 function tiposForm(){const L=S.tipos.map(t=>({...t,n:Object.values(S.adel).filter(a=>!a.deleted&&a.tipo===t.nombre).length}));
   modal('Tipos de adelanto',`<div class="full"><div class="hint" style="margin-bottom:8px">Renombrar un tipo actualiza los adelantos que lo usan. Un tipo desactivado deja de ofrecerse en altas nuevas pero se conserva en los registros.</div><table><thead><tr><th>Nombre</th><th class="n">Adelantos</th><th>Activo</th></tr></thead><tbody>${L.map((t,i)=>`<tr><td><input type="text" name="t${i}" value="${esc(t.nombre)}" style="width:100%"></td><td class="n">${t.n}</td><td><input type="checkbox" name="a${i}" ${t.activo?'checked':''}></td></tr>`).join('')}<tr><td><input type="text" name="tnew" placeholder="+ Nuevo tipo" style="width:100%"></td><td></td><td></td></tr></tbody></table></div>`,
@@ -856,11 +864,11 @@ function factAjusteForm(row){
     fld('Período en el que se carga',`<select name="per" required>${perOptsAjuste}</select><div class="hint">Quincena a la que imputa este adicional / ajuste.</div>`,1)+
     fld('Empresa de transporte',`<input type="text" name="empresa" list="dlE" required value="${esc(d.empresa)}" ${row?'disabled':''}>${dlE()}`,1)+
     fld('Concepto',`<input type="text" name="concepto" required value="${esc(d.concepto||'')}" placeholder="Ej.: ajuste por diferencia de liquidación">`,1)+
-    fld('Monto $',`<input type="number" name="importe" step="0.01" required value="${d.importe!==''&&d.importe!=null?d.importe:''}">`),
+    fld('Monto $',`<input class="money" type="text" inputmode="decimal" name="importe" required value="${d.importe!==''&&d.importe!=null?fmi(d.importe):''}">`),
     fd=>{
       const p=String(fd.per||'');
       if(!p||p<B.PEND)return 'Elegí el período en el que se está cargando el adicional.';
-      const emp=canon(row?d.empresa:fd.empresa),concepto=String(fd.concepto||'').trim(),importe=+fd.importe;
+      const emp=canon(row?d.empresa:fd.empresa),concepto=String(fd.concepto||'').trim(),importe=pm(fd.importe);
       if(!emp)return 'Indicá la empresa.';
       if(!EI()[norm(emp)])return 'Solo se permiten empresas habilitadas o inhabilitadas del ABM (no inactivas).';
       if(!concepto)return 'Indicá el concepto.';
@@ -1020,7 +1028,7 @@ function vPago(){
   ${L.map(r=>{const k=key(r),e=EI()[r.k]||{};if(r.pagado)return `<tr class="closed"><td></td><td>${pLabel(r.periodo)}</td><td class="name">${esc(r.empresa)}</td><td>${esc(e.tipoTransferencia||'—')}</td><td class="n"><b>${fm(r.saldo)}</b></td><td class="n">${fm(r.ef)}</td><td class="n">${fm(r.tr)}</td><td>${fD(r.fechaPago)}</td><td><span class="chip g">Pagada</span></td><td><button class="lnk r" data-a="payUndo" data-k="${esc(k)}">Anular pago</button></td></tr>`;
     const ef=efv(r),bad=!(ef>=0&&ef<=r.saldo+0.5);
     return `<tr class="${UI.paySel.has(k)?'sel':''}"><td><input type="checkbox" ${UI.paySel.has(k)?'checked':''} data-a="paySel" data-k="${esc(k)}" data-ch="1"></td><td>${pLabel(r.periodo)}</td><td class="name"><a class="lnk" style="color:#fff;font-weight:600;font-size:13px" data-a="open" data-k="${esc(r.k)}" data-p="${r.periodo}">${esc(r.empresa)}</a></td><td>${esc(e.tipoTransferencia||'—')}</td><td class="n"><b>${fm(r.saldo)}</b></td>
-     <td class="n"><input class="money ${bad?'bad':''}" type="number" min="0" max="${Math.round(r.saldo)}" step="1000" value="${ef}" data-a="efIn" data-k="${esc(k)}" data-ch="1"><div class="subt"><button class="lnk" data-a="efAll" data-k="${esc(k)}">todo</button> · <button class="lnk" data-a="efNone" data-k="${esc(k)}">nada</button></div></td>
+     <td class="n"><input class="money ${bad?'bad':''}" type="text" inputmode="decimal" value="${fmi(ef)}" data-a="efIn" data-k="${esc(k)}" data-ch="1"><div class="subt"><button class="lnk" data-a="efAll" data-k="${esc(k)}">todo</button> · <button class="lnk" data-a="efNone" data-k="${esc(k)}">nada</button></div></td>
      <td class="n">${bad?'<span class="neg">inválido</span>':fm(r.saldo-ef)}</td><td><input type="date" value="${UI.fpDraft[k]||today()}" data-a="fpIn" data-k="${esc(k)}" data-ch="1"></td><td><span class="chip w">Pendiente</span></td><td><button class="btn sm green" data-a="payOne" data-k="${esc(k)}" ${bad?'disabled':''}>Registrar pago</button></td></tr>`}).join('')||`<tr><td colspan="10" class="empty">${UI.payF==='pend'?'No hay liquidaciones cerradas pendientes de pago.':'Sin registros.'}</td></tr>`}
   </tbody></table></div>
   <p class="legend">Acá aparecen las liquidaciones <b>cerradas</b> con saldo a pagar. Ingresá el monto que se abona en <b>efectivo</b> (entre $0 y el saldo); la <b>transferencia</b> es la diferencia, así siempre se cancela el total. Por defecto se propone $0 en efectivo (100% transferencia). Las liquidaciones históricas del Excel ya figuran pagadas y se consultan en el Panel de control.</p>`;
@@ -1128,10 +1136,10 @@ function vVH(){
 }
 function newCuadroForm(){const f=UI.vhRef||today(),cur=cuadroVig(f);
   modal('Nueva vigencia del cuadro tarifario',`<div class="full"><label class="f">Vigencia desde</label><input type="date" name="desde" required><div class="hint">Valores sugeridos del cuadro vigente al ${fD(f)}. Solo se crean registros para las divisiones que cambies.</div></div>
-   <div class="full"><table><thead><tr><th>División</th><th class="n">Actual</th><th class="n">Nuevo</th></tr></thead><tbody>${cur.map((x,i)=>`<tr><td>${esc(x.d)}</td><td class="n">${x.v?fm(x.v.valor):'—'}</td><td class="n"><input class="money" type="number" step="0.01" min="0" name="v${i}" value="${x.v?x.v.valor:''}"></td></tr>`).join('')}<tr><td><input type="text" name="dnew" placeholder="Nueva división (opcional)" style="width:100%"></td><td></td><td class="n"><input class="money" type="number" name="vnew"></td></tr></tbody></table></div>`,
-   fd=>{if(!fd.desde)return 'Indicá la fecha.';let n=0;cur.forEach((x,i)=>{const nv=+fd['v'+i];if(!nv||(x.v&&+x.v.valor===nv))return;addValor(x.d,nv,fd.desde);n++});if(fd.dnew&&+fd.vnew){addValor(fd.dnew.trim(),+fd.vnew,fd.desde);n++}if(!n)return 'No cambiaste ningún valor.';saveCfg('valores');UI.vhRef=fd.desde;toast(n+' división(es) actualizada(s)')},'Guardar vigencia',true)}
+   <div class="full"><table><thead><tr><th>División</th><th class="n">Actual</th><th class="n">Nuevo</th></tr></thead><tbody>${cur.map((x,i)=>`<tr><td>${esc(x.d)}</td><td class="n">${x.v?fm(x.v.valor):'—'}</td><td class="n"><input class="money" type="text" inputmode="decimal" name="v${i}" value="${x.v?fmi(x.v.valor):''}"></td></tr>`).join('')}<tr><td><input type="text" name="dnew" placeholder="Nueva división (opcional)" style="width:100%"></td><td></td><td class="n"><input class="money" type="text" inputmode="decimal" name="vnew"></td></tr></tbody></table></div>`,
+   fd=>{if(!fd.desde)return 'Indicá la fecha.';let n=0;cur.forEach((x,i)=>{const nv=pm(fd['v'+i]);if(!nv||(x.v&&+x.v.valor===nv))return;addValor(x.d,nv,fd.desde);n++});const vnew=pm(fd.vnew);if(fd.dnew&&vnew>0){addValor(fd.dnew.trim(),vnew,fd.desde);n++}if(!n)return 'No cambiaste ningún valor.';saveCfg('valores');UI.vhRef=fd.desde;toast(n+' división(es) actualizada(s)')},'Guardar vigencia',true)}
 function addValor(d,v,desde){S.valores.filter(x=>x.division===d&&(!x.hasta||x.hasta>=desde)&&(x.desde||'')<desde).forEach(x=>x.hasta=dayBefore(desde));S.valores.push({id:uid('v'),division:d,valor:v,desde,hasta:null})}
-function vhForm(v){modal('Editar valor hora',fld('División',`<input type="text" name="division" required value="${esc(v.division)}">`,1)+fld('Valor $',`<input type="number" name="valor" step="0.01" required value="${v.valor}">`)+fld('Desde',`<input type="date" name="desde" required value="${v.desde||''}">`)+fld('Hasta',`<input type="date" name="hasta" value="${v.hasta||''}">`),fd=>{Object.assign(v,{division:fd.division.trim(),valor:+fd.valor,desde:fd.desde,hasta:fd.hasta||null});saveCfg('valores')})}
+function vhForm(v){modal('Editar valor hora',fld('División',`<input type="text" name="division" required value="${esc(v.division)}">`,1)+fld('Valor $',`<input class="money" type="text" inputmode="decimal" name="valor" required value="${fmi(v.valor)}">`)+fld('Desde',`<input type="date" name="desde" required value="${v.desde||''}">`)+fld('Hasta',`<input type="date" name="hasta" value="${v.hasta||''}">`),fd=>{const valor=pm(fd.valor);if(!(valor>0))return 'Valor inválido.';Object.assign(v,{division:fd.division.trim(),valor,desde:fd.desde,hasta:fd.hasta||null});saveCfg('valores')})}
 
 /* ================= MODAL / TOAST ================= */
 /** Modal en el document padre (Mi Vettore): el iframe es alto y scrollea afuera;
@@ -1482,7 +1490,7 @@ document.addEventListener('change',e=>{
     case 'naftaP':UI.naftaP=el.value;break;
     case 'payP':UI.payP=el.value;break;
     case 'paySel':el.checked?UI.paySel.add(el.dataset.k):UI.paySel.delete(el.dataset.k);break;
-    case 'efIn':{const r=D.rec[el.dataset.k],v=+el.value;if(el.value===''||v<0||v>r.saldo+0.5){UI.efDraft[el.dataset.k]=el.value===''?-1:v;toast(`El efectivo debe estar entre $ 0 y ${fm(r.saldo)}.`)}else UI.efDraft[el.dataset.k]=Math.round(v);break}
+    case 'efIn':{const r=D.rec[el.dataset.k],raw=String(el.value||'').trim(),v=pm(raw);if(raw===''||!(v>=0)||v>r.saldo+0.5){UI.efDraft[el.dataset.k]=raw===''?-1:(Number.isFinite(v)?v:-1);toast(`El efectivo debe estar entre $ 0 y ${fm(r.saldo)}.`)}else UI.efDraft[el.dataset.k]=Math.round(v);break}
     case 'fpIn':UI.fpDraft[el.dataset.k]=el.value;break;
     case 'payFecha':UI.payFecha=el.value;break;
     case 'upP':if(el.dataset.k==='fact'){UI.upFact=el.value;UI.factP=el.value}else{UI.upNafta=el.value;UI.naftaP=el.value}break;
@@ -1494,7 +1502,14 @@ document.addEventListener('change',e=>{
   }
   rebuild();render();
 });
-document.addEventListener('input',e=>{const el=e.target.closest('[data-in]');if(!el)return;UI.search=el.value;const pos=el.selectionStart;render();const n=document.querySelector('[data-a="search"]');if(n){n.focus();n.setSelectionRange(pos,pos)}});
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(isMoneyInput(t)&&!t.disabled&&!t.readOnly){
+    const next=fmtMoneyTyping(t.value);
+    if(next!==t.value){const end=t.selectionEnd||next.length;t.value=next;try{t.setSelectionRange(end,end)}catch(_){}}
+  }
+  const el=t.closest&&t.closest('[data-in]');if(!el)return;UI.search=el.value;const pos=el.selectionStart;render();const n=document.querySelector('[data-a="search"]');if(n){n.focus();n.setSelectionRange(pos,pos)}
+});
 document.getElementById('fileIn').addEventListener('change',async e=>{await handleFiles(e.target.files);rebuild();render()});
 document.addEventListener('dragover',e=>{const d=e.target.closest('.drop');if(d){e.preventDefault();d.classList.add('hov')}});
 document.addEventListener('dragleave',e=>{const d=e.target.closest('.drop');if(d)d.classList.remove('hov')});

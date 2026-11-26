@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
+import { MoneyInput } from "../../components/MoneyInput";
 import { apiFetch, ApiError } from "../../lib/api";
+import { parseMoneyEs } from "../../lib/money-format";
 import {
   TIPO_TALLER_CHIP,
   TIPO_TALLER_LABEL,
@@ -57,8 +59,8 @@ function nuevaPagoLinea(
 
 function parseMontoLinea(raw: string): number {
   if (raw.trim() === "") return 0;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : 0;
+  const n = parseMoneyEs(raw);
+  return n != null && n > 0 ? n : 0;
 }
 
 function roundMoney(n: number) {
@@ -1177,14 +1179,17 @@ export function TalleresProveedoresPanel({
             </div>
             <label className="mb-3 block text-xs">
               Monto a pagar
-              <input
-                type="number"
+              <MoneyInput
                 min={0}
-                max={pagoModal.totalAdeudado}
-                step="0.01"
                 className={input}
-                value={pagoMonto}
-                onChange={(e) => cambiarMontoPago(e.target.value)}
+                value={
+                  pagoMonto.trim() === ""
+                    ? null
+                    : parseMoneyEs(pagoMonto) ?? Number(pagoMonto)
+                }
+                onChange={(n) =>
+                  cambiarMontoPago(n == null ? "" : String(n))
+                }
               />
               {pagoExcede ? (
                 <span className="mt-1 block text-[11px] text-red-600">
@@ -1251,14 +1256,19 @@ export function TalleresProveedoresPanel({
                   </label>
                   <label className="mt-2 block text-xs">
                     Monto
-                    <input
-                      type="number"
+                    <MoneyInput
                       min={0}
-                      step="0.01"
                       className={input}
-                      value={linea.monto}
-                      onChange={(e) =>
-                        updatePagoLinea(linea.key, { monto: e.target.value })
+                      placeholder="0"
+                      value={
+                        linea.monto.trim() === ""
+                          ? null
+                          : parseMoneyEs(linea.monto) ?? Number(linea.monto)
+                      }
+                      onChange={(n) =>
+                        updatePagoLinea(linea.key, {
+                          monto: n == null ? "" : String(n),
+                        })
                       }
                       onBlur={() => cerrarRestoDesde(linea.key)}
                       onKeyDown={(e) => {
@@ -1267,7 +1277,6 @@ export function TalleresProveedoresPanel({
                           cerrarRestoDesde(linea.key);
                         }
                       }}
-                      placeholder="0"
                     />
                   </label>
                   <label className="mt-2 block text-xs">

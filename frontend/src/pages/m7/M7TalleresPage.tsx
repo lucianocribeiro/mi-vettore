@@ -8,6 +8,7 @@ import {
   Plus,
   X,
 } from "../../components/icons";
+import { MoneyInput } from "../../components/MoneyInput";
 import { apiFetch, apiDownload, ApiError } from "../../lib/api";
 import {
   isInternalOps,
@@ -2658,12 +2659,12 @@ function AjusteImportesChecklist({
                 value={adicDesc}
                 onChange={(e) => setAdicDesc(e.target.value)}
               />
-              <input
+              <MoneyInput
                 className="w-full min-h-11 rounded-md border p-2 text-base font-medium"
                 placeholder="Importe $"
-                type="number"
-                value={adicImp}
-                onChange={(e) => setAdicImp(e.target.value)}
+                min={0}
+                value={adicImp.trim() === "" ? null : Number(adicImp)}
+                onChange={(n) => setAdicImp(n == null ? "" : String(n))}
               />
               <div className="flex gap-2">
                 <button
@@ -2745,21 +2746,20 @@ function AjusteImportesChecklist({
                             : i.importe
                         )}</span>
                       ) : (
-                        <input
-                          type="number"
+                        <MoneyInput
                           min={0}
-                          step="0.01"
                           className="min-h-11 w-32 rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-right text-base font-medium"
                           value={
                             importeDrafts[i.id] !== undefined
-                              ? String(importeDrafts[i.id])
-                              : String(i.importe)
+                              ? Number.isFinite(importeDrafts[i.id])
+                                ? importeDrafts[i.id]
+                                : null
+                              : i.importe
                           }
-                          onChange={(e) => {
-                            const n = Number(e.target.value);
+                          onChange={(n) => {
                             setImporteDraft((prev) => ({
                               ...prev,
-                              [i.id]: e.target.value === "" ? NaN : n,
+                              [i.id]: n == null ? NaN : n,
                             }));
                           }}
                         />
@@ -2795,21 +2795,20 @@ function AjusteImportesChecklist({
                   readOnly ? (
                     <span className="font-medium">{money(i.importe)}</span>
                   ) : (
-                    <input
-                      type="number"
+                    <MoneyInput
                       min={0}
-                      step="0.01"
                       className="min-h-11 w-32 rounded border border-[var(--vl-card-border)] bg-[var(--vl-page)] px-2 py-1.5 text-right text-base font-medium"
                       value={
                         importeDrafts[i.id] !== undefined
-                          ? String(importeDrafts[i.id])
-                          : String(i.importe)
+                          ? Number.isFinite(importeDrafts[i.id])
+                            ? importeDrafts[i.id]
+                            : null
+                          : i.importe
                       }
-                      onChange={(e) => {
-                        const n = Number(e.target.value);
+                      onChange={(n) => {
                         setImporteDraft((prev) => ({
                           ...prev,
-                          [i.id]: e.target.value === "" ? NaN : n,
+                          [i.id]: n == null ? NaN : n,
                         }));
                       }}
                     />
@@ -3067,7 +3066,7 @@ function ItemsEditor({
           {talleres.map((t) => <option key={t.id} value={t.id}>{t.razonSocial}</option>)}
         </select>
         <input className="rounded-md border p-2 text-sm" placeholder="Descripción" value={desc} onChange={(e) => setDesc(e.target.value)} />
-        <input className="min-h-11 rounded-md border p-2 text-base font-medium" placeholder="Importe $" type="number" value={imp} onChange={(e) => setImp(e.target.value)} />
+        <MoneyInput className="min-h-11 rounded-md border p-2 text-base font-medium" placeholder="Importe $" min={0} value={imp.trim() === "" ? null : Number(imp)} onChange={(n) => setImp(n == null ? "" : String(n))} />
         <label className="text-xs text-[var(--vl-text-muted)] sm:col-span-2">
           Fecha de reparación
           <input
