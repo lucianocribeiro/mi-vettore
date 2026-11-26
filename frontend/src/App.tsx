@@ -139,6 +139,16 @@ export default function App() {
               }
             />
             <Route
+              path="/m5/catalogos"
+              element={
+                <SugerenciasOnlyGate>
+                  <VettoreOpsGate>
+                    <LiquidacionesPage />
+                  </VettoreOpsGate>
+                </SugerenciasOnlyGate>
+              }
+            />
+            <Route
               path="/m6"
               element={
                 <SugerenciasOnlyGate>
@@ -215,6 +225,10 @@ export default function App() {
                   </VettoreOpsGate>
                 </SugerenciasOnlyGate>
               }
+            />
+            <Route
+              path="/liquidaciones/catalogos"
+              element={<Navigate to="/m5/catalogos" replace />}
             />
             <Route
               path="/liquidaciones/:etapa"

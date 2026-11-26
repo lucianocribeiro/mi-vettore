@@ -2951,7 +2951,7 @@ export function M5FichaPage() {
                     )}
                 </select>
                 <p className="mt-1 text-[11px] text-[var(--vl-text-muted)]">
-                  Listado editable en Liquidaciones → Catálogos. La empresa no
+                  Listado editable en Ficha integral → Catálogos. La empresa no
                   ve el nombre ni el valor de la división al entrar a la app.
                 </p>
               </Field>

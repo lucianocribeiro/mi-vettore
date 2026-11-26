@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 
 /** Slug de URL ↔ clave interna del prototipo (MODS). */
@@ -34,14 +34,24 @@ function buildSrc(role: string, mod: string) {
  * Un solo scroll en el panel de la app: el iframe crece con el contenido
  * (sin barra interna) para que PC y celu se lean cómodos.
  */
+function pathForLiqSlug(next: LiqSlug) {
+  return next === "catalogos" ? "/m5/catalogos" : `/liquidaciones/${next}`;
+}
+
 export function LiquidacionesPage() {
   const { user } = useAuth();
   const { etapa } = useParams<{ etapa?: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeH, setIframeH] = useState(480);
 
-  const slug = etapa && MOD_BY_SLUG[etapa] ? etapa : null;
+  const fromM5Catalogos = location.pathname === "/m5/catalogos";
+  const slug: LiqSlug | null = fromM5Catalogos
+    ? "catalogos"
+    : etapa && MOD_BY_SLUG[etapa]
+      ? (etapa as LiqSlug)
+      : null;
   const mod = slug ? MOD_BY_SLUG[slug]! : "adel";
   const role = user?.rol === "ADMINISTRADOR" ? "admin" : "operador";
 
@@ -59,7 +69,7 @@ export function LiquidacionesPage() {
       if (data.type !== "vt-liq-mod" || !data.mod) return;
       const next = SLUG_BY_MOD[data.mod];
       if (!next || next === slug) return;
-      navigate(`/liquidaciones/${next}`, { replace: true });
+      navigate(pathForLiqSlug(next), { replace: true });
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);

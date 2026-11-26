@@ -257,7 +257,7 @@ export type Cliente = {
   contacto: string | null;
 };
 
-/** Defaults si aún no hay catálogo guardado en Liquidaciones → Catálogos. */
+/** Defaults si aún no hay catálogo guardado en Ficha integral → Catálogos. */
 export const TIPOS_TRANSFERENCIA_EMPRESA_DEFAULT = [
   "Honorarios",
   "Haberes",

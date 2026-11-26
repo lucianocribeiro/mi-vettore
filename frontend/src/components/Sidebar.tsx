@@ -50,6 +50,11 @@ const NAV: NavItem[] = [
         label: "Usuarios especiales",
         roles: ["ADMINISTRADOR", "OPERACIONES"],
       },
+      {
+        to: "/m5/catalogos",
+        label: "Catálogos",
+        roles: ["ADMINISTRADOR", "OPERACIONES"],
+      },
     ],
   },
   {
@@ -159,7 +164,6 @@ const NAV: NavItem[] = [
       { to: "/liquidaciones/liquidacion", label: "Liquidación" },
       { to: "/liquidaciones/pago", label: "Pago" },
       { to: "/liquidaciones/panel", label: "Panel de control" },
-      { to: "/liquidaciones/catalogos", label: "Catálogos" },
     ],
   },
 ];
