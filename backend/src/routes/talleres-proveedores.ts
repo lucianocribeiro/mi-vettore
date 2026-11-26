@@ -154,15 +154,36 @@ async function aplicarPagoMovimiento(
         ...pagoData,
       },
     });
-    await tx.tallerMovimiento.create({
-      data: {
-        tallerProveedorId: mov.tallerProveedorId,
-        otId: mov.otId,
-        montoFacturado: resto,
-        fechaFactura: mov.fechaFactura,
-        estado: "PENDIENTE",
-      },
-    });
+    const otroPend =
+      mov.otId != null
+        ? await tx.tallerMovimiento.findFirst({
+            where: {
+              otId: mov.otId,
+              tallerProveedorId: mov.tallerProveedorId,
+              estado: "PENDIENTE",
+              id: { not: mov.id },
+            },
+          })
+        : null;
+    if (otroPend) {
+      await tx.tallerMovimiento.update({
+        where: { id: otroPend.id },
+        data: {
+          montoFacturado:
+            Math.round((otroPend.montoFacturado + resto) * 100) / 100,
+        },
+      });
+    } else {
+      await tx.tallerMovimiento.create({
+        data: {
+          tallerProveedorId: mov.tallerProveedorId,
+          otId: mov.otId,
+          montoFacturado: resto,
+          fechaFactura: mov.fechaFactura,
+          estado: "PENDIENTE",
+        },
+      });
+    }
     return { pagado, resto };
   }
   const pagado = await tx.tallerMovimiento.update({
@@ -485,18 +506,49 @@ router.post(
         res.status(404).json({ error: "Movimiento no encontrado" });
         return;
       }
-      const updated = await prisma.tallerMovimiento.update({
-        where: { id: mov.id },
-        data: {
-          estado: "PENDIENTE",
-          fechaPago: null,
-          metodoPago: null,
-          observacionPago: null,
-          montoTransferencia: null,
-          detalleTransferencia: null,
-          montoCheque: null,
-          detalleCheque: null,
-        },
+      if (mov.estado !== "PAGADO") {
+        res.status(400).json({ error: "El movimiento no está pagado" });
+        return;
+      }
+      // Si ya hay otro pendiente de la misma OT, sumar ahí (evita 2 pendientes).
+      const updated = await prisma.$transaction(async (tx) => {
+        const otroPend =
+          mov.otId != null
+            ? await tx.tallerMovimiento.findFirst({
+                where: {
+                  otId: mov.otId,
+                  tallerProveedorId: mov.tallerProveedorId,
+                  estado: "PENDIENTE",
+                  id: { not: mov.id },
+                },
+              })
+            : null;
+        if (otroPend) {
+          const merged = await tx.tallerMovimiento.update({
+            where: { id: otroPend.id },
+            data: {
+              montoFacturado:
+                Math.round(
+                  (otroPend.montoFacturado + mov.montoFacturado) * 100
+                ) / 100,
+            },
+          });
+          await tx.tallerMovimiento.delete({ where: { id: mov.id } });
+          return merged;
+        }
+        return tx.tallerMovimiento.update({
+          where: { id: mov.id },
+          data: {
+            estado: "PENDIENTE",
+            fechaPago: null,
+            metodoPago: null,
+            observacionPago: null,
+            montoTransferencia: null,
+            detalleTransferencia: null,
+            montoCheque: null,
+            detalleCheque: null,
+          },
+        });
       });
       res.json(updated);
     } catch (err) {
