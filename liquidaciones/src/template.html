@@ -89,7 +89,22 @@ html,body{margin:0;height:auto!important;min-height:0;overflow:visible!important
 <div class="toast" id="toast"></div>
 <input type="file" id="fileIn" accept=".xlsx,.xls,.csv" multiple style="display:none">
 <script>
-const B=__SEED__;
+// Datos base (histórico de empresas, valores hora, adelantos, préstamos…): no van en este archivo público.
+// Se leen con la sesión del usuario desde la base (documento cfg/seed). Sin sesión o sin datos, arranca vacío.
+const B=(function(){
+  const vacio={empresas:[],valores:[],patentes:[],fact:{},nafta:{},naftaKeys:[],adelantos:[],talleres:[],prestamos:[],cuotas:{},pagos:{},PEND:"2026-10-2"};
+  try{
+    const t=localStorage.getItem('mi-vettore-token')||'';
+    if(!t)return vacio;
+    const x=new XMLHttpRequest();
+    x.open('GET','/api/liquidaciones/doc?path='+encodeURIComponent('cfg/seed'),false);
+    x.setRequestHeader('Authorization','Bearer '+t);
+    x.send();
+    if(x.status!==200)return vacio;
+    const r=JSON.parse(x.responseText);
+    return r&&r.exists&&r.data?Object.assign(vacio,r.data):vacio;
+  }catch(e){return vacio}
+})();
 const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const MESL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const TIPOS=['Adelanto','Gastos camioneta','Habilitaciones','Seguros','Taller'];

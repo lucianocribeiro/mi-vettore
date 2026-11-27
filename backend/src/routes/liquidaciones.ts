@@ -15,6 +15,9 @@ function requireOps(req: AuthedRequest, res: import("express").Response): boolea
   return true;
 }
 
+/** Datos base del módulo (histórico): se cargan con scripts/cargar-seed-liquidaciones.ts y la app sólo los lee. */
+const SEED_PATH = "cfg/seed";
+
 function normalizePath(raw: unknown): string | null {
   const path = decodeURIComponent(String(raw ?? "")).replace(/^\/+/, "").trim();
   if (!path || path.includes("..") || path.length > 240) return null;
@@ -78,6 +81,10 @@ router.put("/doc", authenticate, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "Path inválido" });
       return;
     }
+    if (path === SEED_PATH) {
+      res.status(403).json({ error: "Los datos base no se modifican desde la app" });
+      return;
+    }
     const data = (req.body?.data ?? null) as Prisma.InputJsonValue;
     await prisma.liquidacionDoc.upsert({
       where: { path },
@@ -104,6 +111,10 @@ router.delete("/doc", authenticate, async (req: AuthedRequest, res) => {
     const path = normalizePath(req.query.path ?? req.body?.path);
     if (!path) {
       res.status(400).json({ error: "Path inválido" });
+      return;
+    }
+    if (path === SEED_PATH) {
+      res.status(403).json({ error: "Los datos base no se modifican desde la app" });
       return;
     }
     await prisma.liquidacionDoc.deleteMany({ where: { path } });
