@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { apiFetch, ApiError } from "../lib/api";
 import { isSugerenciasOnly } from "../types";
 import { AvisosBell } from "./AvisosBell";
+import { IdleSessionGuard } from "./IdleSessionGuard";
 import { MessageSquare, Menu, X } from "./icons";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "./ThemeToggle";
@@ -154,6 +155,8 @@ export function AppLayout() {
       {sugerenciaOpen && (
         <SugerenciaModal onClose={() => setSugerenciaOpen(false)} token={token} />
       )}
+
+      <IdleSessionGuard />
     </div>
   );
 }
