@@ -8,7 +8,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { authenticate, type AuthedRequest } from "../middleware/auth.js";
-import { MASTER_WRITE_ROLES } from "../lib/roles.js";
+import { isInternalOpsRole, MASTER_WRITE_ROLES } from "../lib/roles.js";
 import {
   choferPuedeEditarCamioneta,
   choferPuedeVerChofer,
@@ -155,6 +155,38 @@ function ocultosUnidad(c: {
   return ocultos;
 }
 
+/** Alcance de lectura: internos sin límite; CHOFER/EMPRESA solo su flota. */
+async function puedeVerAlcanceDoc(
+  req: AuthedRequest,
+  choferId: string | null | undefined,
+  camionetaId: string | null | undefined
+): Promise<boolean> {
+  const rol = req.user!.rol;
+  if (isInternalOpsRole(rol)) return true;
+  if (rol === Role.CHOFER) {
+    const ctx = contextoAccesoFromReq(req);
+    if (choferId) {
+      if (!(await choferPuedeVerChofer(req.user!.id, choferId, ctx))) return false;
+    }
+    if (camionetaId) {
+      if (!(await choferPuedeEditarCamioneta(req.user!.id, camionetaId, ctx)))
+        return false;
+    }
+    return true;
+  }
+  if (rol === Role.EMPRESA) {
+    if (choferId) {
+      if (!(await empresaPuedeEditarChofer(req.user!.id, choferId))) return false;
+    }
+    if (camionetaId) {
+      if (!(await empresaPuedeEditarCamioneta(req.user!.id, camionetaId)))
+        return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 router.get("/meta", authenticate, async (req, res) => {
   const choferId = req.query.choferId ? String(req.query.choferId) : null;
   const camionetaId = req.query.camionetaId ? String(req.query.camionetaId) : null;
@@ -201,26 +233,9 @@ router.get("/", authenticate, async (req: AuthedRequest, res) => {
       res.status(400).json({ error: "Indicá choferId o camionetaId" });
       return;
     }
-    if (req.user!.rol === Role.CHOFER) {
-      const ctx = contextoAccesoFromReq(req);
-      if (choferId) {
-        const ok = await choferPuedeVerChofer(req.user!.id, choferId, ctx);
-        if (!ok) {
-          res.status(403).json({ error: "Sin permiso" });
-          return;
-        }
-      }
-      if (camionetaId) {
-        const ok = await choferPuedeEditarCamioneta(
-          req.user!.id,
-          camionetaId,
-          ctx
-        );
-        if (!ok) {
-          res.status(403).json({ error: "Sin permiso" });
-          return;
-        }
-      }
+    if (!(await puedeVerAlcanceDoc(req, choferId, camionetaId))) {
+      res.status(403).json({ error: "Sin permiso" });
+      return;
     }
     const items = await prisma.documentoEntidad.findMany({
       where: {
@@ -270,14 +285,13 @@ router.post("/resumen", authenticate, async (req: AuthedRequest, res) => {
     let camionetaIds = parseIds(req.body?.camionetaIds);
     let choferIds = parseIds(req.body?.choferIds);
 
-    if (req.user!.rol === Role.CHOFER) {
-      const ctx = contextoAccesoFromReq(req);
+    if (!isInternalOpsRole(req.user!.rol)) {
       const camOk = await Promise.all(
-        camionetaIds.map((id) => choferPuedeEditarCamioneta(req.user!.id, id, ctx))
+        camionetaIds.map((id) => puedeVerAlcanceDoc(req, null, id))
       );
       camionetaIds = camionetaIds.filter((_, i) => camOk[i]);
       const chOk = await Promise.all(
-        choferIds.map((id) => choferPuedeVerChofer(req.user!.id, id, ctx))
+        choferIds.map((id) => puedeVerAlcanceDoc(req, id, null))
       );
       choferIds = choferIds.filter((_, i) => chOk[i]);
     }
@@ -408,6 +422,10 @@ router.get("/:id/url", authenticate, async (req: AuthedRequest, res) => {
     });
     if (!doc) {
       res.status(404).json({ error: "Documento no encontrado" });
+      return;
+    }
+    if (!(await puedeVerAlcanceDoc(req, doc.choferId, doc.camionetaId))) {
+      res.status(403).json({ error: "Sin permiso" });
       return;
     }
     const signed = await signedDocumentoUrl(doc.storagePath);

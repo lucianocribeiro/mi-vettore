@@ -134,7 +134,8 @@ type MovPendiente = {
   fechaFactura: Date;
 };
 
-/** Marca un movimiento como pagado; si el monto es menor, deja el resto PENDIENTE. */
+/** Marca un movimiento como pagado; si el monto es menor, deja el resto PENDIENTE.
+ * Usa updateMany con estado PENDIENTE para evitar doble pago concurrente. */
 async function aplicarPagoMovimiento(
   tx: Prisma.TransactionClient,
   mov: MovPendiente,
@@ -146,13 +147,19 @@ async function aplicarPagoMovimiento(
   const esParcial = pagadoMonto < adeudado - 0.009;
   if (esParcial) {
     const resto = Math.round((adeudado - pagadoMonto) * 100) / 100;
-    const pagado = await tx.tallerMovimiento.update({
-      where: { id: mov.id },
+    const claimed = await tx.tallerMovimiento.updateMany({
+      where: { id: mov.id, estado: "PENDIENTE" },
       data: {
         estado: "PAGADO",
         montoFacturado: pagadoMonto,
         ...pagoData,
       },
+    });
+    if (claimed.count !== 1) {
+      throw new Error("Movimiento ya no está pendiente");
+    }
+    const pagado = await tx.tallerMovimiento.findUniqueOrThrow({
+      where: { id: mov.id },
     });
     const otroPend =
       mov.otId != null
@@ -186,12 +193,18 @@ async function aplicarPagoMovimiento(
     }
     return { pagado, resto };
   }
-  const pagado = await tx.tallerMovimiento.update({
-    where: { id: mov.id },
+  const claimed = await tx.tallerMovimiento.updateMany({
+    where: { id: mov.id, estado: "PENDIENTE" },
     data: {
       estado: "PAGADO",
       ...pagoData,
     },
+  });
+  if (claimed.count !== 1) {
+    throw new Error("Movimiento ya no está pendiente");
+  }
+  const pagado = await tx.tallerMovimiento.findUniqueOrThrow({
+    where: { id: mov.id },
   });
   return { pagado, resto: 0 };
 }
@@ -377,6 +390,10 @@ router.post(
       }
       res.json(pagado);
     } catch (err) {
+      if (err instanceof Error && err.message === "Movimiento ya no está pendiente") {
+        res.status(409).json({ error: err.message });
+        return;
+      }
       console.error(err);
       res.status(500).json({ error: "Error al marcar pago" });
     }
@@ -471,6 +488,10 @@ async function pagarLote(
     });
     res.json(result);
   } catch (err) {
+    if (err instanceof Error && err.message === "Movimiento ya no está pendiente") {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "Error al pagar el lote" });
   }

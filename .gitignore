@@ -8,3 +8,7 @@ backend/prisma/dev.db-journal
 backend/uploads/
 frontend/dist/
 .vite/
+
+# Liquidaciones: datos reales no van al artefacto público
+liquidaciones/data/seed.full.json
+liquidaciones/ejemplos/*.xlsx

@@ -2,7 +2,7 @@
 
 Prototipo funcional del módulo de liquidaciones quincenales a empresas de transporte. Es una sola página HTML con JavaScript sin framework. Lee Excel en el navegador con SheetJS.
 
-> **Datos reales:** `data/seed.json` (y por lo tanto `app/index.html`) contiene nombres, patentes y montos reales tomados del Excel `00_Liquidacion_Transporte_Kairos_2026_Sheets.xlsx`. Tratalo como información confidencial.
+> **Seguridad:** `data/seed.json` en el repo es **vacío** (sin PII). El build de prod (`python tools/build.py` → `frontend/public/liq-embed`) no embebe datos reales; liquidaciones carga por API autenticada. Un seed histórico local va fuera del repo (`seed.full.json` / backup).
 
 ## Contenido
 

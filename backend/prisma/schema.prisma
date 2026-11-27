@@ -754,6 +754,8 @@ model OtFactura {
 }
 
 /// Historia de cuenta corriente por taller/proveedor.
+/// Cuenta corriente por proveedor. En SQL hay índice único parcial
+/// TallerMovimiento_ot_taller_pendiente_uidx: un solo PENDIENTE por (otId, tallerProveedorId).
 model TallerMovimiento {
   id              String                 @id @default(cuid())
   tallerProveedorId String

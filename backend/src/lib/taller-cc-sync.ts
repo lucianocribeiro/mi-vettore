@@ -27,10 +27,12 @@ export async function syncMovimientosCcAlCerrarOt(
     },
   });
 
+  const keepIds = new Set<string>();
   for (const p of porProveedor) {
     if (!p.id) continue;
     const target = Math.round(p.monto * 100) / 100;
     if (target <= 0.009) continue;
+    keepIds.add(p.id);
 
     const delProv = existentes.filter((m) => m.tallerProveedorId === p.id);
     const sumPagado = Math.round(
@@ -77,5 +79,18 @@ export async function syncMovimientosCcAlCerrarOt(
         data: { montoFacturado: falta },
       });
     }
+  }
+
+  // Proveedores sacados de la OT (o con monto 0): no deben quedar PENDIENTE.
+  const huerfanos = existentes.filter(
+    (m) =>
+      m.estado === "PENDIENTE" &&
+      m.tallerProveedorId != null &&
+      !keepIds.has(m.tallerProveedorId)
+  );
+  if (huerfanos.length > 0) {
+    await tx.tallerMovimiento.deleteMany({
+      where: { id: { in: huerfanos.map((m) => m.id) } },
+    });
   }
 }

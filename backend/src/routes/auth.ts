@@ -1,5 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
 import { Role, UserStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { ensureDuenoFromEmpresaContact } from "../lib/dueno-flota.js";
@@ -12,6 +13,15 @@ import {
 const router = Router();
 
 const VALID_ROLES = new Set(Object.values(Role));
+
+/** Limita fuerza bruta en login (en Vercel el store es por instancia; igual reduce intentos). */
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Demasiados intentos de login. Probá en unos minutos." },
+});
 
 async function empresaNombreForChofer(
   choferId: string | null | undefined
@@ -83,7 +93,7 @@ function publicUser(
   };
 }
 
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   try {
     const identificador = String(
       req.body?.identificador ?? req.body?.email ?? ""
